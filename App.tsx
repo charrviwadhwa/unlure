@@ -11,29 +11,27 @@ const App = () => {
   const [userName, setUserName] = useState('');
 
   useEffect(() => {
-    const initializeApp = async () => {
-      // 1. Await the name from Async Storage
-      const savedName = await UserStore.getName();
-      
-      if (savedName && savedName !== 'Guest') {
-        setUserName(savedName);
-        setCurrentStep('home');
+    const initialize = async () => {
+      try {
+        const savedName = await UserStore.getName();
+        if (savedName && savedName !== 'Guest') {
+          setUserName(savedName);
+          setCurrentStep('home');
+        }
+      } catch (e) {
+        console.warn("Storage check failed, starting fresh.");
+      } finally {
+        setIsReady(true);
       }
-      setIsReady(true);
     };
-
-    initializeApp();
+    initialize();
   }, []);
 
-  // Show a blank background with the theme color while loading
-  if (!isReady) {
-    return <View style={[styles.container, { backgroundColor: '#F5F2ED' }]} />;
-  }
+  if (!isReady) return <View style={{ flex: 1, backgroundColor: '#F5F2ED' }} />;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar barStyle="dark-content" backgroundColor="#F5F2ED" />
-      
       <View style={styles.container}>
         {currentStep === 'entry' && (
           <EntryScreen onAnimationComplete={() => setCurrentStep('name')} />
@@ -41,7 +39,6 @@ const App = () => {
 
         {currentStep === 'name' && (
           <NameScreen onComplete={async () => {
-            // Refresh name state after user enters it
             const name = await UserStore.getName();
             setUserName(name);
             setCurrentStep('home');
@@ -50,7 +47,7 @@ const App = () => {
 
         {currentStep === 'home' && (
           <View style={styles.center}>
-            <Text style={styles.welcomeText}>Welcome, {userName} ✨</Text>
+            <Text style={styles.text}>Welcome, {userName} ✨</Text>
           </View>
         )}
       </View>
@@ -59,20 +56,9 @@ const App = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F2ED',
-  },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  welcomeText: {
-    fontSize: 24,
-    color: '#2D2D2D',
-    fontFamily: 'serif',
-  },
+  container: { flex: 1, backgroundColor: '#F5F2ED' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  text: { fontSize: 24, color: '#2D2D2D', fontFamily: 'serif' }
 });
 
 export default App;
