@@ -4,7 +4,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 // Verify these paths match your folders exactly!
 import EntryScreen from './src/features/onboarding/EntryScreen';
 import NameScreen from './src/features/onboarding/NameScreen';
-import HomeScreen from './src/features/detox/HomeScreen';
+import {HomeScreen} from './src/features/detox/HomeScreen';
 import StreakScreen from './src/features/journey/StreakScreen';
 import { UserStore } from './src/services/storage';
 
