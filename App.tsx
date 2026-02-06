@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, StatusBar } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-// Verify these paths match your folders exactly!
+
 import EntryScreen from './src/features/onboarding/EntryScreen';
 import NameScreen from './src/features/onboarding/NameScreen';
-import {HomeScreen} from './src/features/detox/HomeScreen';
+// 1. IMPORT the selection screen (Named import uses { })
+import { AppSelectionScreen } from './src/features/onboarding/AppSelectionScreen'; 
+import { HomeScreen } from './src/features/detox/HomeScreen';
 import StreakScreen from './src/features/journey/StreakScreen';
 import { UserStore } from './src/services/storage';
 
 const App = () => {
-  const [currentStep, setCurrentStep] = useState<'entry' | 'name' | 'home' | 'journey'>('entry');
+  // 2. ADD 'selection' to the state type
+  const [currentStep, setCurrentStep] = useState<'entry' | 'name' | 'selection' | 'home' | 'journey'>('entry');
   const [isReady, setIsReady] = useState(false);
   const [userName, setUserName] = useState('');
 
@@ -17,9 +20,16 @@ const App = () => {
     const initialize = async () => {
       try {
         const savedName = await UserStore.getName();
+        const savedLimits = await UserStore.getAllLimits();
+        
         if (savedName && savedName !== 'Guest') {
           setUserName(savedName);
-          setCurrentStep('home');
+          // 3. LOGIC: If name exists but NO apps are picked, go to selection
+          if (Object.keys(savedLimits).length > 0) {
+            setCurrentStep('home');
+          } else {
+            setCurrentStep('selection');
+          }
         }
       } catch (e) { console.warn("Storage check failed."); }
       finally { setIsReady(true); }
@@ -34,19 +44,28 @@ const App = () => {
       <StatusBar barStyle="dark-content" backgroundColor="#F5F2ED" />
       <View style={styles.container}>
         {currentStep === 'entry' && <EntryScreen onAnimationComplete={() => setCurrentStep('name')} />}
+        
         {currentStep === 'name' && (
           <NameScreen onComplete={async () => {
             const name = await UserStore.getName();
             setUserName(name);
-            setCurrentStep('home');
+            // 4. MOVE to selection after name is entered
+            setCurrentStep('selection');
           }} />
         )}
+
+        {/* 5. RENDER the selection screen */}
+        {currentStep === 'selection' && (
+          <AppSelectionScreen onComplete={() => setCurrentStep('home')} />
+        )}
+
         {currentStep === 'home' && (
           <HomeScreen 
             userName={userName} 
             onPressStreak={() => setCurrentStep('journey')} 
           />
         )}
+
         {currentStep === 'journey' && (
           <StreakScreen onBack={() => setCurrentStep('home')} />
         )}

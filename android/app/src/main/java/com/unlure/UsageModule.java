@@ -14,6 +14,9 @@ import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.bridge.Arguments;
 import java.util.List;
 import java.util.Calendar;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
+import java.util.ArrayList;
 
 public class UsageModule extends ReactContextBaseJavaModule {
     UsageModule(ReactApplicationContext context) {
@@ -57,5 +60,26 @@ public class UsageModule extends ReactContextBaseJavaModule {
         Intent intent = new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         getReactApplicationContext().startActivity(intent);
+    }
+
+    @ReactMethod
+    public void getInstalledApps(Promise promise) {
+        try {
+            PackageManager pm = getReactApplicationContext().getPackageManager();
+            List<ApplicationInfo> packages = pm.getInstalledApplications(PackageManager.GET_META_DATA);
+            WritableArray appList = Arguments.createArray();
+
+            for (ApplicationInfo appInfo : packages) {
+                if (pm.getLaunchIntentForPackage(appInfo.packageName) != null) {
+                    WritableMap map = Arguments.createMap();
+                    map.putString("appName", appInfo.loadLabel(pm).toString());
+                    map.putString("packageName", appInfo.packageName);
+                    appList.pushMap(map);
+                }
+            }
+            promise.resolve(appList);
+        } catch (Exception e) {
+            promise.reject("ERROR", e.getMessage());
+        }
     }
 }

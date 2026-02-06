@@ -14,7 +14,8 @@ const calendarData = [
   { day: 16, mood: '😊' }, { day: 17, mood: '😊' }, { day: 18, mood: '😐' },
   { day: 19, mood: '😊' }, { day: 20, mood: '😴' }, { day: 21, mood: '😊' },
   { day: 22, mood: '☹️' }, { day: 23, mood: '🔥' }, { day: 24, mood: '' },
-  { day: 25, mood: '' }, { day: 26, mood: '' }, { day: 27, mood: '' },
+  { day: 25, mood: '' }, { day: 26, mood: '' }, { day: 27, mood: '' },{ day: 28, mood: '' },
+  
 ];
 
 const StreakScreen: React.FC<StreakScreenProps> = ({ onBack }) => {
@@ -63,7 +64,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onBack }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F2ED' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 25, alignItems: 'center' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 50, alignItems: 'center' },
   backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
   backArrow: { fontSize: 30, color: '#2D2D2D', fontWeight: '300' },
   title: { fontSize: 24, fontWeight: '700', color: '#2D2D2D', fontFamily: 'serif' },
