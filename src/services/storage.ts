@@ -43,5 +43,9 @@ export const UserStore = {
     } else {
       await AsyncStorage.setItem('@current_streak', '0'); // Reset on failure
     }
-  }
+  },
+  // src/services/storage.ts
+async saveAllLimits(limits: Record<string, number>): Promise<void> {
+  await AsyncStorage.setItem('@app_limits', JSON.stringify(limits));
+}
 };

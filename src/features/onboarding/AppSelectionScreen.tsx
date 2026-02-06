@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { ScreenTimeService } from '../../services/ScreenTimeService';
 import { UserStore } from '../../services/storage';
+import { TimeLimitModal } from './TimeLimitModal';
 
 interface AppInfo {
   appName: string;
@@ -11,81 +12,81 @@ interface AppInfo {
 export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) => {
   const [apps, setApps] = useState<AppInfo[]>([]);
   const [filteredApps, setFilteredApps] = useState<AppInfo[]>([]);
-  const [selectedPackages, setSelectedPackages] = useState<Set<string>>(new Set());
-  const [search, setSearch] = useState('');
+  const [selectedLimits, setSelectedLimits] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+
+  // Modal State
+  const [modalVisible, setModalVisible] = useState(false);
+  const [activeApp, setActiveApp] = useState<AppInfo | null>(null);
 
   useEffect(() => {
     const loadApps = async () => {
       const allApps = await ScreenTimeService.getInstalledApps();
       const storedLimits = await UserStore.getAllLimits();
-      
       setApps(allApps);
       setFilteredApps(allApps);
-      setSelectedPackages(new Set(Object.keys(storedLimits)));
+      setSelectedLimits(storedLimits);
       setLoading(false);
     };
     loadApps();
   }, []);
 
-  const toggleApp = (packageName: string) => {
-    const newSelected = new Set(selectedPackages);
-    if (newSelected.has(packageName)) {
-      newSelected.delete(packageName);
-    } else {
-      newSelected.add(packageName);
+  const handleConfirmLimit = async (minutes: number) => {
+    if (activeApp) {
+      const updated = { ...selectedLimits, [activeApp.packageName]: minutes };
+      setSelectedLimits(updated);
+      await UserStore.saveAllLimits(updated); // Persistent save
     }
-    setSelectedPackages(newSelected);
+    setModalVisible(false);
   };
 
   const handleSearch = (text: string) => {
     setSearch(text);
-    const filtered = apps.filter(app => 
-      app.appName.toLowerCase().includes(text.toLowerCase())
-    );
-    setFilteredApps(filtered);
+    setFilteredApps(apps.filter(a => a.appName.toLowerCase().includes(text.toLowerCase())));
   };
 
-  const saveAndContinue = async () => {
-    // Save only the newly selected apps with a default 30m limit
-    for (const pkg of selectedPackages) {
-      const currentLimits = await UserStore.getAllLimits();
-      if (!currentLimits[pkg]) {
-        await UserStore.setAppLimit(pkg, 30); 
-      }
-    }
-    onComplete();
-  };
-
-  if (loading) return <ActivityIndicator size="large" color="#8E9473" style={{ flex: 1 }} />;
+  if (loading) return <ActivityIndicator size="large" color="#000" style={{ flex: 1 }} />;
 
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Select Distracting Apps</Text>
-      <TextInput
-        style={styles.searchBar}
-        placeholder="Search apps..."
-        value={search}
-        onChangeText={handleSearch}
+      <TextInput 
+        style={styles.searchBar} 
+        placeholder="Search apps..." 
+        value={search} 
+        onChangeText={handleSearch} 
       />
+      
       <FlatList
         data={filteredApps}
         keyExtractor={(item) => item.packageName}
-        renderItem={({ item }) => (
-          <TouchableOpacity 
-            style={[styles.item, selectedPackages.has(item.packageName) && styles.selectedItem]}
-            onPress={() => toggleApp(item.packageName)}
-          >
-            <View>
-              <Text style={styles.appName}>{item.appName}</Text>
-              <Text style={styles.packageName}>{item.packageName}</Text>
-            </View>
-            <Text style={styles.checkbox}>{selectedPackages.has(item.packageName) ? '✅' : '⬜'}</Text>
-          </TouchableOpacity>
-        )}
+        renderItem={({ item }) => {
+          const limit = selectedLimits[item.packageName];
+          return (
+            <TouchableOpacity 
+              style={[styles.item, limit ? styles.selectedItem : undefined]} // Fixed style error
+              onPress={() => { setActiveApp(item); setModalVisible(true); }}
+            >
+              <View>
+                <Text style={styles.appName}>{item.appName}</Text>
+                {limit ? <Text style={styles.limitText}>{limit} mins set</Text> : null}
+              </View>
+              <Text style={styles.icon}>{limit ? '✅' : '〉'}</Text>
+            </TouchableOpacity>
+          );
+        }}
       />
-      <TouchableOpacity style={styles.saveButton} onPress={saveAndContinue}>
-        <Text style={styles.saveButtonText}>Save & Set Limits</Text>
+
+      <TimeLimitModal 
+        visible={modalVisible}
+        appName={activeApp?.appName || ''}
+        onConfirm={handleConfirmLimit}
+        onCancel={() => setModalVisible(false)}
+      />
+
+      <TouchableOpacity style={styles.footerButton} onPress={onComplete}>
+        <Text style={styles.footerText}>Continue 🔥</Text>
       </TouchableOpacity>
     </View>
   );
@@ -93,13 +94,13 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F2ED', padding: 20 },
-  header: { fontSize: 22, fontWeight: '700', marginBottom: 20, color: '#2D2D2D' },
-  searchBar: { backgroundColor: '#FFF', padding: 12, borderRadius: 10, marginBottom: 15, elevation: 2 },
-  item: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, backgroundColor: '#FFF', borderRadius: 10, marginBottom: 8 },
-  selectedItem: { backgroundColor: '#E8EADF', borderColor: '#8E9473', borderWidth: 1 },
-  appName: { fontSize: 16, fontWeight: '600' },
-  packageName: { fontSize: 12, color: '#888' },
-  checkbox: { fontSize: 20 },
-  saveButton: { backgroundColor: '#8E9473', padding: 18, borderRadius: 12, alignItems: 'center', marginTop: 10 },
-  saveButtonText: { color: '#FFF', fontWeight: '700', fontSize: 16 }
+  header: { fontSize: 26, fontWeight: '800', marginBottom: 20 },
+  searchBar: { backgroundColor: '#FFF', padding: 15, borderRadius: 15, marginBottom: 15, elevation: 2 },
+  item: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18, backgroundColor: '#FFF', borderRadius: 18, marginBottom: 12 },
+  selectedItem: { backgroundColor: '#E8EADF', borderColor: '#8E9473', borderWidth: 1.5 },
+  appName: { fontSize: 17, fontWeight: '600' },
+  limitText: { fontSize: 13, color: '#8E9473', fontWeight: 'bold', marginTop: 4 },
+  icon: { fontSize: 18, color: '#DDD' },
+  footerButton: { backgroundColor: '#000', padding: 20, borderRadius: 20, alignItems: 'center', marginTop: 10 },
+  footerText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 }
 });
