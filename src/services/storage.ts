@@ -1,26 +1,47 @@
+// src/services/storage.ts
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Define the "Schema" for our local storage
+interface AppLimit {
+  packageName: string;
+  limitMinutes: number;
+}
+
 export const UserStore = {
-  // MUST be async now
-  setName: async (name: string) => {
-    try {
-      await AsyncStorage.setItem('user_name', name);
-    } catch (e) {
-      console.error("Error saving name", e);
-    }
+  // --- Existing Name Logic ---
+  async getName(): Promise<string> {
+    const name = await AsyncStorage.getItem('@user_name');
+    return name || 'Guest';
   },
 
-  // MUST be async now
-  getName: async (): Promise<string> => {
-    try {
-      const name = await AsyncStorage.getItem('user_name');
-      return name || 'Guest';
-    } catch (e) {
-      return 'Guest';
-    }
+  async saveName(name: string): Promise<void> {
+    await AsyncStorage.setItem('@user_name', name);
   },
 
-  clearAll: async () => {
-    await AsyncStorage.clear();
+  // --- NEW: App Selection & Limits ---
+  async setAppLimit(packageName: string, minutes: number): Promise<void> {
+    const limits = await this.getAllLimits();
+    limits[packageName] = minutes;
+    await AsyncStorage.setItem('@app_limits', JSON.stringify(limits));
+  },
+
+  async getAllLimits(): Promise<Record<string, number>> {
+    const data = await AsyncStorage.getItem('@app_limits');
+    return data ? JSON.parse(data) : {};
+  },
+
+  // --- NEW: Streak Logic ---
+  async getStreak(): Promise<number> {
+    const streak = await AsyncStorage.getItem('@current_streak');
+    return streak ? parseInt(streak, 10) : 0;
+  },
+
+  async updateStreak(isSuccess: boolean): Promise<void> {
+    let current = await this.getStreak();
+    if (isSuccess) {
+      await AsyncStorage.setItem('@current_streak', (current + 1).toString());
+    } else {
+      await AsyncStorage.setItem('@current_streak', '0'); // Reset on failure
+    }
   }
 };

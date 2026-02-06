@@ -33,6 +33,16 @@ export const ScreenTimeService = {
       return [];
     }
   },
+  async getInstalledApps(): Promise<{appName: string, packageName: string}[]> {
+    if (Platform.OS !== 'android') return [];
+    try {
+      // This calls the Java method you added earlier
+      return await UsageModule.getInstalledApps();
+    } catch (error) {
+      console.error("Failed to fetch apps:", error);
+      return [];
+    }
+  },
 
   /**
    * Opens the Android system settings for Usage Access

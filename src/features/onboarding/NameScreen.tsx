@@ -25,7 +25,7 @@ const NameScreen: React.FC<NameScreenProps> = ({ onComplete }) => {
   const handleContinue = async () => {
     if (name.trim()) {
       // Use await to ensure Async Storage saves before we switch screens
-      await UserStore.setName(name.trim()); 
+      await UserStore.saveName(name.trim()); 
       onComplete();
     }
   };
