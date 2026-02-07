@@ -28,7 +28,7 @@ public class UsageModule extends ReactContextBaseJavaModule {
         return "UsageModule";
     }
 
-    @ReactMethod
+   @ReactMethod
 public void getDailyStats(Promise promise) {
     UsageStatsManager usm = (UsageStatsManager) getReactApplicationContext().getSystemService(Context.USAGE_STATS_SERVICE);
     PackageManager pm = getReactApplicationContext().getPackageManager();
@@ -41,13 +41,13 @@ public void getDailyStats(Promise promise) {
     calendar.set(Calendar.MILLISECOND, 0);
     long startTime = calendar.getTimeInMillis();
 
-    List<UsageStats> stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime);
+    // 🚨 USE AGGREGATE INSTEAD OF LIST
+    java.util.Map<String, UsageStats> statsMap = usm.queryAndAggregateUsageStats(startTime, endTime);
     
     WritableArray array = Arguments.createArray();
-    if (stats != null) {
-        for (UsageStats usageStats : stats) {
+    if (statsMap != null) {
+        for (UsageStats usageStats : statsMap.values()) {
             String pkg = usageStats.getPackageName();
-            // 🚨 FILTER: Only include apps that have a launcher icon
             if (usageStats.getTotalTimeInForeground() > 0 && pm.getLaunchIntentForPackage(pkg) != null) {
                 WritableMap map = Arguments.createMap();
                 map.putString("id", pkg);
@@ -66,13 +66,17 @@ public void getDailyStats(Promise promise) {
     }
 
     @ReactMethod
-    public void getInstalledApps(Promise promise) {
+public void getInstalledApps(Promise promise) {
+    // Run this on a background thread to prevent UI freezing
+    new Thread(() -> {
         try {
             PackageManager pm = getReactApplicationContext().getPackageManager();
+            // Fetching just basic info first is faster
             List<ApplicationInfo> packages = pm.getInstalledApplications(PackageManager.GET_META_DATA);
             WritableArray appList = Arguments.createArray();
 
             for (ApplicationInfo appInfo : packages) {
+                // 🚨 OPTIMIZATION: Only process apps that a user can actually launch
                 if (pm.getLaunchIntentForPackage(appInfo.packageName) != null) {
                     WritableMap map = Arguments.createMap();
                     map.putString("appName", appInfo.loadLabel(pm).toString());
@@ -84,5 +88,6 @@ public void getDailyStats(Promise promise) {
         } catch (Exception e) {
             promise.reject("ERROR", e.getMessage());
         }
-    }
+    }).start();
+}
 }

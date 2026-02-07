@@ -1,111 +1,124 @@
 import React, { useState, useEffect } from 'react';
-import { View, FlatList, SafeAreaView, Text, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, RefreshControl } from 'react-native';
+import PieChart from 'react-native-pie-chart';
 import { ScreenTimeService, AppUsage } from '../../services/ScreenTimeService';
 import { UserStore } from '../../services/storage';
 
-interface HomeScreenProps {
-  userName: string;
-  onPressStreak: () => void;
-}
-
-export const HomeScreen = ({ userName, onPressStreak }: HomeScreenProps) => {
-  // 1. ALL HOOKS MUST BE AT THE TOP LEVEL
+export const HomeScreen = ({ userName }: { userName: string }) => {
   const [usageData, setUsageData] = useState<AppUsage[]>([]);
-  const [userLimits, setUserLimits] = useState<Record<string, number>>({});
-  const [healthScore, setHealthScore] = useState(100);
+  const [totalUsage, setTotalUsage] = useState(0);
+  const [totalLimit, setTotalLimit] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
-  const calculateHealth = (stats: AppUsage[], limits: Record<string, number>) => {
-    let deduction = 0;
-    stats.forEach(app => {
-      const limit = limits[app.id];
-      if (limit && app.minutes > limit) {
-        deduction += (app.minutes - limit);
-      }
-    });
-    setHealthScore(Math.max(100 - deduction, 0));
-  };
+  // Colors for the top 4 segments
+  const segmentColors = ['#B1B4FF', '#FFD1A9', '#A9F4FF', '#FFB1B1'];
 
   const loadData = async () => {
     setRefreshing(true);
-    const [stats, limits] = await Promise.all([
-      ScreenTimeService.getDailyStats(),
-      UserStore.getAllLimits()
-    ]);
-    
-    setUsageData(stats);
-    setUserLimits(limits || {});
-    calculateHealth(stats, limits || {});
-    setRefreshing(false);
+    try {
+      const [stats, limits] = await Promise.all([
+        ScreenTimeService.getDailyStats(),
+        UserStore.getAllLimits()
+      ]);
+
+      const sumUsage = stats.reduce((acc, curr) => acc + curr.minutes, 0);
+      const sumLimit = Object.values(limits).reduce((acc, curr) => acc + (curr as number), 0);
+
+      setUsageData(stats.slice(0, 4)); // Only top 4 for the circle
+      setTotalUsage(sumUsage);
+      setTotalLimit(sumLimit || 60); // Default to 60m if no limits set
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
-  const isHealthy = healthScore >= 50;
+  // Format data for the PieChart
+  const series = usageData.map((item, index) => ({
+    value: item.minutes,
+    color: segmentColors[index % segmentColors.length],
+  }));
+
+  // Empty state placeholder
+  if (series.length === 0) series.push({ value: 1, color: '#F0F0F0' });
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isHealthy ? '#F5F2ED' : '#FFF0F0' }]}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.welcomeText}>Welcome,</Text>
-          <Text style={styles.userNameText}>{userName}</Text>
+    <SafeAreaView style={styles.container}>
+      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadData} />}>
+        
+        {/* Header Section */}
+        <View style={styles.header}>
+          <Text style={styles.title}>Analytics</Text>
+          <View style={styles.tabContainer}>
+            <TouchableOpacity style={styles.activeTab}><Text style={styles.activeTabText}>Day</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.inactiveTab}><Text style={styles.inactiveTabText}>Week</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.inactiveTab}><Text style={styles.inactiveTabText}>Month</Text></TouchableOpacity>
+          </View>
         </View>
-        <TouchableOpacity 
-          style={[styles.scoreBadge, { borderColor: isHealthy ? '#8E9473' : '#FF6B6B' }]} 
-          onPress={onPressStreak}
-        >
-          <Text style={[styles.scoreValue, { color: isHealthy ? '#8E9473' : '#FF6B6B' }]}>
-            {healthScore}% {isHealthy ? '🔥' : '😭'}
-          </Text>
-        </TouchableOpacity>
-      </View>
 
-      <FlatList
-        data={usageData}
-        keyExtractor={(item) => item.id}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadData} />}
-        contentContainerStyle={{ padding: 20 }}
-        renderItem={({ item }) => {
-          const limit = userLimits[item.id] || 0;
-          const isOver = limit > 0 && item.minutes > limit;
-          const progress = limit > 0 ? (item.minutes / limit) * 100 : 0;
-
-          return (
-            <View style={styles.card}>
-              <View style={styles.cardInfo}>
-                <Text style={styles.cardName}>{item.id.split('.').pop()}</Text>
-                <Text style={styles.cardUsage}>{item.minutes}m / {limit || '--'}m</Text>
-              </View>
-              <View style={styles.barBg}>
-                <View style={[
-                  styles.barFill, 
-                  { 
-                    width: `${Math.min(progress, 100)}%`, 
-                    backgroundColor: isOver ? '#FF6B6B' : '#8E9473' 
-                  }
-                ]} />
-              </View>
+        {/* The Segmented Analytics Card */}
+        <View style={styles.analyticsCard}>
+          <Text style={styles.cardTitle}>Daily Average</Text>
+          
+          <View style={styles.chartWrapper}>
+            <PieChart
+              widthAndHeight={240}
+              series={series}
+              cover={0.7} // Creates the Donut hole
+              padAngle={0.04} // Creates the gaps between segments
+            />
+            <View style={styles.chartCenter}>
+              <Text style={styles.percentText}>
+                {totalLimit > 0 ? Math.round((totalUsage / totalLimit) * 100) : 0}%
+              </Text>
+              <Text style={styles.subtitle}>Goal Used</Text>
             </View>
-          );
-        }}
-      />
+          </View>
+
+          {/* Legend Grid */}
+          <View style={styles.legendGrid}>
+            {usageData.map((item, i) => (
+              <View key={item.id} style={styles.legendItem}>
+                <View style={[styles.dot, { backgroundColor: segmentColors[i] }]} />
+                <Text style={styles.legendText}>{item.id.split('.').pop()}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.footer}>
+          <Text style={styles.footerTime}>{totalUsage}m</Text>
+          <Text style={styles.footerLimit}>/ {totalLimit}m limit</Text>
+        </View>
+
+      </ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { padding: 25, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  welcomeText: { fontSize: 13, color: '#888' },
-  userNameText: { fontSize: 28, fontWeight: 'bold', color: '#2D2D2D' },
-  scoreBadge: { backgroundColor: '#FFF', padding: 12, borderRadius: 20, borderWidth: 2 },
-  scoreValue: { fontSize: 18, fontWeight: '900' },
-  card: { backgroundColor: '#FFF', padding: 20, borderRadius: 24, marginBottom: 15, elevation: 2 },
-  cardInfo: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  cardName: { fontWeight: '700', fontSize: 16, textTransform: 'capitalize' },
-  cardUsage: { color: '#8E8E8E', fontSize: 13 },
-  barBg: { height: 10, backgroundColor: '#F0F0F0', borderRadius: 5, overflow: 'hidden' },
-  barFill: { height: '100%' }
+  container: { flex: 1, backgroundColor: '#F9F9FB' },
+  header: { padding: 20, alignItems: 'center' },
+  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
+  tabContainer: { flexDirection: 'row', backgroundColor: '#F0F0F2', borderRadius: 25, padding: 5, width: '90%' },
+  activeTab: { flex: 1, backgroundColor: '#1A1A1A', paddingVertical: 10, borderRadius: 20, alignItems: 'center' },
+  activeTabText: { color: '#FFF', fontWeight: 'bold' },
+  inactiveTab: { flex: 1, paddingVertical: 10, alignItems: 'center' },
+  inactiveTabText: { color: '#8E8E93' },
+  analyticsCard: { backgroundColor: '#FFF', margin: 20, borderRadius: 35, padding: 25, elevation: 4 },
+  cardTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 20 },
+  chartWrapper: { justifyContent: 'center', alignItems: 'center', position: 'relative' },
+  chartCenter: { position: 'absolute', alignItems: 'center' },
+  percentText: { fontSize: 36, fontWeight: 'bold', color: '#1C1C1E' },
+  subtitle: { fontSize: 12, color: '#8E8E93' },
+  legendGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: 20 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', margin: 10 },
+  dot: { width: 12, height: 12, borderRadius: 6, marginRight: 8 },
+  legendText: { fontSize: 12, color: '#48484A', textTransform: 'capitalize' },
+  footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'baseline', paddingBottom: 40 },
+  footerTime: { fontSize: 22, fontWeight: 'bold', color: '#B1B4FF' },
+  footerLimit: { fontSize: 14, color: '#8E8E93', marginLeft: 5 }
 });
