@@ -33,24 +33,25 @@ public void getDailyStats(Promise promise) {
     UsageStatsManager usm = (UsageStatsManager) getReactApplicationContext().getSystemService(Context.USAGE_STATS_SERVICE);
     PackageManager pm = getReactApplicationContext().getPackageManager();
     
+    // 🚨 RESET CALENDAR TO EXACT MIDNIGHT TODAY
     Calendar calendar = Calendar.getInstance();
     long endTime = calendar.getTimeInMillis();
+    
     calendar.set(Calendar.HOUR_OF_DAY, 0);
     calendar.set(Calendar.MINUTE, 0);
     calendar.set(Calendar.SECOND, 0);
     calendar.set(Calendar.MILLISECOND, 0);
     long startTime = calendar.getTimeInMillis();
 
-    // 🚨 USE AGGREGATE INSTEAD OF LIST
+    // queryAndAggregate is more accurate for "Today" than a standard list query
     java.util.Map<String, UsageStats> statsMap = usm.queryAndAggregateUsageStats(startTime, endTime);
     
     WritableArray array = Arguments.createArray();
     if (statsMap != null) {
         for (UsageStats usageStats : statsMap.values()) {
-            String pkg = usageStats.getPackageName();
-            if (usageStats.getTotalTimeInForeground() > 0 && pm.getLaunchIntentForPackage(pkg) != null) {
+            if (usageStats.getTotalTimeInForeground() > 0 && pm.getLaunchIntentForPackage(usageStats.getPackageName()) != null) {
                 WritableMap map = Arguments.createMap();
-                map.putString("id", pkg);
+                map.putString("id", usageStats.getPackageName());
                 map.putDouble("totalTime", (double) usageStats.getTotalTimeInForeground());
                 array.pushMap(map);
             }
