@@ -29,32 +29,35 @@ public class UsageModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
-    public void get24HourStats(Promise promise) {
-        UsageStatsManager usm = (UsageStatsManager) getReactApplicationContext().getSystemService(Context.USAGE_STATS_SERVICE);
-        Calendar calendar = Calendar.getInstance();
-        long endTime = calendar.getTimeInMillis();
-        calendar.add(Calendar.HOUR_OF_DAY, -24);
-        long startTime = calendar.getTimeInMillis();
+public void getDailyStats(Promise promise) {
+    UsageStatsManager usm = (UsageStatsManager) getReactApplicationContext().getSystemService(Context.USAGE_STATS_SERVICE);
+    PackageManager pm = getReactApplicationContext().getPackageManager();
+    
+    Calendar calendar = Calendar.getInstance();
+    long endTime = calendar.getTimeInMillis();
+    calendar.set(Calendar.HOUR_OF_DAY, 0);
+    calendar.set(Calendar.MINUTE, 0);
+    calendar.set(Calendar.SECOND, 0);
+    calendar.set(Calendar.MILLISECOND, 0);
+    long startTime = calendar.getTimeInMillis();
 
-        List<UsageStats> stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime);
-        
-        if (stats == null || stats.isEmpty()) {
-            promise.reject("NO_STATS", "No usage stats found. Check permissions.");
-            return;
-        }
-
-        WritableArray array = Arguments.createArray();
+    List<UsageStats> stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime);
+    
+    WritableArray array = Arguments.createArray();
+    if (stats != null) {
         for (UsageStats usageStats : stats) {
-            if (usageStats.getTotalTimeInForeground() > 0) {
+            String pkg = usageStats.getPackageName();
+            // 🚨 FILTER: Only include apps that have a launcher icon
+            if (usageStats.getTotalTimeInForeground() > 0 && pm.getLaunchIntentForPackage(pkg) != null) {
                 WritableMap map = Arguments.createMap();
-                map.putString("packageName", usageStats.getPackageName());
+                map.putString("id", pkg);
                 map.putDouble("totalTime", (double) usageStats.getTotalTimeInForeground());
                 array.pushMap(map);
             }
         }
-        promise.resolve(array);
     }
-
+    promise.resolve(array);
+}
     @ReactMethod
     public void openSettings() {
         Intent intent = new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS);

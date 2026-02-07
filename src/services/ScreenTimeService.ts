@@ -1,55 +1,33 @@
 import { NativeModules, Platform } from 'react-native';
 
-// This name MUST match exactly what you returned in UsageModule.java's getName()
 const { UsageModule } = NativeModules;
 
-export interface AppUsageStats {
-  packageName: string;
-  minutes: number;
-}
 export interface AppUsage {
-  id: string;      // This matches your item.id in the map
-  minutes: number;
+  id: string;      // package name
+  minutes: number; 
 }
 
 export const ScreenTimeService = {
-  // Change the return type from AppUsageStats[] to AppUsage[]
   async getDailyStats(): Promise<AppUsage[]> {
     if (Platform.OS !== 'android') return [];
-
     try {
-      const rawStats = await UsageModule.get24HourStats();
+      const rawStats = await UsageModule.getDailyStats();
       
-      return rawStats
-        .map((app: any) => ({
-          // Map packageName to id here so the UI is happy
-          id: app.packageName, 
-          minutes: Math.floor(app.totalTime / 60000),
-        }))
-        .filter((app: any) => app.minutes > 0)
-        .sort((a: any, b: any) => b.minutes - a.minutes);
-    } catch (error) {
-      console.warn('Usage Stats Error:', error);
-      return [];
-    }
-  },
-  async getInstalledApps(): Promise<{appName: string, packageName: string}[]> {
-    if (Platform.OS !== 'android') return [];
-    try {
-      // This calls the Java method you added earlier
-      return await UsageModule.getInstalledApps();
-    } catch (error) {
-      console.error("Failed to fetch apps:", error);
-      return [];
-    }
-  },
+      const merged = rawStats.reduce((acc: Record<string, number>, curr: any) => {
+        acc[curr.id] = (acc[curr.id] || 0) + curr.totalTime;
+        return acc;
+      }, {});
 
-  /**
-   * Opens the Android system settings for Usage Access
-   */
-  openSettings(): void {
-    if (Platform.OS === 'android') {
-      UsageModule.openSettings();
+      return Object.keys(merged)
+        .map(pkg => ({
+          id: pkg, 
+          minutes: Math.floor(merged[pkg] / 60000), // Change to floor for precision
+        }))
+        .filter(app => app.minutes > 0)
+        .sort((a, b) => b.minutes - a.minutes);
+    } catch (error) {
+      return [];
     }
-  }
+  },
+  openSettings: () => UsageModule.openSettings(),
 };
