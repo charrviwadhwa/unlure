@@ -12,6 +12,12 @@ export interface AppInfo {
   packageName: string;
 }
 
+export interface DailyUsageMap {
+  [date: string]: {
+    [packageName: string]: number; // milliseconds
+  };
+}
+
 export const ScreenTimeService = {
   async getDailyStats(): Promise<AppUsage[]> {
     try {
@@ -32,6 +38,24 @@ export const ScreenTimeService = {
       .sort((a, b) => b.minutes - a.minutes);
     } catch (e) {
       return [];
+    }
+  },
+
+  async storeTodayStats(): Promise<boolean> {
+    if (Platform.OS !== 'android') return false;
+    try {
+      return await UsageModule.storeTodayStats();
+    } catch (error) {
+      return false;
+    }
+  },
+
+  async getStoredDailyStats(): Promise<DailyUsageMap> {
+    if (Platform.OS !== 'android') return {};
+    try {
+      return await UsageModule.getStoredDailyStats();
+    } catch (error) {
+      return {};
     }
   },
 
