@@ -43,6 +43,12 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Focus Apps</Text>
+      <View style={styles.permissionCard}>
+        <Text style={styles.permissionText}>Allow usage access so we can track screen time accurately.</Text>
+        <TouchableOpacity style={styles.permissionButton} onPress={ScreenTimeService.openUsageAccessSettings}>
+          <Text style={styles.permissionButtonText}>Open Usage Access</Text>
+        </TouchableOpacity>
+      </View>
       <TextInput 
         style={styles.searchBar} 
         placeholder="Search for distractions..." 
@@ -66,14 +72,14 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
                 <Text style={styles.appName}>{item.appName}</Text>
                 {limit ? <Text style={styles.limitText}>{limit} mins</Text> : null}
               </View>
-              <Text style={styles.icon}>{limit ? '✅' : '〉'}</Text>
+              <Text style={styles.icon}>{limit ? '\u2705' : '\u3009'}</Text>
             </TouchableOpacity>
           );
         }}
       />
 
       <TouchableOpacity style={styles.footerButton} onPress={onComplete}>
-        <Text style={styles.footerText}>Save & Start 🔥</Text>
+        <Text style={styles.footerText}>Save & Start {'\u{1F525}'}</Text>
       </TouchableOpacity>
 
       <TimeLimitModal 
@@ -89,6 +95,10 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9F9FB', padding: 20 },
   header: { fontSize: 28, fontWeight: 'bold', marginBottom: 20 },
+  permissionCard: { backgroundColor: '#FFF', padding: 14, borderRadius: 14, marginBottom: 12, elevation: 2 },
+  permissionText: { fontSize: 13, color: '#4B4B4B', marginBottom: 10 },
+  permissionButton: { alignSelf: 'flex-start', backgroundColor: '#1A1A1A', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10 },
+  permissionButtonText: { color: '#FFF', fontWeight: '600', fontSize: 12 },
   searchBar: { backgroundColor: '#FFF', padding: 15, borderRadius: 15, marginBottom: 15, elevation: 2 },
   item: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18, backgroundColor: '#FFF', borderRadius: 20, marginBottom: 12 },
   selectedItem: { backgroundColor: '#EEF0FF', borderColor: '#B1B4FF', borderWidth: 1 },

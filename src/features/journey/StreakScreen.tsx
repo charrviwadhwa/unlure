@@ -1,31 +1,65 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Text, SafeAreaView, TouchableOpacity, FlatList } from 'react-native';
+import { UserStore } from '../../services/storage';
 
 interface StreakScreenProps {
   onBack: () => void;
 }
 
-const calendarData = [
-  { day: 1, mood: '😐' }, { day: 2, mood: '☹️' }, { day: 3, mood: '😊' },
-  { day: 4, mood: '😊' }, { day: 5, mood: '😊' }, { day: 6, mood: '😊' },
-  { day: 7, mood: '😊' }, { day: 8, mood: '😊' }, { day: 9, mood: '😊' },
-  { day: 10, mood: '😊' }, { day: 11, mood: '😐' }, { day: 12, mood: '😐' },
-  { day: 13, mood: '😴' }, { day: 14, mood: '😊' }, { day: 15, mood: '☹️' },
-  { day: 16, mood: '😊' }, { day: 17, mood: '😊' }, { day: 18, mood: '😐' },
-  { day: 19, mood: '😊' }, { day: 20, mood: '😴' }, { day: 21, mood: '😊' },
-  { day: 22, mood: '☹️' }, { day: 23, mood: '🔥' }, { day: 24, mood: '' },
-  { day: 25, mood: '' }, { day: 26, mood: '' }, { day: 27, mood: '' },{ day: 28, mood: '' },
-  
-];
+interface CalendarItem {
+  key: string;
+  day: number | null;
+  mood: string;
+}
 
 const StreakScreen: React.FC<StreakScreenProps> = ({ onBack }) => {
-  const renderItem = ({ item }: { item: typeof calendarData[0] }) => (
+  const [calendarData, setCalendarData] = useState<CalendarItem[]>([]);
+  const [streak, setStreak] = useState(0);
+
+  const formatDateKey = (date: Date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const buildMonthGrid = (date: Date, moods: Record<string, string>) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const first = new Date(year, month, 1);
+    const last = new Date(year, month + 1, 0);
+    const startWeekday = first.getDay();
+    const totalDays = last.getDate();
+
+    const items: CalendarItem[] = [];
+    for (let i = 0; i < startWeekday; i += 1) {
+      items.push({ key: `blank-${i}`, day: null, mood: '' });
+    }
+    for (let day = 1; day <= totalDays; day += 1) {
+      const dateKey = formatDateKey(new Date(year, month, day));
+      items.push({ key: dateKey, day, mood: moods[dateKey] || '' });
+    }
+    return items;
+  };
+
+  useEffect(() => {
+    const load = async () => {
+      const [moods, currentStreak] = await Promise.all([
+        UserStore.getDailyMoods(),
+        UserStore.getStreak()
+      ]);
+      setCalendarData(buildMonthGrid(new Date(), moods));
+      setStreak(currentStreak);
+    };
+    load();
+  }, []);
+
+  const renderItem = ({ item }: { item: CalendarItem }) => (
     <View style={styles.dayCell}>
-      <View style={[styles.circle, item.mood ? styles.filledCircle : styles.emptyCircle]}>
-        {/* Only render if mood isn't empty to avoid "Text strings..." crash */}
+      <View style={[styles.circle, item.day ? (item.mood ? styles.filledCircle : styles.emptyCircle) : styles.blankCircle]}>
         {item.mood !== '' && <Text style={styles.moodEmoji}>{item.mood}</Text>}
       </View>
-      <Text style={styles.dayNumber}>{item.day}</Text>
+      {item.day ? <Text style={styles.dayNumber}>{item.day}</Text> : null}
     </View>
   );
 
@@ -33,14 +67,14 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onBack }) => {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backArrow}>←</Text> 
+          <Text style={styles.backArrow}>{'\u2190'}</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Daily streak</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <View style={styles.streakHero}>
-        <Text style={styles.streakNumber}>🔥 50</Text>
+        <Text style={styles.streakNumber}>{`\u{1F525} ${streak}`}</Text>
         <Text style={styles.streakSub}>Every day counts towards your goal</Text>
       </View>
 
@@ -53,7 +87,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onBack }) => {
         <FlatList
           data={calendarData}
           renderItem={renderItem}
-          keyExtractor={item => item.day.toString()}
+          keyExtractor={item => item.key}
           numColumns={7}
           scrollEnabled={false}
         />
@@ -78,6 +112,7 @@ const styles = StyleSheet.create({
   circle: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 5 },
   filledCircle: { backgroundColor: '#FFF9E6' },
   emptyCircle: { backgroundColor: '#F2F2F2' },
+  blankCircle: { backgroundColor: 'transparent' },
   moodEmoji: { fontSize: 20 },
   dayNumber: { fontSize: 12, color: '#8E8E8E' }
 });

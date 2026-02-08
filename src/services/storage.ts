@@ -44,6 +44,32 @@ export const UserStore = {
       await AsyncStorage.setItem('@current_streak', '0'); // Reset on failure
     }
   },
+
+  async getDailyMoods(): Promise<Record<string, string>> {
+    const data = await AsyncStorage.getItem('@daily_moods');
+    return data ? JSON.parse(data) : {};
+  },
+
+  async saveDailyMood(dateKey: string, mood: string): Promise<void> {
+    const moods = await this.getDailyMoods();
+    moods[dateKey] = mood;
+    await AsyncStorage.setItem('@daily_moods', JSON.stringify(moods));
+  },
+
+  async getLastStreakDate(): Promise<string | null> {
+    return await AsyncStorage.getItem('@last_streak_date');
+  },
+
+  async setLastStreakDate(dateKey: string): Promise<void> {
+    await AsyncStorage.setItem('@last_streak_date', dateKey);
+  },
+
+  async updateStreakForDate(dateKey: string, isSuccess: boolean): Promise<void> {
+    const lastDate = await this.getLastStreakDate();
+    if (lastDate === dateKey) return;
+    await this.updateStreak(isSuccess);
+    await this.setLastStreakDate(dateKey);
+  },
   // src/services/storage.ts
 async saveAllLimits(limits: Record<string, number>): Promise<void> {
   await AsyncStorage.setItem('@app_limits', JSON.stringify(limits));

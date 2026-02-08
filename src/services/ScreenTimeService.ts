@@ -41,6 +41,15 @@ export const ScreenTimeService = {
     }
   },
 
+  async openUsageAccessSettings(): Promise<void> {
+    if (Platform.OS !== 'android') return;
+    try {
+      await UsageModule.openSettings();
+    } catch (error) {
+      // no-op
+    }
+  },
+
   async storeTodayStats(): Promise<boolean> {
     if (Platform.OS !== 'android') return false;
     try {
