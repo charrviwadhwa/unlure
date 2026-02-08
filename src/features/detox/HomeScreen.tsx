@@ -181,6 +181,14 @@ export const HomeScreen = () => {
     ? Math.min(Math.round((displayLimitedUsage / (totalLimit * limitMultiplier)) * 100), 100)
     : Math.min(Math.round((displayTotalMins / (24 * 60 * limitMultiplier)) * 100), 100);
 
+  const weekDailyTotals = weekDateObjects.map((dateObj) => {
+    const key = formatDateKey(dateObj);
+    const dayMap = storedDailyStats[key];
+    if (!dayMap) return 0;
+    return Object.keys(dayMap).reduce((acc, pkg) => acc + Math.floor(dayMap[pkg] / 60000), 0);
+  });
+  const maxDaily = Math.max(...weekDailyTotals, 1);
+
   const monthWeekLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   const changeMonth = (delta: number) => {
@@ -196,6 +204,7 @@ export const HomeScreen = () => {
       <ScrollView 
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadData} />}
+        contentContainerStyle={{ paddingBottom: 90 }}
       >
         <View style={styles.header}>
           <View style={styles.headerRow}>
@@ -301,18 +310,38 @@ export const HomeScreen = () => {
               </View>
             </View>
 
-            <View style={styles.chartContainer}>
-              <PieChart 
-                widthAndHeight={260} 
-                series={displayUsageData.length > 0 ? displayUsageData.map((item, i) => ({ value: item.minutes, color: colors[i] })) : series}
-                cover={0.7} 
-                padAngle={0.05} // Gaps between segments
-              />
-              <View style={styles.chartCenter}>
-                <Text style={styles.centerTime}>{showPercent ? `${percent}%` : formatTime(displayTotalMins)}</Text>
-                <Text style={styles.centerSub}>{showPercent ? 'Of Limit' : (isWeek ? 'Total This Week' : 'Total Today')}</Text>
+            {showPercent ? (
+              <View style={styles.chartContainer}>
+                <PieChart 
+                  widthAndHeight={260} 
+                  series={displayUsageData.length > 0 ? displayUsageData.map((item, i) => ({ value: item.minutes, color: colors[i] })) : series}
+                  cover={0.7} 
+                  padAngle={0.05} // Gaps between segments
+                />
+                <View style={styles.chartCenter}>
+                  <Text style={styles.centerTime}>{`${percent}%`}</Text>
+                  <Text style={styles.centerSub}>Of Limit</Text>
+                </View>
               </View>
-            </View>
+            ) : (
+              <View style={styles.barChartContainer}>
+                <View style={styles.barHeader}>
+                  <Text style={styles.barTotal}>{formatTime(displayTotalMins)}</Text>
+                  <Text style={styles.barSub}>{isWeek ? 'This Week' : 'Today'}</Text>
+                </View>
+                <View style={styles.barChart}>
+                  {weekDailyTotals.map((value, idx) => {
+                    const height = Math.max(8, Math.round((value / maxDaily) * 90));
+                    return (
+                      <View key={`bar-${idx}`} style={styles.barItem}>
+                        <View style={[styles.bar, { height, backgroundColor: colors[idx % colors.length] }]} />
+                        <Text style={styles.barLabel}>{weekLabels[idx]}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
 
             <View style={styles.appList}>
               {displayUsageData.map((item, i) => (
@@ -377,6 +406,14 @@ const styles = StyleSheet.create({
   chartCenter: { position: 'absolute', alignItems: 'center' },
   centerTime: { fontSize: 28, fontWeight: '700', color: '#1C1C1E' },
   centerSub: { fontSize: 12, color: '#8E8E93', marginTop: 4 },
+  barChartContainer: { marginTop: 10 },
+  barHeader: { alignItems: 'center', marginBottom: 12 },
+  barTotal: { fontSize: 26, fontWeight: '700', color: '#1C1C1E' },
+  barSub: { fontSize: 12, color: '#8E8E93', marginTop: 4 },
+  barChart: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: 120, paddingHorizontal: 6 },
+  barItem: { alignItems: 'center', width: 28 },
+  bar: { width: 12, borderRadius: 6 },
+  barLabel: { fontSize: 10, color: '#8E8E93', marginTop: 6 },
   appList: { marginTop: 24 },
   appRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   dot: { width: 12, height: 12, borderRadius: 6, marginRight: 12 },
