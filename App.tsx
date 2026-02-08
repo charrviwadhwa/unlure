@@ -40,11 +40,11 @@ const App = () => {
     initialize();
   }, []);
 
-  if (!isReady) return <View style={{ flex: 1, backgroundColor: '#F5F2ED' }} />;
+  if (!isReady) return <View style={{ flex: 1, backgroundColor: '#ECECFF' }} />;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F5F2ED" />
+      <StatusBar barStyle="dark-content" backgroundColor="#ECECFF" />
       <View style={styles.container}>
         {currentStep === 'entry' && <EntryScreen onAnimationComplete={() => setCurrentStep('name')} />}
         
@@ -87,7 +87,7 @@ const App = () => {
 };
 
 const styles = StyleSheet.create({ 
-  container: { flex: 1, backgroundColor: '#F5F2ED' },
+  container: { flex: 1, backgroundColor: '#ECECFF' },
   main: { flex: 1 }
 });
 

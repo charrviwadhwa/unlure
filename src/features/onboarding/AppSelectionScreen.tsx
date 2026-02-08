@@ -42,9 +42,13 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Focus Apps</Text>
+      <View style={styles.headerWrap}>
+        <Text style={styles.header}>Choose Focus Apps</Text>
+        <Text style={styles.subheader}>Pick the apps that distract you most and set limits.</Text>
+      </View>
       <View style={styles.permissionCard}>
-        <Text style={styles.permissionText}>Allow usage access so we can track screen time accurately.</Text>
+        <Text style={styles.permissionTitle}>Usage Access</Text>
+        <Text style={styles.permissionText}>Allow access so we can track screen time accurately.</Text>
         <TouchableOpacity style={styles.permissionButton} onPress={ScreenTimeService.openUsageAccessSettings}>
           <Text style={styles.permissionButtonText}>Open Usage Access</Text>
         </TouchableOpacity>
@@ -70,9 +74,11 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
             >
               <View>
                 <Text style={styles.appName}>{item.appName}</Text>
-                {limit ? <Text style={styles.limitText}>{limit} mins</Text> : null}
+                {limit ? <Text style={styles.limitText}>{limit} mins</Text> : <Text style={styles.limitHint}>Set limit</Text>}
               </View>
-              <Text style={styles.icon}>{limit ? '\u2705' : '\u3009'}</Text>
+              <View style={[styles.radio, limit ? styles.radioActive : null]}>
+                {limit ? <Text style={styles.radioText}>✓</Text> : null}
+              </View>
             </TouchableOpacity>
           );
         }}
@@ -93,18 +99,24 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9F9FB', padding: 20 },
-  header: { fontSize: 28, fontWeight: 'bold', marginBottom: 20 },
-  permissionCard: { backgroundColor: '#FFF', padding: 14, borderRadius: 14, marginBottom: 12, elevation: 2 },
-  permissionText: { fontSize: 13, color: '#4B4B4B', marginBottom: 10 },
-  permissionButton: { alignSelf: 'flex-start', backgroundColor: '#1A1A1A', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10 },
+  container: { flex: 1, backgroundColor: '#ECECFF', padding: 20 },
+  headerWrap: { marginBottom: 12 },
+  header: { fontSize: 26, fontWeight: '700', color: '#2A2A3B' },
+  subheader: { fontSize: 13, color: '#6C6C7A', marginTop: 6 },
+  permissionCard: { backgroundColor: '#FFF', padding: 14, borderRadius: 16, marginBottom: 12, elevation: 2 },
+  permissionTitle: { fontSize: 14, fontWeight: '700', color: '#2A2A3B', marginBottom: 4 },
+  permissionText: { fontSize: 12, color: '#6C6C7A', marginBottom: 10 },
+  permissionButton: { alignSelf: 'flex-start', backgroundColor: '#1C1C1E', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10 },
   permissionButtonText: { color: '#FFF', fontWeight: '600', fontSize: 12 },
-  searchBar: { backgroundColor: '#FFF', padding: 15, borderRadius: 15, marginBottom: 15, elevation: 2 },
-  item: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18, backgroundColor: '#FFF', borderRadius: 20, marginBottom: 12 },
-  selectedItem: { backgroundColor: '#EEF0FF', borderColor: '#B1B4FF', borderWidth: 1 },
-  appName: { fontSize: 16, fontWeight: '600' },
-  limitText: { fontSize: 12, color: '#B1B4FF', fontWeight: 'bold', marginTop: 4 },
-  icon: { fontSize: 18, color: '#DDD' },
-  footerButton: { backgroundColor: '#1A1A1A', padding: 20, borderRadius: 20, alignItems: 'center' },
-  footerText: { color: '#FFF', fontWeight: 'bold' }
+  searchBar: { backgroundColor: '#FFF', padding: 14, borderRadius: 14, marginBottom: 12, elevation: 2 },
+  item: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#FFF', borderRadius: 18, marginBottom: 10 },
+  selectedItem: { backgroundColor: '#F1F2FF', borderColor: '#B1B4FF', borderWidth: 1 },
+  appName: { fontSize: 15, fontWeight: '600', color: '#2A2A3B' },
+  limitText: { fontSize: 12, color: '#6A6DFF', fontWeight: '700', marginTop: 4 },
+  limitHint: { fontSize: 12, color: '#A0A0B2', marginTop: 4 },
+  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: '#C9C9DD', alignItems: 'center', justifyContent: 'center' },
+  radioActive: { backgroundColor: '#6A6DFF', borderColor: '#6A6DFF' },
+  radioText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
+  footerButton: { backgroundColor: '#1C1C1E', padding: 18, borderRadius: 18, alignItems: 'center', marginTop: 6 },
+  footerText: { color: '#FFF', fontWeight: '700' }
 });

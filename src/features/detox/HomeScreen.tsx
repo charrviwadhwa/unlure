@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, RefreshControl, Animated } from 'react-native';
 import PieChart from 'react-native-pie-chart';
 import { ScreenTimeService, AppUsage, DailyUsageMap } from '../../services/ScreenTimeService';
 import { UserStore } from '../../services/storage';
@@ -17,6 +17,7 @@ export const HomeScreen = () => {
   const [monthLabel, setMonthLabel] = useState('');
   const [monthDays, setMonthDays] = useState<Array<{ key: string; day: number | null; mood: string }>>([]);
   const [monthDate, setMonthDate] = useState(new Date());
+  const toggleX = useRef(new Animated.Value(0)).current;
 
   const formatDateKey = (date: Date) => {
     const y = date.getFullYear();
@@ -199,6 +200,14 @@ export const HomeScreen = () => {
     setMonthDays(buildMonth(next, dailyMoods, storedDailyStats, limits));
   };
 
+  useEffect(() => {
+    Animated.timing(toggleX, {
+      toValue: showPercent ? 1 : 0,
+      duration: 220,
+      useNativeDriver: true
+    }).start();
+  }, [showPercent, toggleX]);
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView 
@@ -301,10 +310,23 @@ export const HomeScreen = () => {
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>{isWeek ? 'Weekly Average' : 'Daily Average'}</Text>
               <View style={styles.toggle}>
-                <TouchableOpacity style={showPercent ? styles.toggleItem : styles.toggleActive} onPress={() => setShowPercent(false)}>
-                  <Text style={showPercent ? styles.toggleText : styles.toggleActiveText}>Time</Text>
+                <Animated.View
+                  style={[
+                    styles.togglePill,
+                    {
+                      transform: [{
+                        translateX: toggleX.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0, 62]
+                        })
+                      }]
+                    }
+                  ]}
+                />
+                <TouchableOpacity style={styles.toggleItem} onPress={() => setShowPercent(false)}>
+                  <Text style={!showPercent ? styles.toggleActiveText : styles.toggleText}>Time</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={showPercent ? styles.toggleActive : styles.toggleItem} onPress={() => setShowPercent(true)}>
+                <TouchableOpacity style={styles.toggleItem} onPress={() => setShowPercent(true)}>
                   <Text style={showPercent ? styles.toggleActiveText : styles.toggleText}>Percents</Text>
                 </TouchableOpacity>
               </View>
@@ -362,10 +384,10 @@ export const HomeScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F6F7FB' },
+  container: { flex: 1, backgroundColor: '#ECECFF' },
   header: { paddingHorizontal: 24, paddingTop: 18, paddingBottom: 10 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
-  title: { fontSize: 24, fontWeight: '700', color: '#1C1C1E' },
+  title: { fontSize: 24, fontWeight: '700', color: '#2A2A3B' },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   iconButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', marginRight: 12, elevation: 2 },
   iconBell: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5, borderColor: '#1C1C1E' },
@@ -396,9 +418,9 @@ const styles = StyleSheet.create({
   analyticsCard: { backgroundColor: '#FFF', marginHorizontal: 20, marginTop: 16, borderRadius: 32, padding: 24, elevation: 4, marginBottom: 24 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   cardTitle: { fontSize: 18, fontWeight: '700', color: '#1C1C1E' },
-  toggle: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F2F3F7', borderRadius: 18, padding: 3 },
+  toggle: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F2F3F7', borderRadius: 18, padding: 3, position: 'relative' },
+  togglePill: { position: 'absolute', left: 3, top: 3, bottom: 3, width: 62, backgroundColor: '#1C1C1E', borderRadius: 14 },
   toggleText: { fontSize: 12, color: '#8E8E93', marginHorizontal: 8, fontWeight: '600' },
-  toggleActive: { backgroundColor: '#1C1C1E', borderRadius: 14, paddingVertical: 6, paddingHorizontal: 10 },
   toggleActiveText: { color: '#FFFFFF', fontWeight: '600', fontSize: 12 },
   toggleItem: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 14 },
 
@@ -423,7 +445,7 @@ const styles = StyleSheet.create({
 
   monthCard: { backgroundColor: '#FFFFFF', marginHorizontal: 20, marginTop: 12, borderRadius: 28, padding: 18, elevation: 3, marginBottom: 20 },
   monthHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  monthTitle: { fontSize: 16, fontWeight: '600', color: '#1C1C1E' },
+  monthTitle: { fontSize: 16, fontWeight: '600', color: '#2A2A3B' },
   monthArrow: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F2F3F7', justifyContent: 'center', alignItems: 'center' },
   monthArrowText: { fontSize: 18, color: '#1C1C1E' },
   monthWeekRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },

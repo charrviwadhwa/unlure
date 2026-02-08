@@ -96,11 +96,11 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ userName }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F6F7FB' },
+  container: { flex: 1, backgroundColor: '#C9C9F7' },
   content: { paddingBottom: 90 },
   header: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 18 },
-  greeting: { fontSize: 26, fontWeight: '700', color: '#1C1C1E' },
-  subtitle: { fontSize: 14, color: '#8E8E93', marginTop: 6 },
+  greeting: { fontSize: 26, fontWeight: '700', color: '#2A2A3B' },
+  subtitle: { fontSize: 14, color: '#5E5E7A', marginTop: 6 },
 
   cardsRow: { flexDirection: 'row', paddingHorizontal: 20, gap: 14 },
   squareCard: {
@@ -110,8 +110,8 @@ const styles = StyleSheet.create({
     padding: 16,
     elevation: 3
   },
-  cardLabel: { fontSize: 12, color: '#8E8E93', marginBottom: 8, fontWeight: '600' },
-  cardValue: { fontSize: 20, fontWeight: '700', color: '#1C1C1E' },
+  cardLabel: { fontSize: 12, color: '#7A7A96', marginBottom: 8, fontWeight: '600' },
+  cardValue: { fontSize: 20, fontWeight: '700', color: '#2A2A3B' },
 
   goalCard: {
     marginTop: 18,
@@ -121,9 +121,9 @@ const styles = StyleSheet.create({
     padding: 18,
     elevation: 3
   },
-  goalTitle: { fontSize: 16, fontWeight: '700', color: '#1C1C1E', marginBottom: 6 },
-  goalLabel: { fontSize: 13, color: '#6C6C70', marginBottom: 12 },
+  goalTitle: { fontSize: 16, fontWeight: '700', color: '#2A2A3B', marginBottom: 6 },
+  goalLabel: { fontSize: 13, color: '#6C6C7A', marginBottom: 12 },
   progressBar: { height: 10, backgroundColor: '#F2F3F7', borderRadius: 6, overflow: 'hidden' },
-  progressFill: { height: 10, backgroundColor: '#B1B4FF', borderRadius: 6 },
-  goalPercent: { marginTop: 8, fontSize: 12, color: '#8E8E93', fontWeight: '600' }
+  progressFill: { height: 10, backgroundColor: '#6A6DFF', borderRadius: 6 },
+  goalPercent: { marginTop: 8, fontSize: 12, color: '#7A7A96', fontWeight: '600' }
 });
