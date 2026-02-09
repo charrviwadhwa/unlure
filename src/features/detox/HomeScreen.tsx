@@ -6,6 +6,7 @@ import { UserStore } from '../../services/storage';
 
 export const HomeScreen = () => {
   const [usageData, setUsageData] = useState<AppUsage[]>([]);
+  const [liveTodayUsage, setLiveTodayUsage] = useState<AppUsage[]>([]);
   const [totalMins, setTotalMins] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [limits, setLimits] = useState<Record<string, number>>({});
@@ -17,6 +18,7 @@ export const HomeScreen = () => {
   const [monthLabel, setMonthLabel] = useState('');
   const [monthDays, setMonthDays] = useState<Array<{ key: string; day: number | null; mood: string }>>([]);
   const [monthDate, setMonthDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const toggleX = useRef(new Animated.Value(0)).current;
 
   const formatDateKey = (date: Date) => {
@@ -92,11 +94,9 @@ export const HomeScreen = () => {
   const loadData = async () => {
     setRefreshing(true);
 
-    const [_, stored, storedLimits] = await Promise.all([
-      ScreenTimeService.storeTodayStats(),
-      ScreenTimeService.getStoredDailyStats(),
-      UserStore.getAllLimits()
-    ]);
+    await ScreenTimeService.storeTodayStats();
+    const stored = await ScreenTimeService.getStoredDailyStats();
+    const storedLimits = await UserStore.getAllLimits();
     setStoredDailyStats(stored || {});
     setLimits(storedLimits || {});
 
@@ -112,6 +112,7 @@ export const HomeScreen = () => {
       stats = await ScreenTimeService.getDailyStats();
     }
 
+    setLiveTodayUsage(stats);
     const sortedStats = stats.sort((a, b) => b.minutes - a.minutes);
     setUsageData(sortedStats.slice(0, 4));
     const total = stats.reduce((acc, curr) => acc + curr.minutes, 0);
@@ -149,13 +150,9 @@ export const HomeScreen = () => {
   const weekLabels = week.labels;
   const weekDates = week.dates;
   const weekDateObjects = week.dateObjects;
-  const activeDate = today.getDate();
+  const activeDate = selectedDate.getDate();
 
   const totalLimit = Object.keys(limits || {}).reduce((acc, pkg) => acc + (limits[pkg] || 0), 0);
-  const dailyLimitedUsage = usageData.reduce((acc, curr) => {
-    const limit = limits[curr.id];
-    return limit ? acc + curr.minutes : acc;
-  }, 0);
 
   const weekUsageMap: Record<string, number> = {};
   weekDateObjects.forEach((dateObj) => {
@@ -174,9 +171,27 @@ export const HomeScreen = () => {
   const weekLimitedUsage = weekStats.reduce((acc, curr) => (limits[curr.id] ? acc + curr.minutes : acc), 0);
 
   const isWeek = activeRange === 'week';
-  const displayUsageData = isWeek ? weekUsageData : usageData;
-  const displayTotalMins = isWeek ? weekTotalMins : totalMins;
-  const displayLimitedUsage = isWeek ? weekLimitedUsage : dailyLimitedUsage;
+  const selectedDateKey = formatDateKey(selectedDate);
+  const todayKey = formatDateKey(today);
+  const selectedMap = storedDailyStats[selectedDateKey] || {};
+  let selectedStats: AppUsage[] = Object.keys(selectedMap).map((pkg) => ({
+    id: pkg,
+    minutes: Math.floor(selectedMap[pkg] / 60000)
+  }));
+  if (selectedStats.length === 0 && selectedDateKey === todayKey) {
+    selectedStats = liveTodayUsage;
+  }
+  const selectedSorted = selectedStats.sort((a, b) => b.minutes - a.minutes);
+  const selectedTop = selectedSorted.slice(0, 4);
+  const selectedTotalMins = selectedStats.reduce((acc, curr) => acc + curr.minutes, 0);
+  const selectedLimitedUsage = selectedStats.reduce((acc, curr) => {
+    const limit = limits[curr.id];
+    return limit ? acc + curr.minutes : acc;
+  }, 0);
+
+  const displayUsageData = isWeek ? weekUsageData : selectedTop;
+  const displayTotalMins = isWeek ? weekTotalMins : selectedTotalMins;
+  const displayLimitedUsage = isWeek ? weekLimitedUsage : selectedLimitedUsage;
   const limitMultiplier = isWeek ? 7 : 1;
   const percent = totalLimit > 0
     ? Math.min(Math.round((displayLimitedUsage / (totalLimit * limitMultiplier)) * 100), 100)
@@ -207,6 +222,10 @@ export const HomeScreen = () => {
       useNativeDriver: true
     }).start();
   }, [showPercent, toggleX]);
+
+  const selectedMood = getMoodForDate(selectedDateKey, storedDailyStats, limits, dailyMoods[selectedDateKey]);
+  const calendarMood = selectedMood || overallMood;
+  const barSubLabel = isWeek ? 'This Week' : (selectedDateKey === todayKey ? 'Today' : 'Selected Day');
 
   return (
     <SafeAreaView style={styles.container}>
@@ -246,9 +265,9 @@ export const HomeScreen = () => {
           <View style={styles.calendarCard}>
             <View style={styles.calendarHeader}>
               <View style={styles.moodCircle}>
-                <Text style={styles.moodText}>{overallMood}</Text>
+                <Text style={styles.moodText}>{calendarMood}</Text>
               </View>
-              <Text style={styles.calendarDate}>{formatDisplayDate(today)}</Text>
+              <Text style={styles.calendarDate}>{formatDisplayDate(selectedDate)}</Text>
             </View>
 
             <View style={styles.calendarWeek}>
@@ -263,13 +282,15 @@ export const HomeScreen = () => {
                 const dateKey = formatDateKey(dateObj);
                 const mood = getMoodForDate(dateKey, storedDailyStats, limits, dailyMoods[dateKey]);
                 return (
-                  <View key={dateKey} style={[styles.dateCircle, date === activeDate && styles.activeDate]}>
-                    {mood ? (
-                      <Text style={styles.dateEmoji}>{mood}</Text>
-                    ) : (
-                      <Text style={[styles.dateText, date === activeDate && styles.activeDateText]}>{date}</Text>
-                    )}
-                  </View>
+                  <TouchableOpacity key={dateKey} onPress={() => setSelectedDate(dateObj)} activeOpacity={0.8}>
+                    <View style={[styles.dateCircle, date === activeDate && styles.activeDate]}>
+                      {mood ? (
+                        <Text style={styles.dateEmoji}>{mood}</Text>
+                      ) : (
+                        <Text style={[styles.dateText, date === activeDate && styles.activeDateText]}>{date}</Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
                 );
               })}
             </View>
@@ -349,7 +370,7 @@ export const HomeScreen = () => {
               <View style={styles.barChartContainer}>
                 <View style={styles.barHeader}>
                   <Text style={styles.barTotal}>{formatTime(displayTotalMins)}</Text>
-                  <Text style={styles.barSub}>{isWeek ? 'This Week' : 'Today'}</Text>
+                  <Text style={styles.barSub}>{barSubLabel}</Text>
                 </View>
                 <View style={styles.barChart}>
                   {weekDailyTotals.map((value, idx) => {
