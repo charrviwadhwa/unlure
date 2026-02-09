@@ -271,8 +271,8 @@ export const HomeScreen = () => {
             </View>
 
             <View style={styles.calendarWeek}>
-              {weekLabels.map((label) => (
-                <Text key={label} style={styles.weekLabel}>{label}</Text>
+              {weekLabels.map((label, idx) => (
+                <Text key={`${label}-${idx}`} style={styles.weekLabel}>{label}</Text>
               ))}
             </View>
 
