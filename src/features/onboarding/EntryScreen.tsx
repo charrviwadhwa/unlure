@@ -1,19 +1,23 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Image, Dimensions, SafeAreaView } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
-import LinearGradient from 'react-native-linear-gradient';
-
-const { width, height } = Dimensions.get('window');
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  Easing
+} from 'react-native-reanimated';
 
 interface EntryScreenProps {
   onAnimationComplete: () => void;
 }
 
+const { width } = Dimensions.get('window');
+
 const EntryScreen: React.FC<EntryScreenProps> = ({ onAnimationComplete }) => {
   const fadeAnim = useSharedValue(0);
 
   useEffect(() => {
-    fadeAnim.value = withTiming(1, { duration: 800, easing: Easing.out(Easing.quad) });
+    fadeAnim.value = withTiming(1, { duration: 1000, easing: Easing.out(Easing.quad) });
   }, []);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -22,214 +26,231 @@ const EntryScreen: React.FC<EntryScreenProps> = ({ onAnimationComplete }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Animated.View style={[styles.content, animatedStyle]}>
-        
-        {/* Top Navigation Row */}
-        <View style={styles.topRow}>
-          <TouchableOpacity style={styles.iconButton}>
-            <Text style={styles.backArrow}>←</Text>
-          </TouchableOpacity>
-          <View style={styles.versionPill}>
-            <Text style={styles.sparkle}>✻</Text>
-            <Text style={styles.versionText}>Version 2.0</Text>
-            <Text style={styles.chevron}>⌄</Text>
+      <View style={styles.card}>
+        <Animated.View style={[styles.content, animatedStyle]}>
+          <View style={styles.topBar}>
+            <TouchableOpacity style={styles.backButton} activeOpacity={0.8}>
+              <Text style={styles.backText}>{'\u2190'}</Text>
+            </TouchableOpacity>
+            <View style={styles.versionPill}>
+              <Text style={styles.versionIcon}>{'\u2736'}</Text>
+              <Text style={styles.versionText}>Version 2.0</Text>
+              <Text style={styles.versionArrow}>{'\u25BE'}</Text>
+            </View>
+            <View style={styles.topSpacer} />
           </View>
-          <View style={styles.spacer} />
-        </View>
 
-        {/* Branding - Exactly like image */}
-        <View style={styles.brandContainer}>
-          <Text style={styles.brandMind}>Mind</Text>
-          <View style={styles.mateHighlight}>
-             <Text style={styles.brandMate}>Mate</Text>
+          <View style={styles.brandRow}>
+            <Text style={styles.brandBase}>Mind</Text>
+            <Text style={styles.brandHighlight}>Mate</Text>
           </View>
-        </View>
 
-        {/* Illustration */}
-        <View style={styles.imageContainer}>
-          <Image
-            source={require('../../assets/Motivation 6.png')}
-            style={styles.mainImage}
-            resizeMode="contain"
-          />
-        </View>
+          <View style={styles.illustrationWrap}>
+            <Image
+              source={require('../../assets/Motivation 6.png')}
+              style={styles.illustration}
+              resizeMode="contain"
+            />
+          </View>
 
-        {/* Headline & Subheadline */}
-        <View style={styles.textGroup}>
           <Text style={styles.headline}>
-            Unlock the Power of{"\n"}Your Mind 🧠 ⌛ 😊
+            Unlock the Power of{'\n'}Your Mind {'\uD83E\uDDE0'} {'\u23F3'} {'\u263A'}
           </Text>
-          <Text style={styles.subheadline}>
-            Track your focus, balance your emotions, and train{"\n"}your mental clarity — all in one place.
+          <Text style={styles.subhead}>
+            Track your focus, balance your emotions, and train{'\n'}your mental clarity \u2014 all in one place.
           </Text>
-        </View>
 
-        {/* Footer Actions */}
-        <View style={styles.footer}>
-          <TouchableOpacity onPress={onAnimationComplete} activeOpacity={0.8}>
-            <LinearGradient
-              colors={['#D6E6A1', '#F5D9E0']} // Lime to Pink Gradient
-              start={{x: 0, y: 0}}
-              end={{x: 1, y: 0}}
-              style={styles.getStartedBtn}
-            >
-              <View style={styles.btnIconCircle}>
-                <Text style={styles.btnArrow}>→</Text>
+          <View style={styles.footerRow}>
+            <TouchableOpacity style={styles.ctaButton} onPress={onAnimationComplete} activeOpacity={0.85}>
+              <View style={styles.ctaIconCircle}>
+                <Text style={styles.ctaArrow}>{'\u2192'}</Text>
               </View>
-              <Text style={styles.btnText}>Get Started</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-
-          <TouchableOpacity>
-            <Text style={styles.skipText}>Skip</Text>
-          </TouchableOpacity>
-        </View>
-
-      </Animated.View>
+              <Text style={styles.ctaText}>Get Started</Text>
+            </TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.7}>
+              <Text style={styles.skipText}>Skip</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </View>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#FFFFFF' 
+  container: {
+    flex: 1,
+    backgroundColor: '#FAF9F6',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
-  content: { 
-    flex: 1, 
-    paddingHorizontal: 24, 
-    paddingTop: 10 
+  card: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 48,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    elevation: 4,
   },
-  topRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center' 
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 6,
+    width: '100%',
   },
-  iconButton: { 
-    width: 44, 
-    height: 44, 
-    borderRadius: 22, 
-    backgroundColor: '#F7F7F7', 
-    justifyContent: 'center', 
-    alignItems: 'center' 
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
-  backArrow: { 
-    fontSize: 20, 
-    color: '#000' 
+  backText: {
+    fontSize: 18,
+    color: '#1A1A1A',
+    fontWeight: '600',
   },
-  versionPill: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: '#F7F7F7', 
-    paddingHorizontal: 12, 
-    paddingVertical: 6, 
-    borderRadius: 20 
+  versionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
-  sparkle: { 
-    marginRight: 4, 
-    fontSize: 14 
+  versionIcon: {
+    fontSize: 12,
+    color: '#1A1A1A',
+    marginRight: 6,
   },
-  versionText: { 
-    fontSize: 13, 
-    fontWeight: '600', 
-    marginRight: 4 
+  versionText: {
+    fontSize: 12,
+    color: '#1A1A1A',
+    fontWeight: '600',
+    marginRight: 6,
   },
-  chevron: { 
-    fontSize: 14, 
-    color: '#888' 
+  versionArrow: {
+    fontSize: 12,
+    color: '#1A1A1A',
   },
-  spacer: { 
-    width: 44 
+  topSpacer: {
+    width: 40,
   },
-  brandContainer: { 
-    flexDirection: 'row', 
-    alignSelf: 'center', 
-    marginTop: 35, 
-    alignItems: 'center' 
+  content: {
+    flex: 1,
+    alignItems: 'center',
+    paddingTop: 6,
   },
-  brandMind: { 
-    fontSize: 34, 
-    fontWeight: '700', 
-    color: '#000' 
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
   },
-  mateHighlight: { 
-    backgroundColor: '#A9D6E5', // Sky Blue
-    borderRadius: 4, 
-    marginLeft: 4, 
-    paddingHorizontal: 6, 
-    paddingVertical: 2 
+  brandBase: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#1A1A1A',
+    marginRight: 4,
   },
-  brandMate: { 
-    fontSize: 34, 
-    fontWeight: '700', 
-    color: '#FFF' 
+  brandHighlight: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    backgroundColor: '#0D5D4E',
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    overflow: 'hidden',
   },
-  imageContainer: { 
-    width: '100%', 
-    height: height * 0.38, 
-    marginTop: 10 
+  illustrationWrap: {
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 4,
   },
-  mainImage: { 
-    width: '100%', 
-    height: '100%' 
+  illustration: {
+    width: width * 0.95,
+    height: width * 1.18,
   },
-  textGroup: { 
-    marginTop: 20, 
-    alignItems: 'center' 
+  headline: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#1A1A1A',
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 32,
   },
-  headline: { 
-    fontSize: 28, 
-    fontWeight: '800', // Bold
-    textAlign: 'center', 
-    color: '#000', 
-    lineHeight: 36 
+  subhead: {
+    fontSize: 13,
+    color: '#1A1A1A',
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 20,
   },
-  subheadline: { 
-    fontSize: 15, 
-    textAlign: 'center', 
-    color: '#666', 
-    marginTop: 12, 
-    lineHeight: 22, 
-    fontWeight: '400' 
+  footerRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    paddingHorizontal: 4,
   },
-  footer: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginTop: 'auto', // Sticks to bottom
-    marginBottom: 40 
+  ctaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFD581',
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 22,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  getStartedBtn: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    paddingVertical: 14, 
-    paddingHorizontal: 24, 
-    borderRadius: 35 
+  ctaIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#E8685D',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
   },
-  btnIconCircle: { 
-    width: 30, 
-    height: 30, 
-    borderRadius: 15, 
-    backgroundColor: 'rgba(255,255,255,0.4)', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    marginRight: 12 
+  ctaArrow: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
-  btnArrow: { 
-    color: '#000', 
-    fontWeight: 'bold', 
-    fontSize: 16 
+  ctaText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1A1A',
   },
-  btnText: { 
-    fontSize: 17, 
-    fontWeight: '700', 
-    color: '#000' 
+  skipText: {
+    fontSize: 14,
+    color: '#1A1A1A',
+    fontWeight: '600',
   },
-  skipText: { 
-    fontSize: 16, 
-    color: '#000', 
-    fontWeight: '600' 
-  }
 });
 
 export default EntryScreen;
