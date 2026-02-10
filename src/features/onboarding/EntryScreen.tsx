@@ -52,13 +52,14 @@ const EntryScreen: React.FC<EntryScreenProps> = ({ onAnimationComplete }) => {
               resizeMode="contain"
             />
           </View>
-
-          <Text style={styles.headline}>
-            Unlock the Power of{'\n'}Your Mind {'\uD83E\uDDE0'} {'\u23F3'} {'\u263A'}
-          </Text>
-          <Text style={styles.subhead}>
-            Track your focus, balance your emotions, and train{'\n'}your mental clarity \u2014 all in one place.
-          </Text>
+          <View style={styles.textGroup}>
+            <Text style={styles.headline}>
+              Unlock the Power of{'\n'}Your Mind {'\uD83E\uDDE0'} {'\u23F3'} {'\u263A'}
+            </Text>
+            <Text style={styles.subhead}>
+              Track your focus, balance your emotions, and train your mental clarity \u2014 all in one place.
+            </Text>
+          </View>
 
           <View style={styles.footerRow}>
             <TouchableOpacity style={styles.ctaButton} onPress={onAnimationComplete} activeOpacity={0.85}>
@@ -80,13 +81,13 @@ const EntryScreen: React.FC<EntryScreenProps> = ({ onAnimationComplete }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAF9F6',
+    backgroundColor: '#faf7f6',
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
   card: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#ffffff',
     borderRadius: 48,
     paddingHorizontal: 24,
     paddingTop: 16,
@@ -160,7 +161,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     alignItems: 'center',
-    paddingTop: 6,
+    paddingTop: 8,
   },
   brandRow: {
     flexDirection: 'row',
@@ -191,19 +192,23 @@ const styles = StyleSheet.create({
     width: width * 0.95,
     height: width * 1.18,
   },
+  textGroup: {
+    width: '100%',
+    alignItems: 'flex-start',
+    marginTop: 6,
+  },
   headline: {
-    fontSize: 24,
+    fontSize: 35,
     fontWeight: '800',
     color: '#1A1A1A',
-    textAlign: 'center',
-    marginTop: 6,
-    lineHeight: 32,
+    textAlign: 'left',
+    lineHeight: 39,
   },
   subhead: {
-    fontSize: 13,
+    fontSize: 16.5,
     color: '#1A1A1A',
-    textAlign: 'center',
-    marginTop: 8,
+    textAlign: 'left',
+    marginTop: 10,
     lineHeight: 20,
   },
   footerRow: {
@@ -211,38 +216,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 14,
+    marginTop: 10,
     paddingHorizontal: 4,
   },
   ctaButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFD581',
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    borderRadius: 22,
+    paddingVertical: 14,
+    paddingHorizontal: 22,
+    borderRadius: 26,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
     shadowRadius: 10,
     elevation: 2,
+    marginTop:9
   },
   ctaIconCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 15,
     backgroundColor: '#E8685D',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 8,
   },
   ctaArrow: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#FFFFFF',
     fontWeight: '700',
+    
   },
   ctaText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
     color: '#1A1A1A',
   },
