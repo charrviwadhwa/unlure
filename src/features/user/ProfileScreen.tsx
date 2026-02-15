@@ -61,19 +61,19 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ userName, onOpenLi
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ECECFF' },
+  container: { flex: 1, backgroundColor: '#F5F5F5' },
   content: { paddingBottom: 90 },
   header: { alignItems: 'center', paddingTop: 24, paddingBottom: 18 },
-  avatar: { width: 92, height: 92, borderRadius: 46, backgroundColor: '#C9C9F7', marginBottom: 12 },
-  name: { fontSize: 22, fontWeight: '700', color: '#2A2A3B' },
-  email: { fontSize: 13, color: '#6C6C7A', marginTop: 6 },
+  avatar: { width: 92, height: 92, borderRadius: 46, backgroundColor: '#E2E2E2', marginBottom: 12 },
+  name: { fontSize: 22, fontWeight: '700', color: '#111111' },
+  email: { fontSize: 13, color: '#4A4A4A', marginTop: 6 },
 
   section: { marginTop: 18, marginHorizontal: 20, backgroundColor: '#FFFFFF', borderRadius: 20, paddingVertical: 6, elevation: 2 },
-  sectionTitle: { paddingHorizontal: 16, paddingVertical: 10, fontSize: 12, color: '#7A7A96', fontWeight: '600' },
+  sectionTitle: { paddingHorizontal: 16, paddingVertical: 10, fontSize: 12, color: '#5B5B5B', fontWeight: '600' },
   row: { paddingHorizontal: 16, paddingVertical: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  rowText: { fontSize: 15, color: '#2A2A3B', fontWeight: '600' },
-  rowArrow: { fontSize: 20, color: '#C7C7CC' },
+  rowText: { fontSize: 15, color: '#111111', fontWeight: '600' },
+  rowArrow: { fontSize: 20, color: '#9A9A9A' },
 
-  logoutButton: { marginTop: 24, marginHorizontal: 20, borderRadius: 16, borderWidth: 1, borderColor: '#D74B4B', paddingVertical: 14, alignItems: 'center' },
-  logoutText: { color: '#D74B4B', fontWeight: '700' }
+  logoutButton: { marginTop: 24, marginHorizontal: 20, borderRadius: 16, borderWidth: 1, borderColor: '#111111', paddingVertical: 14, alignItems: 'center' },
+  logoutText: { color: '#111111', fontWeight: '700' }
 });

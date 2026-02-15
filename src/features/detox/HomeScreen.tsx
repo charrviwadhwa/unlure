@@ -7,7 +7,6 @@ import { UserStore } from '../../services/storage';
 export const HomeScreen = () => {
   const [usageData, setUsageData] = useState<AppUsage[]>([]);
   const [liveTodayUsage, setLiveTodayUsage] = useState<AppUsage[]>([]);
-  const [totalMins, setTotalMins] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [limits, setLimits] = useState<Record<string, number>>({});
   const [overallMood, setOverallMood] = useState('\u{1F642}');
@@ -115,9 +114,6 @@ export const HomeScreen = () => {
     setLiveTodayUsage(stats);
     const sortedStats = stats.sort((a, b) => b.minutes - a.minutes);
     setUsageData(sortedStats.slice(0, 4));
-    const total = stats.reduce((acc, curr) => acc + curr.minutes, 0);
-    setTotalMins(total);
-
     const totalLimit = Object.keys(storedLimits || {}).reduce((acc, pkg) => acc + (storedLimits[pkg] || 0), 0);
     const totalLimitedUsage = stats.reduce((acc, curr) => {
       const limit = storedLimits?.[curr.id];
@@ -138,12 +134,14 @@ export const HomeScreen = () => {
     setRefreshing(false);
   };
 
+  // loadData intentionally runs once on mount.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadData(); }, []);
 
-  const colors = ['#B1B4FF', '#FFD1A9', '#A9F4FF', '#FFB1B1']; 
+  const colors = ['#111111', '#3A3A3A', '#666666', '#9A9A9A'];
   const series = usageData.map((item, i) => ({ value: item.minutes, color: colors[i] }));
   
-  if (series.length === 0) series.push({ value: 1, color: '#F0F0F0' });
+  if (series.length === 0) series.push({ value: 1, color: '#DCDCDC' });
 
   const today = new Date();
   const week = buildWeek(today);
@@ -405,77 +403,77 @@ export const HomeScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ECECFF' },
+  container: { flex: 1, backgroundColor: '#F5F5F5' },
   header: { paddingHorizontal: 24, paddingTop: 18, paddingBottom: 10 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
-  title: { fontSize: 24, fontWeight: '700', color: '#2A2A3B' },
+  title: { fontSize: 24, fontWeight: '700', color: '#111111' },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   iconButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', marginRight: 12, elevation: 2 },
-  iconBell: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5, borderColor: '#1C1C1E' },
-  notificationDot: { position: 'absolute', width: 8, height: 8, borderRadius: 4, backgroundColor: '#A0A7FF', top: 7, right: 8 },
-  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#E8EAFF', justifyContent: 'center', alignItems: 'center' },
-  avatarText: { fontWeight: '700', color: '#4B4B4B', fontSize: 12 },
+  iconBell: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5, borderColor: '#111111' },
+  notificationDot: { position: 'absolute', width: 8, height: 8, borderRadius: 4, backgroundColor: '#111111', top: 7, right: 8 },
+  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#E0E0E0', justifyContent: 'center', alignItems: 'center' },
+  avatarText: { fontWeight: '700', color: '#2F2F2F', fontSize: 12 },
 
   tabBar: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: 24, padding: 4, elevation: 2 },
-  activeTab: { flex: 1, backgroundColor: '#1C1C1E', paddingVertical: 10, borderRadius: 20, alignItems: 'center' },
+  activeTab: { flex: 1, backgroundColor: '#111111', paddingVertical: 10, borderRadius: 20, alignItems: 'center' },
   activeTabText: { color: '#FFF', fontWeight: '600' },
   tab: { flex: 1, paddingVertical: 10, alignItems: 'center' },
-  tabText: { color: '#8E8E93', fontWeight: '500' },
+  tabText: { color: '#666666', fontWeight: '500' },
 
   calendarCard: { backgroundColor: '#FFFFFF', marginHorizontal: 20, marginTop: 8, borderRadius: 28, padding: 20, elevation: 3 },
   calendarHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  moodCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#C8D2FF', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
-  moodText: { fontWeight: '700', color: '#1C1C1E', fontSize: 12 },
-  calendarDate: { fontSize: 16, fontWeight: '600', color: '#1C1C1E' },
+  moodCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#E6E6E6', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  moodText: { fontWeight: '700', color: '#111111', fontSize: 12 },
+  calendarDate: { fontSize: 16, fontWeight: '600', color: '#111111' },
   calendarWeek: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10, paddingHorizontal: 4 },
-  weekLabel: { color: '#8E8E93', fontSize: 12, width: 28, textAlign: 'center' },
+  weekLabel: { color: '#666666', fontSize: 12, width: 28, textAlign: 'center' },
   calendarDates: { flexDirection: 'row', justifyContent: 'space-between' },
-  dateCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F2F3F7', justifyContent: 'center', alignItems: 'center' },
+  dateCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F2F2F2', justifyContent: 'center', alignItems: 'center' },
   dateEmoji: { fontSize: 14 },
-  dateText: { color: '#1C1C1E', fontWeight: '600', fontSize: 12 },
-  activeDate: { backgroundColor: '#C8D2FF' },
-  activeDateText: { color: '#1C1C1E' },
+  dateText: { color: '#111111', fontWeight: '600', fontSize: 12 },
+  activeDate: { backgroundColor: '#D9D9D9' },
+  activeDateText: { color: '#111111' },
 
   analyticsCard: { backgroundColor: '#FFF', marginHorizontal: 20, marginTop: 16, borderRadius: 32, padding: 24, elevation: 4, marginBottom: 24 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  cardTitle: { fontSize: 18, fontWeight: '700', color: '#1C1C1E' },
-  toggle: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F2F3F7', borderRadius: 18, padding: 3, position: 'relative' },
-  togglePill: { position: 'absolute', left: 3, top: 3, bottom: 3, width: 62, backgroundColor: '#1C1C1E', borderRadius: 14 },
-  toggleText: { fontSize: 12, color: '#8E8E93', marginHorizontal: 8, fontWeight: '600' },
+  cardTitle: { fontSize: 18, fontWeight: '700', color: '#111111' },
+  toggle: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F2F2F2', borderRadius: 18, padding: 3, position: 'relative' },
+  togglePill: { position: 'absolute', left: 3, top: 3, bottom: 3, width: 62, backgroundColor: '#111111', borderRadius: 14 },
+  toggleText: { fontSize: 12, color: '#666666', marginHorizontal: 8, fontWeight: '600' },
   toggleActiveText: { color: '#FFFFFF', fontWeight: '600', fontSize: 12 },
   toggleItem: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 14 },
 
   chartContainer: { justifyContent: 'center', alignItems: 'center', position: 'relative', marginTop: 10 },
   chartCenter: { position: 'absolute', alignItems: 'center' },
-  centerTime: { fontSize: 28, fontWeight: '700', color: '#1C1C1E' },
-  centerSub: { fontSize: 12, color: '#8E8E93', marginTop: 4 },
+  centerTime: { fontSize: 28, fontWeight: '700', color: '#111111' },
+  centerSub: { fontSize: 12, color: '#666666', marginTop: 4 },
   barChartContainer: { marginTop: 10 },
   barHeader: { alignItems: 'center', marginBottom: 12 },
-  barTotal: { fontSize: 26, fontWeight: '700', color: '#1C1C1E' },
-  barSub: { fontSize: 12, color: '#8E8E93', marginTop: 4 },
+  barTotal: { fontSize: 26, fontWeight: '700', color: '#111111' },
+  barSub: { fontSize: 12, color: '#666666', marginTop: 4 },
   barChart: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: 120, paddingHorizontal: 6 },
   barItem: { alignItems: 'center', width: 28 },
   bar: { width: 12, borderRadius: 6 },
-  barLabel: { fontSize: 10, color: '#8E8E93', marginTop: 6 },
+  barLabel: { fontSize: 10, color: '#666666', marginTop: 6 },
   appList: { marginTop: 24 },
   appRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   dot: { width: 12, height: 12, borderRadius: 6, marginRight: 12 },
-  appName: { flex: 1, fontSize: 14, fontWeight: '600', textTransform: 'capitalize', color: '#2C2C2E' },
-  appTime: { fontSize: 14, fontWeight: '700', color: '#1C1C1E' },
-  overLimit: { color: '#D74B4B' },
+  appName: { flex: 1, fontSize: 14, fontWeight: '600', textTransform: 'capitalize', color: '#2C2C2C' },
+  appTime: { fontSize: 14, fontWeight: '700', color: '#111111' },
+  overLimit: { color: '#111111' },
 
   monthCard: { backgroundColor: '#FFFFFF', marginHorizontal: 20, marginTop: 12, borderRadius: 28, padding: 18, elevation: 3, marginBottom: 20 },
   monthHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  monthTitle: { fontSize: 16, fontWeight: '600', color: '#2A2A3B' },
-  monthArrow: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F2F3F7', justifyContent: 'center', alignItems: 'center' },
-  monthArrowText: { fontSize: 18, color: '#1C1C1E' },
+  monthTitle: { fontSize: 16, fontWeight: '600', color: '#111111' },
+  monthArrow: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F2F2F2', justifyContent: 'center', alignItems: 'center' },
+  monthArrowText: { fontSize: 18, color: '#111111' },
   monthWeekRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  monthWeekLabel: { fontSize: 11, color: '#8E8E93', width: 28, textAlign: 'center' },
+  monthWeekLabel: { fontSize: 11, color: '#666666', width: 28, textAlign: 'center' },
   monthGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   monthCell: { width: '14.2857%', alignItems: 'center', marginBottom: 10 },
   monthCircle: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
-  monthFilled: { backgroundColor: '#FFF9E6' },
+  monthFilled: { backgroundColor: '#E6E6E6' },
   monthEmpty: { backgroundColor: '#F2F2F2' },
   monthEmoji: { fontSize: 18 },
-  monthDay: { fontSize: 11, color: '#8E8E8E' }
+  monthDay: { fontSize: 11, color: '#666666' }
 });

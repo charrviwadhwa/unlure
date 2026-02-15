@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, StatusBar } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -18,6 +18,11 @@ const App = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'profile'>('overview');
   const [isReady, setIsReady] = useState(false);
   const [userName, setUserName] = useState('');
+  const isMain = currentStep === 'main';
+
+  const handleTabChange = useCallback((tab: 'overview' | 'analytics' | 'profile') => {
+    setActiveTab(prev => (prev === tab ? prev : tab));
+  }, []);
 
   useEffect(() => {
     const initialize = async () => {
@@ -34,17 +39,17 @@ const App = () => {
             setCurrentStep('selection');
           }
         }
-      } catch (e) { console.warn("Storage check failed."); }
+      } catch { console.warn('Storage check failed.'); }
       finally { setIsReady(true); }
     };
     initialize();
   }, []);
 
-  if (!isReady) return <View style={{ flex: 1, backgroundColor: '#ECECFF' }} />;
+  if (!isReady) return <View style={{ flex: 1, backgroundColor: '#FFFFFF' }} />;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <StatusBar barStyle="dark-content" backgroundColor="#ECECFF" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <View style={styles.container}>
         {currentStep === 'entry' && <EntryScreen onAnimationComplete={() => setCurrentStep('name')} />}
         
@@ -64,9 +69,13 @@ const App = () => {
 
         {currentStep === 'main' && (
           <View style={styles.main}>
-            {activeTab === 'overview' && <OverviewScreen userName={userName} />}
-            {activeTab === 'analytics' && <HomeScreen />}
-            {activeTab === 'profile' && (
+            <View pointerEvents={isMain && activeTab === 'overview' ? 'auto' : 'none'} style={[styles.tabScreen, activeTab === 'overview' ? styles.tabVisible : styles.tabHidden]}>
+              <OverviewScreen userName={userName} />
+            </View>
+            <View pointerEvents={isMain && activeTab === 'analytics' ? 'auto' : 'none'} style={[styles.tabScreen, activeTab === 'analytics' ? styles.tabVisible : styles.tabHidden]}>
+              <HomeScreen />
+            </View>
+            <View pointerEvents={isMain && activeTab === 'profile' ? 'auto' : 'none'} style={[styles.tabScreen, activeTab === 'profile' ? styles.tabVisible : styles.tabHidden]}>
               <ProfileScreen
                 userName={userName}
                 onOpenLimits={() => setCurrentStep('selection')}
@@ -77,8 +86,10 @@ const App = () => {
                   setCurrentStep('entry');
                 }}
               />
-            )}
-            <BottomNav active={activeTab} onChange={setActiveTab} />
+            </View>
+            <View style={styles.bottomNavWrap}>
+              <BottomNav active={activeTab} onChange={handleTabChange} />
+            </View>
           </View>
         )}
       </View>
@@ -87,8 +98,24 @@ const App = () => {
 };
 
 const styles = StyleSheet.create({ 
-  container: { flex: 1, backgroundColor: '#ECECFF' },
-  main: { flex: 1 }
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  main: { flex: 1 },
+  tabScreen: {
+    ...StyleSheet.absoluteFillObject
+  },
+  tabVisible: {
+    opacity: 1
+  },
+  tabHidden: {
+    opacity: 0
+  },
+  bottomNavWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 10
+  }
 });
 
 export default App;

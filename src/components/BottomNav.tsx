@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, Image, ImageSourcePropType } from 'react-native';
 
 type TabKey = 'overview' | 'analytics' | 'profile';
 
@@ -8,12 +8,13 @@ interface BottomNavProps {
   onChange: (tab: TabKey) => void;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ active, onChange }) => {
-  const tabs: Array<{ key: TabKey; label: string; icon: string }> = [
-    { key: 'overview', label: 'Home', icon: '\u2302' },
-    { key: 'analytics', label: 'Analytics', icon: '\u25A6' },
-    { key: 'profile', label: 'Profile', icon: '\u263A' }
-  ];
+const tabs: Array<{ key: TabKey; label: string; icon: ImageSourcePropType }> = [
+  { key: 'overview', label: 'Home', icon: require('../assets/home.png') },
+  { key: 'analytics', label: 'Analytics', icon: require('../assets/analytics.png') },
+  { key: 'profile', label: 'Profile', icon: require('../assets/profile.png') }
+];
+
+const BottomNavComponent: React.FC<BottomNavProps> = ({ active, onChange }) => {
   const [barWidth, setBarWidth] = useState(0);
   const translateX = useRef(new Animated.Value(0)).current;
 
@@ -27,7 +28,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ active, onChange }) => {
       friction: 7,
       tension: 80
     }).start();
-  }, [active, barWidth, tabs.length, translateX]);
+  }, [active, barWidth, translateX]);
 
   return (
     <View style={styles.wrapper}>
@@ -46,10 +47,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({ active, onChange }) => {
             <TouchableOpacity
               key={tab.key}
               style={[styles.item, isActive && styles.itemActive]}
-              onPress={() => onChange(tab.key)}
+              onPress={() => {
+                if (!isActive) onChange(tab.key);
+              }}
               activeOpacity={0.8}
             >
-              <Text style={[styles.icon, isActive && styles.iconActive]}>{tab.icon}</Text>
+              <Image source={tab.icon} style={[styles.icon, isActive && styles.iconActive]} />
               <Text style={[styles.label, isActive && styles.labelActive]}>{tab.label}</Text>
             </TouchableOpacity>
           );
@@ -58,6 +61,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({ active, onChange }) => {
     </View>
   );
 };
+
+export const BottomNav = React.memo(BottomNavComponent);
 
 const styles = StyleSheet.create({
   wrapper: { paddingHorizontal: 20, paddingBottom: 20, backgroundColor: 'transparent' },
@@ -76,14 +81,19 @@ const styles = StyleSheet.create({
     left: 8,
     top: 8,
     bottom: 8,
-    backgroundColor: '#1C1C1E',
+    backgroundColor: '#111111',
     borderRadius: 18,
     zIndex: 0
   },
   item: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 18, zIndex: 1 },
   itemActive: {},
-  icon: { fontSize: 18, color: '#8E8E93', marginBottom: 2 },
-  iconActive: { color: '#FFFFFF' },
-  label: { fontSize: 11, color: '#8E8E93', fontWeight: '600' },
+  icon: {
+    width: 18,
+    height: 18,
+    marginBottom: 4,
+    tintColor: '#666666'
+  },
+  iconActive: { tintColor: '#FFFFFF' },
+  label: { fontSize: 11, color: '#666666', fontWeight: '600' },
   labelActive: { color: '#FFFFFF' }
 });

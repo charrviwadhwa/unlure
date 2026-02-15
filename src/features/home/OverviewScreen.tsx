@@ -96,11 +96,11 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ userName }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#C9C9F7' },
+  container: { flex: 1, backgroundColor: '#F5F5F5' },
   content: { paddingBottom: 90 },
   header: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 18 },
-  greeting: { fontSize: 26, fontWeight: '700', color: '#2A2A3B' },
-  subtitle: { fontSize: 14, color: '#5E5E7A', marginTop: 6 },
+  greeting: { fontSize: 26, fontWeight: '700', color: '#111111' },
+  subtitle: { fontSize: 14, color: '#4A4A4A', marginTop: 6 },
 
   cardsRow: { flexDirection: 'row', paddingHorizontal: 20, gap: 14 },
   squareCard: {
@@ -110,8 +110,8 @@ const styles = StyleSheet.create({
     padding: 16,
     elevation: 3
   },
-  cardLabel: { fontSize: 12, color: '#7A7A96', marginBottom: 8, fontWeight: '600' },
-  cardValue: { fontSize: 20, fontWeight: '700', color: '#2A2A3B' },
+  cardLabel: { fontSize: 12, color: '#5B5B5B', marginBottom: 8, fontWeight: '600' },
+  cardValue: { fontSize: 20, fontWeight: '700', color: '#111111' },
 
   goalCard: {
     marginTop: 18,
@@ -121,9 +121,9 @@ const styles = StyleSheet.create({
     padding: 18,
     elevation: 3
   },
-  goalTitle: { fontSize: 16, fontWeight: '700', color: '#2A2A3B', marginBottom: 6 },
-  goalLabel: { fontSize: 13, color: '#6C6C7A', marginBottom: 12 },
-  progressBar: { height: 10, backgroundColor: '#F2F3F7', borderRadius: 6, overflow: 'hidden' },
-  progressFill: { height: 10, backgroundColor: '#6A6DFF', borderRadius: 6 },
-  goalPercent: { marginTop: 8, fontSize: 12, color: '#7A7A96', fontWeight: '600' }
+  goalTitle: { fontSize: 16, fontWeight: '700', color: '#111111', marginBottom: 6 },
+  goalLabel: { fontSize: 13, color: '#4A4A4A', marginBottom: 12 },
+  progressBar: { height: 10, backgroundColor: '#E8E8E8', borderRadius: 6, overflow: 'hidden' },
+  progressFill: { height: 10, backgroundColor: '#111111', borderRadius: 6 },
+  goalPercent: { marginTop: 8, fontSize: 12, color: '#5B5B5B', fontWeight: '600' }
 });
