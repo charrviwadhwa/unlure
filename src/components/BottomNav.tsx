@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated, Image, ImageSourcePropType } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, TouchableOpacity, StyleSheet, Animated, Image, ImageSourcePropType } from 'react-native';
 
 type TabKey = 'overview' | 'analytics' | 'profile';
 
@@ -8,39 +8,37 @@ interface BottomNavProps {
   onChange: (tab: TabKey) => void;
 }
 
-const tabs: Array<{ key: TabKey; label: string; icon: ImageSourcePropType }> = [
-  { key: 'overview', label: 'Home', icon: require('../assets/home.png') },
-  { key: 'analytics', label: 'Analytics', icon: require('../assets/analytics.png') },
-  { key: 'profile', label: 'Profile', icon: require('../assets/profile.png') }
+const tabs: Array<{ key: TabKey; icon: ImageSourcePropType }> = [
+  { key: 'overview', icon: require('../assets/home.png') },
+  { key: 'analytics', icon: require('../assets/analytics.png') },
+  { key: 'profile', icon: require('../assets/profile.png') }
 ];
 
+const ITEM_SIZE = 52;
+const BAR_PADDING = 6;
+
 const BottomNavComponent: React.FC<BottomNavProps> = ({ active, onChange }) => {
-  const [barWidth, setBarWidth] = useState(0);
   const translateX = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (!barWidth) return;
     const index = tabs.findIndex(t => t.key === active);
-    const tabWidth = barWidth / tabs.length;
     Animated.spring(translateX, {
-      toValue: index * tabWidth,
+      toValue: index * ITEM_SIZE,
       useNativeDriver: true,
-      friction: 7,
-      tension: 80
+      friction: 8,
+      tension: 110
     }).start();
-  }, [active, barWidth, translateX]);
+  }, [active, translateX]);
 
   return (
     <View style={styles.wrapper}>
-      <View style={styles.bar} onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}>
-        {barWidth > 0 && (
-          <Animated.View
-            style={[
-              styles.activePill,
-              { width: barWidth / tabs.length, transform: [{ translateX }] }
-            ]}
-          />
-        )}
+      <View style={styles.bar}>
+        <Animated.View
+          style={[
+            styles.activeBubble,
+            { transform: [{ translateX }] }
+          ]}
+        />
         {tabs.map((tab) => {
           const isActive = active === tab.key;
           return (
@@ -53,7 +51,6 @@ const BottomNavComponent: React.FC<BottomNavProps> = ({ active, onChange }) => {
               activeOpacity={0.8}
             >
               <Image source={tab.icon} style={[styles.icon, isActive && styles.iconActive]} />
-              <Text style={[styles.label, isActive && styles.labelActive]}>{tab.label}</Text>
             </TouchableOpacity>
           );
         })}
@@ -65,35 +62,42 @@ const BottomNavComponent: React.FC<BottomNavProps> = ({ active, onChange }) => {
 export const BottomNav = React.memo(BottomNavComponent);
 
 const styles = StyleSheet.create({
-  wrapper: { paddingHorizontal: 20, paddingBottom: 20, backgroundColor: 'transparent' },
+  wrapper: { paddingHorizontal: 20, paddingBottom: 20, alignItems: 'center', backgroundColor: 'transparent' },
   bar: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 8,
-    elevation: 8,
-    justifyContent: 'space-between',
+    backgroundColor: '#141414',
+    borderRadius: 999,
+    padding: BAR_PADDING,
+    elevation: 10,
     position: 'relative',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    alignItems: 'center'
   },
-  activePill: {
+  activeBubble: {
     position: 'absolute',
-    left: 8,
-    top: 8,
-    bottom: 8,
-    backgroundColor: '#111111',
-    borderRadius: 18,
-    zIndex: 0
+    left: BAR_PADDING,
+    top: BAR_PADDING,
+    width: ITEM_SIZE,
+    height: ITEM_SIZE,
+    borderRadius: ITEM_SIZE / 2,
+    backgroundColor: '#FFFFFF',
+    zIndex: 0,
+    borderWidth: 1,
+    borderColor: '#EDEDED'
   },
-  item: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 18, zIndex: 1 },
+  item: {
+    width: ITEM_SIZE,
+    height: ITEM_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: ITEM_SIZE / 2,
+    zIndex: 1
+  },
   itemActive: {},
   icon: {
-    width: 18,
-    height: 18,
-    marginBottom: 4,
-    tintColor: '#666666'
+    width: 22,
+    height: 22,
+    tintColor: '#FFFFFF'
   },
-  iconActive: { tintColor: '#FFFFFF' },
-  label: { fontSize: 11, color: '#666666', fontWeight: '600' },
-  labelActive: { color: '#FFFFFF' }
+  iconActive: { tintColor: '#111111' }
 });

@@ -18,7 +18,7 @@ const EntryScreen: React.FC<EntryScreenProps> = ({ onAnimationComplete }) => {
 
   useEffect(() => {
     fadeAnim.value = withTiming(1, { duration: 1000, easing: Easing.out(Easing.quad) });
-  }, []);
+  }, [fadeAnim]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: fadeAnim.value,
@@ -81,7 +81,7 @@ const EntryScreen: React.FC<EntryScreenProps> = ({ onAnimationComplete }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#faf7f6',
+    backgroundColor: '#F5F5F5',
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '800',
     color: '#FFFFFF',
-    backgroundColor: '#0D5D4E',
+    backgroundColor: '#111111',
     paddingHorizontal: 8,
     borderRadius: 6,
     overflow: 'hidden',
@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
   ctaButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFD581',
+    backgroundColor: '#111111',
     paddingVertical: 14,
     paddingHorizontal: 22,
     borderRadius: 26,
@@ -237,21 +237,21 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 15,
-    backgroundColor: '#E8685D',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
   },
   ctaArrow: {
     fontSize: 15,
-    color: '#FFFFFF',
+    color: '#111111',
     fontWeight: '700',
     
   },
   ctaText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: '#FFFFFF',
   },
   skipText: {
     fontSize: 14,

@@ -34,7 +34,7 @@ export const TimeLimitModal = ({ visible, appName, onConfirm, onCancel }: TimeLi
                 // Change (value) to (value: string)
                 onValueChange={(value: string) => setHours(value)}
                 isCyclic={true}
-                selectTextColor="#000"
+                selectTextColor="#111111"
                 textSize={22}
                 />
             </View>
@@ -48,7 +48,7 @@ export const TimeLimitModal = ({ visible, appName, onConfirm, onCancel }: TimeLi
                 pickerData={minuteData}
                 onValueChange={(value: string) => setMinutes(value)}
                 isCyclic={true} // Infinite scrolling
-                selectTextColor="#000"
+                selectTextColor="#111111"
                 textSize={22}
               />
             </View>
@@ -62,7 +62,7 @@ export const TimeLimitModal = ({ visible, appName, onConfirm, onCancel }: TimeLi
               style={styles.confirmButton} 
               onPress={() => {
                 // Convert strings to numbers before math
-                const totalMinutes = (parseInt(hours) * 60) + parseInt(minutes);
+                const totalMinutes = (parseInt(hours, 10) * 60) + parseInt(minutes, 10);
                 onConfirm(totalMinutes);
                 }}
             >
@@ -78,20 +78,20 @@ export const TimeLimitModal = ({ visible, appName, onConfirm, onCancel }: TimeLi
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   content: { backgroundColor: '#FFF', borderTopLeftRadius: 35, borderTopRightRadius: 35, padding: 30, paddingBottom: 40 },
-  label: { fontSize: 12, color: '#999', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1.5 },
-  appName: { fontSize: 28, fontWeight: '800', color: '#000', marginBottom: 25 },
+  label: { fontSize: 12, color: '#666', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1.5 },
+  appName: { fontSize: 28, fontWeight: '800', color: '#111111', marginBottom: 25 },
   pickerContainer: { 
     flexDirection: 'row', 
-    backgroundColor: '#F7F7F7', 
+    backgroundColor: '#F2F2F2',
     borderRadius: 25, 
     overflow: 'hidden',
     paddingVertical: 10
   },
   column: { flex: 1, alignItems: 'center' },
-  columnLabel: { fontSize: 13, color: '#BBB', fontWeight: 'bold', marginTop: 10, marginBottom: -10 },
+  columnLabel: { fontSize: 13, color: '#777', fontWeight: 'bold', marginTop: 10, marginBottom: -10 },
   picker: { width: '100%', height: 200, backgroundColor: 'transparent' },
   buttonRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 35 },
   cancelText: { color: '#666', fontSize: 16, fontWeight: '600' },
-  confirmButton: { backgroundColor: '#000', paddingHorizontal: 50, paddingVertical: 18, borderRadius: 18, elevation: 6 },
+  confirmButton: { backgroundColor: '#111111', paddingHorizontal: 50, paddingVertical: 18, borderRadius: 18, elevation: 6 },
   confirmText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 }
 });

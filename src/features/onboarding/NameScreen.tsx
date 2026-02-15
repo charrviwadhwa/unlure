@@ -61,8 +61,8 @@ const NameScreen: React.FC<NameScreenProps> = ({ onComplete }) => {
           </View>
 
           {/* 3. The Olive Button */}
-          <TouchableOpacity 
-            style={[styles.button, { opacity: name ? 1 : 0.6 }]} 
+          <TouchableOpacity
+            style={[styles.button, !name && styles.buttonDisabled]}
             onPress={handleContinue}
             disabled={!name}
             activeOpacity={0.8}
@@ -78,7 +78,7 @@ const NameScreen: React.FC<NameScreenProps> = ({ onComplete }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F2ED', // Consistent Amanda cream theme
+    backgroundColor: '#F5F5F5',
   },
   scrollContent: {
     flexGrow: 1,
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#2D2D2D',
     borderWidth: 1,
-    borderColor: '#E6E2D3',
+    borderColor: '#D9D9D9',
     // Subtle shadow for the "Bear" look
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -127,12 +127,12 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   button: {
-    backgroundColor: '#8E9473', // Exact olive color
+    backgroundColor: '#111111',
     width: '100%',
     paddingVertical: 20,
     borderRadius: 22,
     alignItems: 'center',
-    shadowColor: '#8E9473',
+    shadowColor: '#111111',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
@@ -142,6 +142,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
 });
 
