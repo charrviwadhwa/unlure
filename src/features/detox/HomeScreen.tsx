@@ -82,7 +82,7 @@ export const HomeScreen = () => {
     return items;
   };
 
-  // Updated formatting: 197m -> 3h 17m
+ 
   const formatTime = (totalMinutes: number) => {
     const h = Math.floor(totalMinutes / 60);
     const m = Math.round(totalMinutes % 60);
