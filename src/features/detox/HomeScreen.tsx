@@ -130,6 +130,10 @@ export const HomeScreen = () => {
     return items;
   };
 
+<<<<<<< HEAD
+=======
+ 
+>>>>>>> 4c178a80d5710621c15e8503f0430f5d6ebb4d83
   const formatTime = (totalMinutes: number) => {
     const h = Math.floor(totalMinutes / 60);
     const m = Math.round(totalMinutes % 60);
