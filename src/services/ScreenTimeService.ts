@@ -10,6 +10,7 @@ export interface AppUsage {
 export interface AppInfo {
   appName: string;
   packageName: string;
+  iconBase64?: string;
 }
 
 export interface DailyUsageMap {
@@ -36,7 +37,7 @@ export const ScreenTimeService = {
       }))
       .filter(app => app.minutes > 0)
       .sort((a, b) => b.minutes - a.minutes);
-    } catch (e) {
+    } catch {
       return [];
     }
   },
@@ -45,7 +46,7 @@ export const ScreenTimeService = {
     if (Platform.OS !== 'android') return;
     try {
       await UsageModule.openSettings();
-    } catch (error) {
+    } catch {
       // no-op
     }
   },
@@ -54,7 +55,7 @@ export const ScreenTimeService = {
     if (Platform.OS !== 'android') return false;
     try {
       return await UsageModule.storeTodayStats();
-    } catch (error) {
+    } catch {
       return false;
     }
   },
@@ -63,7 +64,7 @@ export const ScreenTimeService = {
     if (Platform.OS !== 'android') return {};
     try {
       return await UsageModule.getStoredDailyStats();
-    } catch (error) {
+    } catch {
       return {};
     }
   },
@@ -72,6 +73,6 @@ export const ScreenTimeService = {
     if (Platform.OS !== 'android') return [];
     try {
       return await UsageModule.getInstalledApps();
-    } catch (error) { return []; }
+    } catch { return []; }
   }
 };

@@ -1,23 +1,51 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, RefreshControl, Animated } from 'react-native';
 import PieChart from 'react-native-pie-chart';
 import { ScreenTimeService, AppUsage, DailyUsageMap } from '../../services/ScreenTimeService';
 import { UserStore } from '../../services/storage';
 
+type RangeType = 'day' | 'week' | 'month';
+
+type MonthCell = {
+  key: string;
+  day: number | null;
+  mood: string;
+};
+
+const FONT = {
+  title: 'PlayfairDisplay-Bold',
+  heading: 'PlayfairDisplay-SemiBold',
+  body: 'sans-serif',
+  regular: 'sans-serif'
+};
+
+const RANGE_LABELS: Record<RangeType, string> = {
+  day: 'Day',
+  week: 'Week',
+  month: 'Month'
+};
+
+const MOOD_CIRCLE_COLORS: Record<string, string> = {
+  '\u{1F525}': '#BFCBFF',
+  '\u{1F62D}': '#FFD9BE'
+};
+
+const FALLBACK_MOOD_BG = '#E9EDF7';
+
 export const HomeScreen = () => {
-  const [usageData, setUsageData] = useState<AppUsage[]>([]);
   const [liveTodayUsage, setLiveTodayUsage] = useState<AppUsage[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [limits, setLimits] = useState<Record<string, number>>({});
   const [overallMood, setOverallMood] = useState('\u{1F642}');
-  const [activeRange, setActiveRange] = useState<'day' | 'week' | 'month'>('day');
+  const [activeRange, setActiveRange] = useState<RangeType>('day');
   const [showPercent, setShowPercent] = useState(false);
   const [dailyMoods, setDailyMoods] = useState<Record<string, string>>({});
   const [storedDailyStats, setStoredDailyStats] = useState<DailyUsageMap>({});
   const [monthLabel, setMonthLabel] = useState('');
-  const [monthDays, setMonthDays] = useState<Array<{ key: string; day: number | null; mood: string }>>([]);
+  const [monthDays, setMonthDays] = useState<MonthCell[]>([]);
   const [monthDate, setMonthDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [appNameMap, setAppNameMap] = useState<Record<string, string>>({});
   const toggleX = useRef(new Animated.Value(0)).current;
 
   const formatDateKey = (date: Date) => {
@@ -34,7 +62,8 @@ export const HomeScreen = () => {
 
   const buildWeek = (date: Date) => {
     const start = new Date(date);
-    start.setDate(date.getDate() - date.getDay()); // Sunday start
+    start.setHours(0, 0, 0, 0);
+    start.setDate(date.getDate() - date.getDay());
     const labels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
     const dates = Array.from({ length: 7 }, (_, i) => {
       const d = new Date(start);
@@ -49,7 +78,12 @@ export const HomeScreen = () => {
     return { labels, dates, dateObjects };
   };
 
-  const getMoodForDate = (dateKey: string, dailyStats: DailyUsageMap, limitsMap: Record<string, number>, savedMood?: string) => {
+  const getMoodForDate = (
+    dateKey: string,
+    dailyStats: DailyUsageMap,
+    limitsMap: Record<string, number>,
+    savedMood?: string
+  ) => {
     if (savedMood && savedMood.length > 0) return savedMood;
     const dayMap = dailyStats[dateKey];
     if (!dayMap) return '';
@@ -62,27 +96,40 @@ export const HomeScreen = () => {
     return totalLimitedUsage > totalLimit ? '\u{1F62D}' : '\u{1F525}';
   };
 
-  const buildMonth = (date: Date, moods: Record<string, string>, dailyStats: DailyUsageMap, limitsMap: Record<string, number>) => {
+  const buildMonth = (
+    date: Date,
+    moods: Record<string, string>,
+    dailyStats: DailyUsageMap,
+    limitsMap: Record<string, number>
+  ) => {
     const year = date.getFullYear();
     const month = date.getMonth();
     const first = new Date(year, month, 1);
     const last = new Date(year, month + 1, 0);
     const startWeekday = first.getDay();
     const totalDays = last.getDate();
-    const items: Array<{ key: string; day: number | null; mood: string }> = [];
+    const items: MonthCell[] = [];
 
     for (let i = 0; i < startWeekday; i += 1) {
       items.push({ key: `blank-${i}`, day: null, mood: '' });
     }
+
     for (let day = 1; day <= totalDays; day += 1) {
       const dateKey = formatDateKey(new Date(year, month, day));
       const mood = getMoodForDate(dateKey, dailyStats, limitsMap, moods[dateKey]);
       items.push({ key: dateKey, day, mood });
     }
+
+    const rem = items.length % 7;
+    if (rem !== 0) {
+      for (let i = 0; i < 7 - rem; i += 1) {
+        items.push({ key: `tail-${i}`, day: null, mood: '' });
+      }
+    }
+
     return items;
   };
 
-  // Updated formatting: 197m -> 3h 17m
   const formatTime = (totalMinutes: number) => {
     const h = Math.floor(totalMinutes / 60);
     const m = Math.round(totalMinutes % 60);
@@ -90,14 +137,27 @@ export const HomeScreen = () => {
     return `${m}m`;
   };
 
+  const formatAppName = (pkg: string) => {
+    if (appNameMap[pkg]) return appNameMap[pkg];
+    const raw = pkg.split('.').pop() || pkg;
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+  };
+
   const loadData = async () => {
     setRefreshing(true);
 
     await ScreenTimeService.storeTodayStats();
-    const stored = await ScreenTimeService.getStoredDailyStats();
-    const storedLimits = await UserStore.getAllLimits();
+    const [stored, storedLimits, installedApps] = await Promise.all([
+      ScreenTimeService.getStoredDailyStats(),
+      UserStore.getAllLimits(),
+      ScreenTimeService.getInstalledApps()
+    ]);
     setStoredDailyStats(stored || {});
     setLimits(storedLimits || {});
+    setAppNameMap(installedApps.reduce<Record<string, string>>((acc, app) => {
+      acc[app.packageName] = app.appName;
+      return acc;
+    }, {}));
 
     const todayKey = formatDateKey(new Date());
     const todayMap = stored[todayKey] || {};
@@ -112,8 +172,8 @@ export const HomeScreen = () => {
     }
 
     setLiveTodayUsage(stats);
-    const sortedStats = stats.sort((a, b) => b.minutes - a.minutes);
-    setUsageData(sortedStats.slice(0, 4));
+    stats.sort((a, b) => b.minutes - a.minutes);
+
     const totalLimit = Object.keys(storedLimits || {}).reduce((acc, pkg) => acc + (storedLimits[pkg] || 0), 0);
     const totalLimitedUsage = stats.reduce((acc, curr) => {
       const limit = storedLimits?.[curr.id];
@@ -131,20 +191,17 @@ export const HomeScreen = () => {
     setMonthDate(current);
     setMonthLabel(current.toLocaleString('en-US', { month: 'long', year: 'numeric' }));
     setMonthDays(buildMonth(current, moods, stored, storedLimits || {}));
+
     setRefreshing(false);
   };
 
-  // loadData intentionally runs once on mount.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadData(); }, []);
 
-  const colors = ['#111111', '#3A3A3A', '#666666', '#9A9A9A'];
-  const series = usageData.map((item, i) => ({ value: item.minutes, color: colors[i] }));
-  
-  if (series.length === 0) series.push({ value: 1, color: '#DCDCDC' });
-
+  const colors = ['#7E8CF8', '#99C9F5', '#F1B46A', '#BFA6F4'];
   const today = new Date();
-  const week = buildWeek(today);
+
+  const week = buildWeek(selectedDate);
   const weekLabels = week.labels;
   const weekDates = week.dates;
   const weekDateObjects = week.dateObjects;
@@ -168,7 +225,6 @@ export const HomeScreen = () => {
   const weekTotalMins = weekStats.reduce((acc, curr) => acc + curr.minutes, 0);
   const weekLimitedUsage = weekStats.reduce((acc, curr) => (limits[curr.id] ? acc + curr.minutes : acc), 0);
 
-  const isWeek = activeRange === 'week';
   const selectedDateKey = formatDateKey(selectedDate);
   const todayKey = formatDateKey(today);
   const selectedMap = storedDailyStats[selectedDateKey] || {};
@@ -179,6 +235,7 @@ export const HomeScreen = () => {
   if (selectedStats.length === 0 && selectedDateKey === todayKey) {
     selectedStats = liveTodayUsage;
   }
+
   const selectedSorted = selectedStats.sort((a, b) => b.minutes - a.minutes);
   const selectedTop = selectedSorted.slice(0, 4);
   const selectedTotalMins = selectedStats.reduce((acc, curr) => acc + curr.minutes, 0);
@@ -187,13 +244,17 @@ export const HomeScreen = () => {
     return limit ? acc + curr.minutes : acc;
   }, 0);
 
-  const displayUsageData = isWeek ? weekUsageData : selectedTop;
-  const displayTotalMins = isWeek ? weekTotalMins : selectedTotalMins;
-  const displayLimitedUsage = isWeek ? weekLimitedUsage : selectedLimitedUsage;
-  const limitMultiplier = isWeek ? 7 : 1;
+  const displayUsageData = activeRange === 'week' ? weekUsageData : selectedTop;
+  const displayTotalMins = activeRange === 'week' ? weekTotalMins : selectedTotalMins;
+  const displayLimitedUsage = activeRange === 'week' ? weekLimitedUsage : selectedLimitedUsage;
+  const limitMultiplier = activeRange === 'week' ? 7 : 1;
+
   const percent = totalLimit > 0
     ? Math.min(Math.round((displayLimitedUsage / (totalLimit * limitMultiplier)) * 100), 100)
     : Math.min(Math.round((displayTotalMins / (24 * 60 * limitMultiplier)) * 100), 100);
+
+  const daySeries = displayUsageData.map((item, i) => ({ value: item.minutes, color: colors[i] || '#D3D8E8' }));
+  if (daySeries.length === 0) daySeries.push({ value: 1, color: '#E2E6F3' });
 
   const weekDailyTotals = weekDateObjects.map((dateObj) => {
     const key = formatDateKey(dateObj);
@@ -213,6 +274,12 @@ export const HomeScreen = () => {
     setMonthDays(buildMonth(next, dailyMoods, storedDailyStats, limits));
   };
 
+  const changeWeek = (deltaWeeks: number) => {
+    const next = new Date(selectedDate);
+    next.setDate(next.getDate() + (deltaWeeks * 7));
+    setSelectedDate(next);
+  };
+
   useEffect(() => {
     Animated.timing(toggleX, {
       toValue: showPercent ? 1 : 0,
@@ -223,257 +290,691 @@ export const HomeScreen = () => {
 
   const selectedMood = getMoodForDate(selectedDateKey, storedDailyStats, limits, dailyMoods[selectedDateKey]);
   const calendarMood = selectedMood || overallMood;
-  const barSubLabel = isWeek ? 'This Week' : (selectedDateKey === todayKey ? 'Today' : 'Selected Day');
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView 
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadData} />}
-        contentContainerStyle={{ paddingBottom: 90 }}
-      >
-        <View style={styles.header}>
-          <View style={styles.headerRow}>
-            <Text style={styles.title}>Analytics</Text>
-            <View style={styles.headerActions}>
-              <TouchableOpacity style={styles.iconButton}>
-                <View style={styles.iconBell} />
-                <View style={styles.notificationDot} />
-              </TouchableOpacity>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>CW</Text>
-              </View>
-            </View>
+  const weekStart = weekDateObjects[0];
+  const weekEnd = weekDateObjects[6];
+  const weekRangeText = `${weekStart.getDate()} ${weekStart.toLocaleString('en-US', { month: 'short' })} - ${weekEnd.getDate()} ${weekEnd.toLocaleString('en-US', { month: 'short' })}`;
+  const legendData = displayUsageData.map((item, index) => ({
+    id: item.id,
+    color: colors[index] || '#D3D8E8',
+    label: formatAppName(item.id)
+  }));
+
+  const renderDayLayout = () => (
+    <>
+      <View style={styles.dayCalendarCard}>
+        <View style={styles.dayCalendarHeader}>
+          <View style={[styles.dayMoodCircle, { backgroundColor: MOOD_CIRCLE_COLORS[calendarMood] || FALLBACK_MOOD_BG }]}>
+            <Text style={styles.dayMoodText}>{calendarMood}</Text>
           </View>
+          <Text style={styles.dayDateText}>{formatDisplayDate(selectedDate)}</Text>
+        </View>
 
-          <View style={styles.tabBar}>
-            <TouchableOpacity style={activeRange === 'day' ? styles.activeTab : styles.tab} onPress={() => setActiveRange('day')}>
-              <Text style={activeRange === 'day' ? styles.activeTabText : styles.tabText}>Day</Text>
+        <View style={styles.weekLettersRow}>
+          {weekLabels.map((label, idx) => (
+            <Text key={`${label}-${idx}`} style={styles.weekLetter}>{label}</Text>
+          ))}
+        </View>
+
+        <View style={styles.dayDatePillsRow}>
+          {weekDates.map((date, idx) => {
+            const dateObj = weekDateObjects[idx];
+            const dateKey = formatDateKey(dateObj);
+            const mood = getMoodForDate(dateKey, storedDailyStats, limits, dailyMoods[dateKey]);
+            const isActive = date === activeDate;
+            return (
+              <TouchableOpacity key={dateKey} activeOpacity={0.85} onPress={() => setSelectedDate(dateObj)} style={[styles.dayDatePill, isActive && styles.dayDatePillActive]}>
+                <Text style={[styles.dayDateNumber, isActive && styles.dayDateNumberActive]}>{date}</Text>
+                <View style={[styles.dayPillMood, { backgroundColor: MOOD_CIRCLE_COLORS[mood] || '#F3F5FB' }]}>
+                  {mood ? <Text style={styles.dayPillMoodText}>{mood}</Text> : null}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      <View style={styles.dayAnalyticsCard}>
+        <View style={styles.dayAnalyticsHeader}>
+          <Text style={styles.dayAnalyticsTitle}>Daily Average</Text>
+          <View style={styles.metricToggle}>
+            <Animated.View
+              style={[
+                styles.metricTogglePill,
+                {
+                  transform: [{
+                    translateX: toggleX.interpolate({ inputRange: [0, 1], outputRange: [0, 58] })
+                  }]
+                }
+              ]}
+            />
+            <TouchableOpacity style={styles.metricToggleBtn} onPress={() => setShowPercent(false)}>
+              <Text style={!showPercent ? styles.metricToggleTextActive : styles.metricToggleText}>Time</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={activeRange === 'week' ? styles.activeTab : styles.tab} onPress={() => setActiveRange('week')}>
-              <Text style={activeRange === 'week' ? styles.activeTabText : styles.tabText}>Week</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={activeRange === 'month' ? styles.activeTab : styles.tab} onPress={() => setActiveRange('month')}>
-              <Text style={activeRange === 'month' ? styles.activeTabText : styles.tabText}>Month</Text>
+            <TouchableOpacity style={styles.metricToggleBtn} onPress={() => setShowPercent(true)}>
+              <Text style={showPercent ? styles.metricToggleTextActive : styles.metricToggleText}>Percents</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {activeRange !== 'month' && (
-          <View style={styles.calendarCard}>
-            <View style={styles.calendarHeader}>
-              <View style={styles.moodCircle}>
-                <Text style={styles.moodText}>{calendarMood}</Text>
-              </View>
-              <Text style={styles.calendarDate}>{formatDisplayDate(selectedDate)}</Text>
+        {showPercent ? (
+          <View style={styles.pieWrap}>
+            <PieChart widthAndHeight={220} series={daySeries} cover={0.72} padAngle={0.03} />
+            <View style={styles.pieCenter}>
+              <Text style={styles.pieCenterValue}>{`${percent}%`}</Text>
+              <Text style={styles.pieCenterLabel}>Usage Score</Text>
             </View>
-
-            <View style={styles.calendarWeek}>
-              {weekLabels.map((label, idx) => (
-                <Text key={`${label}-${idx}`} style={styles.weekLabel}>{label}</Text>
+          </View>
+        ) : (
+          <View style={styles.timeBarsWrap}>
+            <View style={styles.timeBarsGrid}>
+              {[60, 45, 30, 0].map((val, idx) => (
+                <View key={`line-${val}`} style={[styles.gridLine, { top: 10 + (idx * 65) }]}>
+                  <Text style={styles.gridLabel}>{val === 0 ? '0' : `${val}m`}</Text>
+                </View>
               ))}
-            </View>
-
-            <View style={styles.calendarDates}>
-              {weekDates.map((date, idx) => {
-                const dateObj = weekDateObjects[idx];
-                const dateKey = formatDateKey(dateObj);
-                const mood = getMoodForDate(dateKey, storedDailyStats, limits, dailyMoods[dateKey]);
-                return (
-                  <TouchableOpacity key={dateKey} onPress={() => setSelectedDate(dateObj)} activeOpacity={0.8}>
-                    <View style={[styles.dateCircle, date === activeDate && styles.activeDate]}>
-                      {mood ? (
-                        <Text style={styles.dateEmoji}>{mood}</Text>
-                      ) : (
-                        <Text style={[styles.dateText, date === activeDate && styles.activeDateText]}>{date}</Text>
-                      )}
+              <View style={styles.barsRow}>
+                {weekDailyTotals.map((value, idx) => {
+                  const height = Math.max(8, Math.round((value / maxDaily) * 130));
+                  return (
+                    <View key={`daily-bar-${idx}`} style={styles.barCol}>
+                      <View style={[styles.dayBar, styles.dayBarFill, { height }]} />
+                      <Text style={styles.barColLabel}>{weekLabels[idx]}</Text>
                     </View>
-                  </TouchableOpacity>
-                );
-              })}
+                  );
+                })}
+              </View>
             </View>
+            <Text style={styles.totalTimeText}>{formatTime(displayTotalMins)}</Text>
           </View>
         )}
 
-        {activeRange === 'month' && (
-          <View style={styles.monthCard}>
-            <View style={styles.monthHeader}>
-              <TouchableOpacity style={styles.monthArrow} onPress={() => changeMonth(-1)}>
-                <Text style={styles.monthArrowText}>{'\u2039'}</Text>
-              </TouchableOpacity>
-              <Text style={styles.monthTitle}>{monthLabel}</Text>
-              <TouchableOpacity style={styles.monthArrow} onPress={() => changeMonth(1)}>
-                <Text style={styles.monthArrowText}>{'\u203A'}</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.monthWeekRow}>
-              {monthWeekLabels.map((d) => (
-                <Text key={d} style={styles.monthWeekLabel}>{d}</Text>
-              ))}
-            </View>
-            <View style={styles.monthGrid}>
-              {monthDays.map((item) => (
-                <View key={item.key} style={styles.monthCell}>
-                  <View style={[styles.monthCircle, item.mood ? styles.monthFilled : styles.monthEmpty]}>
-                    {item.mood ? <Text style={styles.monthEmoji}>{item.mood}</Text> : null}
-                  </View>
-                  {item.day ? <Text style={styles.monthDay}>{item.day}</Text> : null}
-                </View>
-              ))}
-            </View>
+        {legendData.length > 0 && (
+          <View style={styles.legendWrap}>
+            {legendData.map((item) => (
+              <View key={`day-legend-${item.id}`} style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+                <Text numberOfLines={1} style={styles.legendText}>{item.label}</Text>
+              </View>
+            ))}
           </View>
         )}
+      </View>
+    </>
+  );
 
-        {activeRange !== 'month' && (
-          <View style={styles.analyticsCard}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>{isWeek ? 'Weekly Average' : 'Daily Average'}</Text>
-              <View style={styles.toggle}>
-                <Animated.View
-                  style={[
-                    styles.togglePill,
-                    {
-                      transform: [{
-                        translateX: toggleX.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [0, 62]
-                        })
-                      }]
-                    }
-                  ]}
-                />
-                <TouchableOpacity style={styles.toggleItem} onPress={() => setShowPercent(false)}>
-                  <Text style={!showPercent ? styles.toggleActiveText : styles.toggleText}>Time</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.toggleItem} onPress={() => setShowPercent(true)}>
-                  <Text style={showPercent ? styles.toggleActiveText : styles.toggleText}>Percents</Text>
-                </TouchableOpacity>
+  const renderWeekLayout = () => (
+    <View style={styles.periodCard}>
+      <View style={styles.periodHeader}>
+        <TouchableOpacity style={styles.navArrow} onPress={() => changeWeek(-1)}>
+          <Text style={styles.navArrowText}>{'\u2039'}</Text>
+        </TouchableOpacity>
+        <Text style={styles.periodTitle}>{weekRangeText}</Text>
+        <TouchableOpacity style={styles.navArrow} onPress={() => changeWeek(1)}>
+          <Text style={styles.navArrowText}>{'\u203A'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.dayChipRow}>
+        {monthWeekLabels.map((d) => (
+          <View key={d} style={styles.dayChip}><Text style={styles.dayChipText}>{d}</Text></View>
+        ))}
+      </View>
+
+      <View style={styles.weekGraphCard}>
+        <View style={styles.weekGraphRow}>
+          {weekDateObjects.map((dateObj, idx) => {
+            const key = formatDateKey(dateObj);
+            const mood = getMoodForDate(key, storedDailyStats, limits, dailyMoods[key]);
+            const value = weekDailyTotals[idx] || 0;
+            const height = Math.max(10, Math.round((value / maxDaily) * 230));
+            return (
+              <View key={key} style={styles.weekGraphCol}>
+                <View style={styles.weekTrack}>
+                  <View style={[styles.weekFill, styles.weekFillColor, { height }]} />
+                  <View style={[styles.weekDot, { backgroundColor: MOOD_CIRCLE_COLORS[mood] || '#8EA3F7' }]} />
+                </View>
+                <Text style={styles.weekDate}>{dateObj.getDate()}</Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+
+      {legendData.length > 0 && (
+        <View style={styles.legendWrap}>
+          {legendData.map((item) => (
+            <View key={`week-legend-${item.id}`} style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+              <Text numberOfLines={1} style={styles.legendText}>{item.label}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+
+  const renderMonthLayout = () => (
+    <View style={styles.periodCard}>
+      <View style={styles.periodHeader}>
+        <TouchableOpacity style={styles.navArrow} onPress={() => changeMonth(-1)}>
+          <Text style={styles.navArrowText}>{'\u2039'}</Text>
+        </TouchableOpacity>
+        <Text style={styles.periodTitle}>{monthLabel}</Text>
+        <TouchableOpacity style={styles.navArrow} onPress={() => changeMonth(1)}>
+          <Text style={styles.navArrowText}>{'\u203A'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.dayChipRow}>
+        {monthWeekLabels.map((d) => (
+          <View key={d} style={styles.dayChip}><Text style={styles.dayChipText}>{d}</Text></View>
+        ))}
+      </View>
+
+      <View style={styles.monthGrid}>
+        {monthDays.map((item) => {
+          const isEmpty = item.day === null;
+          const moodBg = item.mood ? (MOOD_CIRCLE_COLORS[item.mood] || FALLBACK_MOOD_BG) : '#F4F6FB';
+          return (
+            <View key={item.key} style={[styles.monthCell, isEmpty && styles.monthCellEmpty]}>
+              <Text style={[styles.monthDayNumber, isEmpty && styles.monthDayNumberEmpty]}>{item.day ?? ''}</Text>
+              <View style={[styles.monthMoodDot, { backgroundColor: moodBg }]}>
+                {item.mood ? <Text style={styles.monthMoodText}>{item.mood}</Text> : null}
               </View>
             </View>
+          );
+        })}
+      </View>
+    </View>
+  );
 
-            {showPercent ? (
-              <View style={styles.chartContainer}>
-                <PieChart 
-                  widthAndHeight={260} 
-                  series={displayUsageData.length > 0 ? displayUsageData.map((item, i) => ({ value: item.minutes, color: colors[i] })) : series}
-                  cover={0.7} 
-                  padAngle={0.05} // Gaps between segments
-                />
-                <View style={styles.chartCenter}>
-                  <Text style={styles.centerTime}>{`${percent}%`}</Text>
-                  <Text style={styles.centerSub}>Of Limit</Text>
-                </View>
-              </View>
-            ) : (
-              <View style={styles.barChartContainer}>
-                <View style={styles.barHeader}>
-                  <Text style={styles.barTotal}>{formatTime(displayTotalMins)}</Text>
-                  <Text style={styles.barSub}>{barSubLabel}</Text>
-                </View>
-                <View style={styles.barChart}>
-                  {weekDailyTotals.map((value, idx) => {
-                    const height = Math.max(8, Math.round((value / maxDaily) * 90));
-                    return (
-                      <View key={`bar-${idx}`} style={styles.barItem}>
-                        <View style={[styles.bar, { height, backgroundColor: colors[idx % colors.length] }]} />
-                        <Text style={styles.barLabel}>{weekLabels[idx]}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
-
-            <View style={styles.appList}>
-              {displayUsageData.map((item, i) => (
-                <View key={item.id} style={styles.appRow}>
-                  <View style={[styles.dot, { backgroundColor: colors[i] }]} />
-                  <Text style={styles.appName}>{item.id.split('.').pop()}</Text>
-                  <Text style={[styles.appTime, limits[item.id] && item.minutes > limits[item.id] ? styles.overLimit : null]}>
-                    {formatTime(item.minutes)}
-                  </Text>
-                </View>
-              ))}
-            </View>
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadData} />}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={styles.header}>
+          <Text style={styles.title}>Analytics</Text>
+          <View style={styles.headerActions}>
+            <TouchableOpacity style={styles.iconButton}>
+              <Text style={styles.iconGlyph}>{'\u23F0'}</Text>
+              <View style={styles.notificationDot} />
+            </TouchableOpacity>
+            <View style={styles.avatar}><Text style={styles.avatarText}>CW</Text></View>
           </View>
-        )}
+        </View>
+
+        <View style={styles.rangeTabsWrap}>
+          {(Object.keys(RANGE_LABELS) as RangeType[]).map((range) => (
+            <TouchableOpacity key={range} style={[styles.rangeTab, activeRange === range && styles.rangeTabActive]} onPress={() => setActiveRange(range)}>
+              <Text style={[styles.rangeTabText, activeRange === range && styles.rangeTabTextActive]}>{RANGE_LABELS[range]}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {activeRange === 'day' && renderDayLayout()}
+        {activeRange === 'week' && renderWeekLayout()}
+        {activeRange === 'month' && renderMonthLayout()}
       </ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
-  header: { paddingHorizontal: 24, paddingTop: 18, paddingBottom: 10 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
-  title: { fontSize: 24, fontWeight: '700', color: '#111111' },
-  headerActions: { flexDirection: 'row', alignItems: 'center' },
-  iconButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', marginRight: 12, elevation: 2 },
-  iconBell: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5, borderColor: '#111111' },
-  notificationDot: { position: 'absolute', width: 8, height: 8, borderRadius: 4, backgroundColor: '#111111', top: 7, right: 8 },
-  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#E0E0E0', justifyContent: 'center', alignItems: 'center' },
-  avatarText: { fontWeight: '700', color: '#2F2F2F', fontSize: 12 },
+  container: {
+    flex: 1,
+    backgroundColor: '#EEF1FA'
+  },
+  scrollContent: {
+    paddingHorizontal: 18,
+    paddingTop: 6,
+    paddingBottom: 100
+  },
+  header: {
+    marginTop: 10,
+    marginBottom: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  title: {
+    fontSize: 30,
+    color: '#2A2F4A',
+    fontFamily: FONT.title
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  iconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#FDFEFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+    position: 'relative'
+  },
+  iconGlyph: {
+    fontSize: 18
+  },
+  notificationDot: {
+    position: 'absolute',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    top: 6,
+    right: 6,
+    backgroundColor: '#9BAAF6'
+  },
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#C1C9FF',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  avatarText: {
+    color: '#3A4267',
+    fontFamily: FONT.heading,
+    fontSize: 12
+  },
 
-  tabBar: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: 24, padding: 4, elevation: 2 },
-  activeTab: { flex: 1, backgroundColor: '#111111', paddingVertical: 10, borderRadius: 20, alignItems: 'center' },
-  activeTabText: { color: '#FFF', fontWeight: '600' },
-  tab: { flex: 1, paddingVertical: 10, alignItems: 'center' },
-  tabText: { color: '#666666', fontWeight: '500' },
+  rangeTabsWrap: {
+    flexDirection: 'row',
+    backgroundColor: '#FDFEFF',
+    borderRadius: 24,
+    padding: 4,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#DCE2F6'
+  },
+  rangeTab: {
+    flex: 1,
+    borderRadius: 20,
+    paddingVertical: 12,
+    alignItems: 'center'
+  },
+  rangeTabActive: {
+    backgroundColor: '#7E8CF8'
+  },
+  rangeTabText: {
+    color: '#68708C',
+    fontSize: 14,
+    fontFamily: FONT.body
+  },
+  rangeTabTextActive: {
+    color: '#FFFFFF',
+    fontFamily: FONT.heading
+  },
 
-  calendarCard: { backgroundColor: '#FFFFFF', marginHorizontal: 20, marginTop: 8, borderRadius: 28, padding: 20, elevation: 3 },
-  calendarHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  moodCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#E6E6E6', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
-  moodText: { fontWeight: '700', color: '#111111', fontSize: 12 },
-  calendarDate: { fontSize: 16, fontWeight: '600', color: '#111111' },
-  calendarWeek: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10, paddingHorizontal: 4 },
-  weekLabel: { color: '#666666', fontSize: 12, width: 28, textAlign: 'center' },
-  calendarDates: { flexDirection: 'row', justifyContent: 'space-between' },
-  dateCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F2F2F2', justifyContent: 'center', alignItems: 'center' },
-  dateEmoji: { fontSize: 14 },
-  dateText: { color: '#111111', fontWeight: '600', fontSize: 12 },
-  activeDate: { backgroundColor: '#D9D9D9' },
-  activeDateText: { color: '#111111' },
+  dayCalendarCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    padding: 18,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#DDE3F7'
+  },
+  dayCalendarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14
+  },
+  dayMoodCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12
+  },
+  dayMoodText: {
+    fontSize: 22
+  },
+  dayDateText: {
+    fontSize: 14,
+    color: '#161A27',
+    fontFamily: FONT.heading
+  },
+  weekLettersRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingHorizontal: 2
+  },
+  weekLetter: {
+    width: 42,
+    textAlign: 'center',
+    color: '#6E7385',
+    fontSize: 12,
+    fontFamily: FONT.body
+  },
+  dayDatePillsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between'
+  },
+  dayDatePill: {
+    width: 42,
+    borderRadius: 21,
+    paddingVertical: 6,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E8ECF5'
+  },
+  dayDatePillActive: {
+    borderColor: '#A9B4FF',
+    backgroundColor: '#EFF2FF'
+  },
+  dayDateNumber: {
+    fontSize: 12,
+    color: '#3A3F4D',
+    fontFamily: FONT.heading,
+    marginBottom: 4
+  },
+  dayDateNumberActive: {
+    color: '#131724'
+  },
+  dayPillMood: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  dayPillMoodText: {
+    fontSize: 13
+  },
 
-  analyticsCard: { backgroundColor: '#FFF', marginHorizontal: 20, marginTop: 16, borderRadius: 32, padding: 24, elevation: 4, marginBottom: 24 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  cardTitle: { fontSize: 18, fontWeight: '700', color: '#111111' },
-  toggle: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F2F2F2', borderRadius: 18, padding: 3, position: 'relative' },
-  togglePill: { position: 'absolute', left: 3, top: 3, bottom: 3, width: 62, backgroundColor: '#111111', borderRadius: 14 },
-  toggleText: { fontSize: 12, color: '#666666', marginHorizontal: 8, fontWeight: '600' },
-  toggleActiveText: { color: '#FFFFFF', fontWeight: '600', fontSize: 12 },
-  toggleItem: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 14 },
+  dayAnalyticsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#DDE3F7'
+  },
+  dayAnalyticsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12
+  },
+  dayAnalyticsTitle: {
+    fontSize: 16,
+    color: '#141924',
+    fontFamily: FONT.heading
+  },
+  metricToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 3,
+    backgroundColor: '#F2F4FD',
+    borderRadius: 18,
+    position: 'relative'
+  },
+  metricTogglePill: {
+    position: 'absolute',
+    left: 3,
+    top: 3,
+    bottom: 3,
+    width: 58,
+    borderRadius: 15,
+    backgroundColor: '#7E8CF8'
+  },
+  metricToggleBtn: {
+    width: 58,
+    alignItems: 'center',
+    paddingVertical: 6
+  },
+  metricToggleText: {
+    color: '#7A8092',
+    fontFamily: FONT.body
+  },
+  metricToggleTextActive: {
+    color: '#FFFFFF',
+    fontFamily: FONT.heading
+  },
+  pieWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 250
+  },
+  pieCenter: {
+    position: 'absolute',
+    alignItems: 'center'
+  },
+  pieCenterValue: {
+    fontSize: 34,
+    color: '#151A26',
+    fontFamily: FONT.title
+  },
+  pieCenterLabel: {
+    marginTop: 2,
+    color: '#7E85A0',
+    fontFamily: FONT.body,
+    fontSize: 14
+  },
+  timeBarsWrap: {
+    marginTop: 6
+  },
+  timeBarsGrid: {
+    height: 220,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#ECEFF7',
+    paddingTop: 10,
+    paddingHorizontal: 10,
+    justifyContent: 'flex-end'
+  },
+  gridLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    borderTopWidth: 1,
+    borderColor: '#F1F3F9'
+  },
+  gridLabel: {
+    position: 'absolute',
+    left: 6,
+    top: -9,
+    fontSize: 11,
+    color: '#8B92A6',
+    fontFamily: FONT.regular
+  },
+  barsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end'
+  },
+  barCol: {
+    alignItems: 'center',
+    width: 24
+  },
+  dayBar: {
+    width: 14,
+    borderRadius: 7
+  },
+  dayBarFill: {
+    backgroundColor: '#A9B4F8'
+  },
+  barColLabel: {
+    marginTop: 8,
+    fontSize: 11,
+    color: '#788098',
+    fontFamily: FONT.body
+  },
+  totalTimeText: {
+    marginTop: 10,
+    alignSelf: 'center',
+    fontSize: 18,
+    color: '#1F2742',
+    fontFamily: FONT.heading
+  },
 
-  chartContainer: { justifyContent: 'center', alignItems: 'center', position: 'relative', marginTop: 10 },
-  chartCenter: { position: 'absolute', alignItems: 'center' },
-  centerTime: { fontSize: 28, fontWeight: '700', color: '#111111' },
-  centerSub: { fontSize: 12, color: '#666666', marginTop: 4 },
-  barChartContainer: { marginTop: 10 },
-  barHeader: { alignItems: 'center', marginBottom: 12 },
-  barTotal: { fontSize: 26, fontWeight: '700', color: '#111111' },
-  barSub: { fontSize: 12, color: '#666666', marginTop: 4 },
-  barChart: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: 120, paddingHorizontal: 6 },
-  barItem: { alignItems: 'center', width: 28 },
-  bar: { width: 12, borderRadius: 6 },
-  barLabel: { fontSize: 10, color: '#666666', marginTop: 6 },
-  appList: { marginTop: 24 },
-  appRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  dot: { width: 12, height: 12, borderRadius: 6, marginRight: 12 },
-  appName: { flex: 1, fontSize: 14, fontWeight: '600', textTransform: 'capitalize', color: '#2C2C2C' },
-  appTime: { fontSize: 14, fontWeight: '700', color: '#111111' },
-  overLimit: { color: '#111111' },
+  periodCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#DDE3F7'
+  },
+  periodHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14
+  },
+  navArrow: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#F5F7FF',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  navArrowText: {
+    fontSize: 26,
+    color: '#232A3E'
+  },
+  periodTitle: {
+    color: '#171C2B',
+    fontSize: 16,
+    fontFamily: FONT.heading
+  },
+  dayChipRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12
+  },
+  dayChip: {
+    minWidth: 44,
+    height: 30,
+    paddingHorizontal: 8,
+    borderRadius: 15,
+    backgroundColor: '#F3F5FD',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  dayChipText: {
+    fontSize: 11,
+    color: '#5E6578',
+    fontFamily: FONT.body
+  },
 
-  monthCard: { backgroundColor: '#FFFFFF', marginHorizontal: 20, marginTop: 12, borderRadius: 28, padding: 18, elevation: 3, marginBottom: 20 },
-  monthHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  monthTitle: { fontSize: 16, fontWeight: '600', color: '#111111' },
-  monthArrow: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F2F2F2', justifyContent: 'center', alignItems: 'center' },
-  monthArrowText: { fontSize: 18, color: '#111111' },
-  monthWeekRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  monthWeekLabel: { fontSize: 11, color: '#666666', width: 28, textAlign: 'center' },
-  monthGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  monthCell: { width: '14.2857%', alignItems: 'center', marginBottom: 10 },
-  monthCircle: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
-  monthFilled: { backgroundColor: '#E6E6E6' },
-  monthEmpty: { backgroundColor: '#F2F2F2' },
-  monthEmoji: { fontSize: 18 },
-  monthDay: { fontSize: 11, color: '#666666' }
+  weekGraphCard: {
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#ECEFF7',
+    padding: 14
+  },
+  weekGraphRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    minHeight: 280
+  },
+  weekGraphCol: {
+    alignItems: 'center',
+    width: 38
+  },
+  weekTrack: {
+    height: 240,
+    width: 28,
+    borderRadius: 14,
+    backgroundColor: '#F7F8FC',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    position: 'relative',
+    overflow: 'hidden'
+  },
+  weekFill: {
+    width: '100%',
+    borderRadius: 14
+  },
+  weekFillColor: {
+    backgroundColor: '#BFC9F766'
+  },
+  weekDot: {
+    position: 'absolute',
+    top: 8,
+    width: 16,
+    height: 16,
+    borderRadius: 8
+  },
+  weekDate: {
+    marginTop: 8,
+    fontSize: 13,
+    color: '#2E344A',
+    fontFamily: FONT.body
+  },
+
+  monthGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between'
+  },
+  monthCell: {
+    width: '13.7%',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#ECEFF7',
+    paddingVertical: 8,
+    marginBottom: 8,
+    alignItems: 'center'
+  },
+  monthCellEmpty: {
+    backgroundColor: '#FAFBFE',
+    borderColor: '#F1F3F8'
+  },
+  monthDayNumber: {
+    fontSize: 12,
+    color: '#31384D',
+    fontFamily: FONT.heading,
+    marginBottom: 6
+  },
+  monthDayNumberEmpty: {
+    color: '#BCC2D3'
+  },
+  monthMoodDot: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  monthMoodText: {
+    fontSize: 13
+  },
+  legendWrap: {
+    marginTop: 12,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F4F5FE',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6
+  },
+  legendText: {
+    maxWidth: 110,
+    color: '#5E6578',
+    fontSize: 11,
+    fontFamily: FONT.body
+  }
 });

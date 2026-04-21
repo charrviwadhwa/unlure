@@ -54,7 +54,7 @@ const EntryScreen: React.FC<EntryScreenProps> = ({ onAnimationComplete }) => {
           </View>
           <View style={styles.textGroup}>
             <Text style={styles.headline}>
-              Unlock the Power of{'\n'}Your Mind {'\uD83E\uDDE0'} {'\u23F3'} {'\u263A'}
+              Unlock the Power of{'\n'}Your Mind {'\uD83E\uDDE0'}
             </Text>
             <Text style={styles.subhead}>
               Track your focus, balance your emotions, and train your mental clarity \u2014 all in one place.

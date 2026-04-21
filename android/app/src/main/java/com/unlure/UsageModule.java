@@ -26,6 +26,12 @@ import org.json.JSONException;
 import java.text.SimpleDateFormat;
 import java.util.Locale;
 import java.util.TimeZone;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.util.Base64;
+import java.io.ByteArrayOutputStream;
 
 public class UsageModule extends ReactContextBaseJavaModule {
     private static final String PREFS_NAME = "UsageDailyPrefs";
@@ -40,6 +46,29 @@ public class UsageModule extends ReactContextBaseJavaModule {
     @Override
     public String getName() {
         return "UsageModule";
+    }
+
+    private String drawableToBase64(Drawable drawable) {
+        try {
+            Bitmap bitmap;
+            if (drawable instanceof BitmapDrawable) {
+                Bitmap source = ((BitmapDrawable) drawable).getBitmap();
+                if (source == null) return null;
+                bitmap = Bitmap.createScaledBitmap(source, 96, 96, true);
+            } else {
+                bitmap = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888);
+                Canvas canvas = new Canvas(bitmap);
+                drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+                drawable.draw(canvas);
+            }
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.PNG, 90, baos);
+            byte[] bytes = baos.toByteArray();
+            return Base64.encodeToString(bytes, Base64.NO_WRAP);
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     @ReactMethod
@@ -231,6 +260,10 @@ public void getInstalledApps(Promise promise) {
                     WritableMap map = Arguments.createMap();
                     map.putString("appName", appInfo.loadLabel(pm).toString());
                     map.putString("packageName", appInfo.packageName);
+                    String iconBase64 = drawableToBase64(appInfo.loadIcon(pm));
+                    if (iconBase64 != null) {
+                        map.putString("iconBase64", iconBase64);
+                    }
                     appList.pushMap(map);
                 }
             }
