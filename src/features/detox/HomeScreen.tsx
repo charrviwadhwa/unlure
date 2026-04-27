@@ -13,10 +13,10 @@ type MonthCell = {
 };
 
 const FONT = {
-  title: 'PlayfairDisplay-Bold',
-  heading: 'PlayfairDisplay-SemiBold',
-  body: 'sans-serif',
-  regular: 'sans-serif'
+  title: 'System',
+  heading: 'System',
+  body: 'System',
+  regular: 'System'
 };
 
 const RANGE_LABELS: Record<RangeType, string> = {
@@ -26,11 +26,31 @@ const RANGE_LABELS: Record<RangeType, string> = {
 };
 
 const MOOD_CIRCLE_COLORS: Record<string, string> = {
-  '\u{1F525}': '#BFCBFF',
-  '\u{1F62D}': '#FFD9BE'
+  '\u{1F604}': '#BAC9FF',
+  '\u{1F642}': '#BEE7FF',
+  '\u{1F610}': '#F9E58E',
+  '\u{1F641}': '#FFDFAF',
+  '\u{1F623}': '#F9C2C9',
+  '\u{2754}': '#F4F6FB'
 };
 
 const FALLBACK_MOOD_BG = '#E9EDF7';
+const EMPTY_MOOD = '\u{2754}';
+
+const normalizeMood = (raw?: string) => {
+  if (!raw) return '';
+  if (raw === '\u{1F525}') return '\u{1F604}';
+  if (raw === '\u{1F62D}') return '\u{1F623}';
+  return raw;
+};
+
+const getMoodFromRatio = (ratio: number) => {
+  if (ratio <= 0.45) return '\u{1F604}';
+  if (ratio <= 0.75) return '\u{1F642}';
+  if (ratio <= 1) return '\u{1F610}';
+  if (ratio <= 1.2) return '\u{1F641}';
+  return '\u{1F623}';
+};
 
 export const HomeScreen = () => {
   const [liveTodayUsage, setLiveTodayUsage] = useState<AppUsage[]>([]);
@@ -84,16 +104,16 @@ export const HomeScreen = () => {
     limitsMap: Record<string, number>,
     savedMood?: string
   ) => {
-    if (savedMood && savedMood.length > 0) return savedMood;
+    if (savedMood && savedMood.length > 0) return normalizeMood(savedMood);
     const dayMap = dailyStats[dateKey];
     if (!dayMap) return '';
     const totalLimit = Object.keys(limitsMap || {}).reduce((acc, pkg) => acc + (limitsMap[pkg] || 0), 0);
-    if (totalLimit === 0) return '';
+    if (totalLimit === 0) return '\u{1F642}';
     const totalLimitedUsage = Object.keys(dayMap).reduce((acc, pkg) => {
       const limit = limitsMap[pkg];
       return limit ? acc + Math.floor(dayMap[pkg] / 60000) : acc;
     }, 0);
-    return totalLimitedUsage > totalLimit ? '\u{1F62D}' : '\u{1F525}';
+    return getMoodFromRatio(totalLimitedUsage / totalLimit);
   };
 
   const buildMonth = (
@@ -130,10 +150,7 @@ export const HomeScreen = () => {
     return items;
   };
 
-<<<<<<< HEAD
-=======
  
->>>>>>> 4c178a80d5710621c15e8503f0430f5d6ebb4d83
   const formatTime = (totalMinutes: number) => {
     const h = Math.floor(totalMinutes / 60);
     const m = Math.round(totalMinutes % 60);
@@ -184,7 +201,7 @@ export const HomeScreen = () => {
       return limit ? acc + curr.minutes : acc;
     }, 0);
     const isOver = totalLimit > 0 && totalLimitedUsage > totalLimit;
-    const mood = totalLimit === 0 ? '\u{1F642}' : (isOver ? '\u{1F62D}' : '\u{1F525}');
+    const mood = totalLimit === 0 ? '\u{1F642}' : getMoodFromRatio(totalLimitedUsage / totalLimit);
     setOverallMood(mood);
     await UserStore.saveDailyMood(todayKey, mood);
     await UserStore.updateStreakForDate(todayKey, !isOver);
@@ -429,14 +446,17 @@ export const HomeScreen = () => {
         <View style={styles.weekGraphRow}>
           {weekDateObjects.map((dateObj, idx) => {
             const key = formatDateKey(dateObj);
-            const mood = getMoodForDate(key, storedDailyStats, limits, dailyMoods[key]);
+            const mood = getMoodForDate(key, storedDailyStats, limits, dailyMoods[key]) || EMPTY_MOOD;
             const value = weekDailyTotals[idx] || 0;
-            const height = Math.max(10, Math.round((value / maxDaily) * 230));
+            const height = value === 0 ? 0 : Math.max(18, Math.round((value / maxDaily) * 220));
+            const moodColor = MOOD_CIRCLE_COLORS[mood] || FALLBACK_MOOD_BG;
             return (
               <View key={key} style={styles.weekGraphCol}>
                 <View style={styles.weekTrack}>
-                  <View style={[styles.weekFill, styles.weekFillColor, { height }]} />
-                  <View style={[styles.weekDot, { backgroundColor: MOOD_CIRCLE_COLORS[mood] || '#8EA3F7' }]} />
+                  <View style={[styles.weekFill, { height, backgroundColor: `${moodColor}99` }]} />
+                  <View style={[styles.weekDot, { backgroundColor: moodColor }]}>
+                    <Text style={styles.weekDotText}>{mood}</Text>
+                  </View>
                 </View>
                 <Text style={styles.weekDate}>{dateObj.getDate()}</Text>
               </View>
@@ -444,17 +464,6 @@ export const HomeScreen = () => {
           })}
         </View>
       </View>
-
-      {legendData.length > 0 && (
-        <View style={styles.legendWrap}>
-          {legendData.map((item) => (
-            <View key={`week-legend-${item.id}`} style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-              <Text numberOfLines={1} style={styles.legendText}>{item.label}</Text>
-            </View>
-          ))}
-        </View>
-      )}
     </View>
   );
 
@@ -479,12 +488,17 @@ export const HomeScreen = () => {
       <View style={styles.monthGrid}>
         {monthDays.map((item) => {
           const isEmpty = item.day === null;
-          const moodBg = item.mood ? (MOOD_CIRCLE_COLORS[item.mood] || FALLBACK_MOOD_BG) : '#F4F6FB';
+          const isTodayCell = !isEmpty
+            && today.getMonth() === monthDate.getMonth()
+            && today.getFullYear() === monthDate.getFullYear()
+            && today.getDate() === item.day;
+          const mood = item.mood || (!isEmpty ? EMPTY_MOOD : '');
+          const moodBg = mood ? (MOOD_CIRCLE_COLORS[mood] || FALLBACK_MOOD_BG) : '#F4F6FB';
           return (
-            <View key={item.key} style={[styles.monthCell, isEmpty && styles.monthCellEmpty]}>
+            <View key={item.key} style={[styles.monthCell, isEmpty && styles.monthCellEmpty, isTodayCell && styles.monthCellToday]}>
               <Text style={[styles.monthDayNumber, isEmpty && styles.monthDayNumberEmpty]}>{item.day ?? ''}</Text>
               <View style={[styles.monthMoodDot, { backgroundColor: moodBg }]}>
-                {item.mood ? <Text style={styles.monthMoodText}>{item.mood}</Text> : null}
+                {mood ? <Text style={styles.monthMoodText}>{mood}</Text> : null}
               </View>
             </View>
           );
@@ -545,9 +559,11 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   title: {
-    fontSize: 30,
-    color: '#2A2F4A',
-    fontFamily: FONT.title
+    fontSize: 22,
+    color: '#12141C',
+    fontFamily: FONT.title,
+    fontWeight: '600',
+    letterSpacing: -0.6
   },
   headerActions: {
     flexDirection: 'row',
@@ -586,17 +602,18 @@ const styles = StyleSheet.create({
   avatarText: {
     color: '#3A4267',
     fontFamily: FONT.heading,
-    fontSize: 12
+    fontSize: 12,
+    fontWeight: '600'
   },
 
   rangeTabsWrap: {
     flexDirection: 'row',
-    backgroundColor: '#FDFEFF',
+    backgroundColor: '#FBFCFE',
     borderRadius: 24,
     padding: 4,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#DCE2F6'
+    borderColor: '#EFF2F8'
   },
   rangeTab: {
     flex: 1,
@@ -605,16 +622,18 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   rangeTabActive: {
-    backgroundColor: '#7E8CF8'
+    backgroundColor: '#17181F'
   },
   rangeTabText: {
-    color: '#68708C',
-    fontSize: 14,
-    fontFamily: FONT.body
+    color: '#626878',
+    fontSize: 15,
+    fontFamily: FONT.body,
+    fontWeight: '500'
   },
   rangeTabTextActive: {
     color: '#FFFFFF',
-    fontFamily: FONT.heading
+    fontFamily: FONT.heading,
+    fontWeight: '600'
   },
 
   dayCalendarCard: {
@@ -821,11 +840,11 @@ const styles = StyleSheet.create({
   },
 
   periodCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FBFCFE',
     borderRadius: 28,
     padding: 18,
     borderWidth: 1,
-    borderColor: '#DDE3F7'
+    borderColor: '#ECEFF7'
   },
   periodHeader: {
     flexDirection: 'row',
@@ -837,7 +856,9 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: '#F5F7FF',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EEF1F8',
     alignItems: 'center',
     justifyContent: 'center'
   },
@@ -847,8 +868,9 @@ const styles = StyleSheet.create({
   },
   periodTitle: {
     color: '#171C2B',
-    fontSize: 16,
-    fontFamily: FONT.heading
+    fontSize: 17,
+    fontFamily: FONT.heading,
+    fontWeight: '600'
   },
   dayChipRow: {
     flexDirection: 'row',
@@ -860,22 +882,23 @@ const styles = StyleSheet.create({
     height: 30,
     paddingHorizontal: 8,
     borderRadius: 15,
-    backgroundColor: '#F3F5FD',
+    backgroundColor: '#ECEFF4',
     alignItems: 'center',
     justifyContent: 'center'
   },
   dayChipText: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#5E6578',
-    fontFamily: FONT.body
+    fontFamily: FONT.body,
+    fontWeight: '500'
   },
 
   weekGraphCard: {
-    borderRadius: 24,
+    borderRadius: 26,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#ECEFF7',
-    padding: 14
+    borderColor: '#EEF1F8',
+    padding: 12
   },
   weekGraphRow: {
     flexDirection: 'row',
@@ -885,13 +908,13 @@ const styles = StyleSheet.create({
   },
   weekGraphCol: {
     alignItems: 'center',
-    width: 38
+    width: 40
   },
   weekTrack: {
-    height: 240,
-    width: 28,
-    borderRadius: 14,
-    backgroundColor: '#F7F8FC',
+    height: 252,
+    width: 34,
+    borderRadius: 17,
+    backgroundColor: '#F2F4F8',
     justifyContent: 'flex-end',
     alignItems: 'center',
     position: 'relative',
@@ -899,23 +922,28 @@ const styles = StyleSheet.create({
   },
   weekFill: {
     width: '100%',
-    borderRadius: 14
-  },
-  weekFillColor: {
-    backgroundColor: '#BFC9F766'
+    borderRadius: 17
   },
   weekDot: {
     position: 'absolute',
-    top: 8,
-    width: 16,
-    height: 16,
-    borderRadius: 8
+    top: 6,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF'
+  },
+  weekDotText: {
+    fontSize: 18
   },
   weekDate: {
     marginTop: 8,
-    fontSize: 13,
+    fontSize: 14,
     color: '#2E344A',
-    fontFamily: FONT.body
+    fontFamily: FONT.body,
+    fontWeight: '600'
   },
 
   monthGrid: {
@@ -925,35 +953,44 @@ const styles = StyleSheet.create({
   },
   monthCell: {
     width: '13.7%',
-    borderRadius: 20,
+    minHeight: 108,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: '#ECEFF7',
-    paddingVertical: 8,
+    borderColor: '#EEF1F7',
+    paddingTop: 10,
+    paddingBottom: 12,
     marginBottom: 8,
-    alignItems: 'center'
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF'
   },
   monthCellEmpty: {
     backgroundColor: '#FAFBFE',
     borderColor: '#F1F3F8'
   },
+  monthCellToday: {
+    backgroundColor: '#E9EEFF',
+    borderColor: '#CDD7FF'
+  },
   monthDayNumber: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#31384D',
     fontFamily: FONT.heading,
-    marginBottom: 6
+    marginBottom: 8,
+    fontWeight: '600'
   },
   monthDayNumberEmpty: {
     color: '#BCC2D3'
   },
   monthMoodDot: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center'
   },
   monthMoodText: {
-    fontSize: 13
+    fontSize: 24
   },
   legendWrap: {
     marginTop: 12,
