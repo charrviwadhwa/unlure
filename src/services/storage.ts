@@ -7,6 +7,26 @@ interface AppLimit {
   limitMinutes: number;
 }
 
+const DAILY_MOOD_RETENTION_DAYS = 180;
+
+const pruneOldDateKeys = (
+  keyedData: Record<string, string>,
+  retentionDays: number
+): Record<string, string> => {
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - retentionDays);
+  const cutoffMs = cutoff.getTime();
+
+  return Object.entries(keyedData).reduce<Record<string, string>>((acc, [dateKey, value]) => {
+    const parsed = new Date(`${dateKey}T00:00:00`).getTime();
+    if (!Number.isNaN(parsed) && parsed >= cutoffMs) {
+      acc[dateKey] = value;
+    }
+    return acc;
+  }, {});
+};
+
 export const UserStore = {
   // --- Existing Name Logic ---
   async getName(): Promise<string> {
@@ -53,7 +73,8 @@ export const UserStore = {
   async saveDailyMood(dateKey: string, mood: string): Promise<void> {
     const moods = await this.getDailyMoods();
     moods[dateKey] = mood;
-    await AsyncStorage.setItem('@daily_moods', JSON.stringify(moods));
+    const prunedMoods = pruneOldDateKeys(moods, DAILY_MOOD_RETENTION_DAYS);
+    await AsyncStorage.setItem('@daily_moods', JSON.stringify(prunedMoods));
   },
 
   async getLastStreakDate(): Promise<string | null> {

@@ -43,8 +43,8 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
   return (
     <View style={styles.container}>
       <View style={styles.headerWrap}>
-        <Text style={styles.header}>Choose Focus Apps</Text>
-        <Text style={styles.subheader}>Pick the apps that distract you most and set limits.</Text>
+        <Text style={styles.header}>App List</Text>
+        <Text style={styles.subheader}>Select apps and choose time constraints.</Text>
       </View>
       <View style={styles.permissionCard}>
         <Text style={styles.permissionTitle}>Usage Access</Text>
@@ -89,7 +89,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
       />
 
       <TouchableOpacity style={styles.footerButton} onPress={onComplete}>
-        <Text style={styles.footerText}>Save & Start {'\u{1F525}'}</Text>
+        <Text style={styles.footerText}>Save App List</Text>
       </TouchableOpacity>
 
       <TimeLimitModal

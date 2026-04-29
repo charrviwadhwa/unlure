@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, TouchableOpacity, StyleSheet, Animated, Image, ImageSourcePropType } from 'react-native';
 
-type TabKey = 'overview' | 'analytics' | 'profile';
+type TabKey = 'home' | 'streak' | 'analytics';
 
 interface BottomNavProps {
   active: TabKey;
@@ -9,9 +9,9 @@ interface BottomNavProps {
 }
 
 const tabs: Array<{ key: TabKey; icon: ImageSourcePropType }> = [
-  { key: 'overview', icon: require('../assets/home.png') },
+  { key: 'home', icon: require('../assets/home.png') },
+  { key: 'streak', icon: require('../assets/profile.png') },
   { key: 'analytics', icon: require('../assets/analytics.png') },
-  { key: 'profile', icon: require('../assets/profile.png') }
 ];
 
 const ITEM_SIZE = 52;
