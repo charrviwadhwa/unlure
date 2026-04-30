@@ -105,6 +105,20 @@ export const HomeScreen = () => {
   };
 
   const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const today = new Date();
+
+  const lightenHex = (hex: string, amount = 0.35) => {
+    const clean = hex.replace('#', '');
+    const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean;
+    const num = parseInt(full, 16);
+    const r = (num >> 16) & 255;
+    const g = (num >> 8) & 255;
+    const b = num & 255;
+    const lr = Math.round(r + (255 - r) * amount);
+    const lg = Math.round(g + (255 - g) * amount);
+    const lb = Math.round(b + (255 - b) * amount);
+    return `rgb(${lr}, ${lg}, ${lb})`;
+  };
 
   const moodConfig: Record<Exclude<MonthCell['state'], 'empty'>, { mouth: string; bg: string; faceColor: string; eyebrow?: boolean; dotted?: boolean }> = {
     happy: { mouth: '﹀', bg: '#BDE8FF', faceColor: '#2E6279' },
@@ -137,14 +151,45 @@ export const HomeScreen = () => {
         <View style={styles.grid}>
           {days.map((cell) => {
             const isBlank = cell.day === null;
+            const isToday =
+              !isBlank &&
+              monthDate.getFullYear() === today.getFullYear() &&
+              monthDate.getMonth() === today.getMonth() &&
+              cell.day === today.getDate();
+            const todayMood =
+              !isBlank && cell.state !== 'empty' ? moodConfig[cell.state] : null;
             return (
-              <View key={cell.key} style={[styles.cell, isBlank && styles.blankCell]}>
-                <Text style={[styles.dayText, isBlank && styles.blankDayText]}>{cell.day ?? ''}</Text>
+              <View
+                key={cell.key}
+                style={[
+                  styles.cell,
+                  isBlank && styles.blankCell,
+                  isToday && styles.todayCell,
+                  isToday && todayMood ? { backgroundColor: lightenHex(todayMood.bg, 0.42) } : null
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.dayText,
+                    isBlank && styles.blankDayText,
+                    isToday && styles.todayDayText,
+                    isToday && todayMood ? { color: todayMood.faceColor } : null
+                  ]}
+                >
+                  {cell.day ?? ''}
+                </Text>
                 {!isBlank && (
                   cell.state === 'empty' ? (
-                    <View style={styles.emptyCircle} />
+                    <View style={[styles.emptyCircle, isToday && styles.todayEmptyCircle]} />
                   ) : (
-                    <View style={[styles.iconWrap, { backgroundColor: moodConfig[cell.state].bg }]}>
+                    <View
+                      style={[
+                        styles.iconWrap,
+                        { backgroundColor: moodConfig[cell.state].bg },
+                        isToday && styles.todayIconWrap,
+                        isToday ? { borderColor: moodConfig[cell.state].faceColor } : null
+                      ]}
+                    >
                       {moodConfig[cell.state].dotted && <View style={styles.dottedRing} />}
                       {moodConfig[cell.state].eyebrow && (
                         <View style={styles.browRow}>
@@ -172,59 +217,74 @@ export const HomeScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#EDEFF5' },
-  content: { paddingHorizontal: 20, paddingTop: 50, paddingBottom: 120 },
+  container: { flex: 1, backgroundColor: '#ECEFFA' },
+  content: { paddingHorizontal: 18, paddingTop: 44, paddingBottom: 120 },
   monthNav: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 18
+    marginBottom: 16
   },
   arrowBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E1E5EE'
+    borderColor: '#DCE4F1'
   },
-  arrow: { fontSize: 28, color: '#1A1A1A', marginTop: -2 },
+  arrow: { fontSize: 26, color: '#1A1A1A', marginTop: -2 },
   monthLabel: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '300',
     color: '#141414',
     fontFamily: 'Montserrat-Light'
   },
-  weekRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+  weekRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   weekChip: {
     width: '13.7%',
-    height: 34,
-    borderRadius: 16,
-    backgroundColor: '#DEE2EB',
+    height: 40,
+    borderRadius: 18,
+    backgroundColor: '#D9E0EE',
     alignItems: 'center',
     justifyContent: 'center'
   },
-  weekChipText: { color: '#5E6575', fontWeight: '300', fontFamily: 'Montserrat-Light', fontSize: 15 },
+  weekChipText: { color: '#59647A', fontWeight: '300', fontFamily: 'Montserrat-Light', fontSize: 14 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   cell: {
     width: '13.7%',
-    minHeight: 96,
-    borderRadius: 20,
+    minHeight: 104,
+    borderRadius: 22,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E4E8F0',
-    marginBottom: 10,
+    borderColor: '#D9E2F1',
+    marginBottom: 9,
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 10
+    paddingVertical: 10,
+    shadowColor: '#9AA8C5',
+    shadowOpacity: 0.12,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1
   },
   blankCell: {
-    backgroundColor: '#F7F8FB',
-    borderColor: '#EEF1F6'
+    backgroundColor: '#E7EBF3',
+    borderColor: '#E7EBF3'
+  },
+  todayCell: {
+    borderColor: '#9AAAFB',
+    backgroundColor: '#EEF1FF',
+    shadowColor: '#7488FF',
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3
   },
   dayText: { fontSize: 15, color: '#242424', fontWeight: '300', fontFamily: 'Montserrat-Light' },
+  todayDayText: { color: '#3D4FB5', fontWeight: '700' },
   blankDayText: { color: '#C4CAD6' },
   iconWrap: {
     width: 38,
@@ -234,6 +294,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#F3F5FA',
     marginBottom: 2
+  },
+  todayIconWrap: {
+    borderWidth: 1,
+    borderColor: '#CFD8FF'
   },
   eyesRow: {
     flexDirection: 'row',
@@ -271,6 +335,9 @@ const styles = StyleSheet.create({
     height: 16,
     borderRadius: 8,
     backgroundColor: '#C8CFDA'
+  },
+  todayEmptyCircle: {
+    backgroundColor: '#8FA2FF'
   },
   dottedRing: {
     position: 'absolute',
