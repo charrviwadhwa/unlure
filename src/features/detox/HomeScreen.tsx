@@ -1,21 +1,94 @@
-import React, { useEffect, useState } from 'react';
-import { Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  SafeAreaView,
+  TouchableOpacity,
+  Dimensions,
+  Platform,
+  StatusBar
+} from 'react-native';
 import { ScreenTimeService, DailyUsageMap } from '../../services/ScreenTimeService';
-import { UserStore } from '../../services/storage';
+import { DailyLimitSnapshots, DailyMoodSnapshots, StoredMood, UserStore } from '../../services/storage';
 
-type MonthCell = {
-  key: string;
-  day: number | null;
-  state: 'happy' | 'lightSmile' | 'neutral' | 'angry' | 'broken' | 'empty';
+const { width } = Dimensions.get('window');
+
+const COLORS = {
+  bg: '#F5F6F9',
+  cardBg: '#FFFFFF',
+  textMain: '#1C1C1E',
+  textSecondary: '#8E8E93',
+  textFaint: '#D1D1D6',
+  pillBg: '#F0F1F5',
+  selectedCellBg: '#E7E5FF',
+  moods: {
+    great: { bg: '#D3D0FF', line: '#5C56B6' },
+    good: { bg: '#C6E3FF', line: '#528DF5' },
+    neutral: { bg: '#FCEFB4', line: '#C2A320' },
+    bad: { bg: '#FCE1B9', line: '#D0933C' },
+    awful: { bg: '#F8F9FB', line: '#D0933C' },
+    empty: { bg: '#F8F9FB', line: '#D1D1D6' }
+  }
 };
 
-const FONT_REGULAR = Platform.select({ ios: 'Inter_24pt-Light', android: 'Inter_24pt-Light', default: 'System' });
-const FONT_SEMIBOLD = Platform.select({ ios: 'Inter_24pt-Light', android: 'Inter_24pt-Light', default: 'System' });
+const MOOD_TYPES = {
+  GREAT: 'great',
+  GOOD: 'good',
+  NEUTRAL: 'neutral',
+  AWFUL: 'awful',
+  EMPTY: 'empty'
+} as const;
+
+type MoodType = (typeof MOOD_TYPES)[keyof typeof MOOD_TYPES];
+type CalendarItem = { date: string; isCurrentMonth: boolean; mood: MoodType; isSelected?: boolean };
+
+const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const MoodFace = ({ type }: { type: MoodType }) => {
+  const theme = COLORS.moods[type];
+
+  if (type === MOOD_TYPES.EMPTY) {
+    return (
+      <View style={[styles.faceContainer, styles.transparentFace]}>
+        <View style={styles.emptyDot} />
+      </View>
+    );
+  }
+
+  const isFrown = type === MOOD_TYPES.AWFUL;
+  const isNeutral = type === MOOD_TYPES.NEUTRAL;
+  const isDotted = type === MOOD_TYPES.AWFUL;
+
+  return (
+    <View style={[styles.faceContainer, { backgroundColor: theme.bg }, !isDotted && { borderColor: theme.line, borderWidth: 1 }]}>
+      {isDotted ? <View style={[styles.dottedFaceRing, { borderColor: theme.line }]} /> : null}
+      <View style={styles.eyesContainer}>
+        <View>
+          <View style={[styles.eye, { backgroundColor: theme.line }]} />
+        </View>
+        <View>
+          <View style={[styles.eye, { backgroundColor: theme.line }]} />
+        </View>
+      </View>
+      {isNeutral ? (
+        <View style={[styles.mouthNeutral, { backgroundColor: theme.line }]} />
+      ) : (
+        <View
+          style={[
+            styles.mouthCurve,
+            { borderColor: theme.line },
+            isFrown && styles.mouthFrown
+          ]}
+        />
+      )}
+    </View>
+  );
+};
 
 export const HomeScreen = () => {
   const [monthDate, setMonthDate] = useState(new Date());
-  const [monthLabel, setMonthLabel] = useState('');
-  const [days, setDays] = useState<MonthCell[]>([]);
+  const [calendarData, setCalendarData] = useState<CalendarItem[]>([]);
 
   const formatDateKey = (date: Date) => {
     const y = date.getFullYear();
@@ -24,93 +97,53 @@ export const HomeScreen = () => {
     return `${y}-${m}-${d}`;
   };
 
-  const buildMonth = (
-    date: Date,
-    stats: DailyUsageMap,
-    limits: Record<string, number>
-  ): MonthCell[] => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const first = new Date(year, month, 1);
-    const last = new Date(year, month + 1, 0);
-
-    const totalDays = last.getDate();
-    const startWeekday = first.getDay();
-    const items: MonthCell[] = [];
-
-    for (let i = 0; i < startWeekday; i += 1) {
-      items.push({ key: `blank-${i}`, day: null, state: 'empty' });
-    }
-
+  const resolveMood = useCallback((dayMap: Record<string, number> | undefined, limits: Record<string, number>): MoodType => {
+    if (!dayMap) return MOOD_TYPES.EMPTY;
     const totalLimit = Object.keys(limits).reduce((acc, pkg) => acc + (limits[pkg] || 0), 0);
+    if (totalLimit === 0) return MOOD_TYPES.NEUTRAL;
+    const hasExceededApp = Object.keys(limits).some((pkg) => {
+      const limit = limits[pkg];
+      if (!limit) return false;
+      return Math.floor((dayMap[pkg] || 0) / 60000) > limit;
+    });
+    if (hasExceededApp) return MOOD_TYPES.AWFUL;
+    const limitedUsage = Object.keys(dayMap).reduce((acc, pkg) => {
+      const limit = limits[pkg];
+      if (!limit) return acc;
+      return acc + Math.floor(dayMap[pkg] / 60000);
+    }, 0);
+    const ratio = limitedUsage / totalLimit;
+    if (ratio <= 0.25) return MOOD_TYPES.GREAT;
+    if (ratio <= 0.65) return MOOD_TYPES.GOOD;
+    return MOOD_TYPES.NEUTRAL;
+  }, []);
 
-    for (let day = 1; day <= totalDays; day += 1) {
-      const key = formatDateKey(new Date(year, month, day));
-      const dayMap = stats[key];
+  const resolveStoredMood = useCallback((dayMap: Record<string, number> | undefined, limits: Record<string, number>): StoredMood => {
+    const mood = resolveMood(dayMap, limits);
+    if (mood === MOOD_TYPES.GREAT) return 'happy';
+    if (mood === MOOD_TYPES.GOOD) return 'lightSmile';
+    if (mood === MOOD_TYPES.AWFUL) return 'dotted';
+    return 'neutral';
+  }, [resolveMood]);
 
-      if (!dayMap) {
-        items.push({ key, day, state: 'empty' });
-        continue;
-      }
+  const moodFromStored = useCallback((mood: StoredMood): MoodType => {
+    if (mood === 'happy') return MOOD_TYPES.GREAT;
+    if (mood === 'lightSmile') return MOOD_TYPES.GOOD;
+    if (mood === 'dotted') return MOOD_TYPES.AWFUL;
+    return MOOD_TYPES.NEUTRAL;
+  }, []);
 
-      if (totalLimit === 0) {
-        items.push({ key, day, state: 'neutral' });
-        continue;
-      }
+  const getLimitsForDate = useCallback((
+    dateKey: string,
+    snapshots: DailyLimitSnapshots,
+    currentLimits: Record<string, number>
+  ) => {
+    const todayKey = formatDateKey(new Date());
+    if (snapshots[dateKey]) return snapshots[dateKey];
+    return dateKey === todayKey ? currentLimits : {};
+  }, []);
 
-      const limitedUsage = Object.keys(dayMap).reduce((acc, pkg) => {
-        const limit = limits[pkg];
-        if (!limit) return acc;
-        return acc + Math.floor(dayMap[pkg] / 60000);
-      }, 0);
-
-      const ratio = limitedUsage / totalLimit;
-      if (ratio > 1) {
-        items.push({ key, day, state: 'angry' });
-      } else if (ratio <= 0.3) {
-        items.push({ key, day, state: 'happy' });
-      } else if (ratio <= 1) {
-        items.push({ key, day, state: 'lightSmile' });
-      } else {
-        items.push({ key, day, state: 'neutral' });
-      }
-    }
-
-    const rem = items.length % 7;
-    if (rem !== 0) {
-      for (let i = 0; i < 7 - rem; i += 1) {
-        items.push({ key: `tail-${i}`, day: null, state: 'empty' });
-      }
-    }
-
-    return items;
-  };
-
-  const loadMonth = async (targetDate: Date) => {
-    await ScreenTimeService.storeTodayStats();
-    const [stats, limits] = await Promise.all([
-      ScreenTimeService.getStoredDailyStats(),
-      UserStore.getAllLimits()
-    ]);
-
-    setMonthLabel(targetDate.toLocaleString('en-US', { month: 'long', year: 'numeric' }));
-    setDays(buildMonth(targetDate, stats as DailyUsageMap, limits || {}));
-  };
-
-  useEffect(() => {
-    loadMonth(monthDate);
-  }, [monthDate]);
-
-  const shiftMonth = (delta: number) => {
-    const next = new Date(monthDate);
-    next.setMonth(next.getMonth() + delta);
-    setMonthDate(next);
-  };
-
-  const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const today = new Date();
-
-  const lightenHex = (hex: string, amount = 0.35) => {
+  const lightenHex = (hex: string, amount = 0.48) => {
     const clean = hex.replace('#', '');
     const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean;
     const num = parseInt(full, 16);
@@ -123,93 +156,135 @@ export const HomeScreen = () => {
     return `rgb(${lr}, ${lg}, ${lb})`;
   };
 
-  const moodConfig: Record<Exclude<MonthCell['state'], 'empty'>, { mouth: string; bg: string; faceColor: string; eyebrow?: boolean; dotted?: boolean }> = {
-    happy: { mouth: '\uFE40', bg: '#BDE8FF', faceColor: '#2E6279' },
-    lightSmile: { mouth: '\u25E1', bg: '#D6CBFF', faceColor: '#5A43A7' },
-    neutral: { mouth: '\u2014', bg: '#F9E38D', faceColor: '#6B5E24' },
-    angry: { mouth: '\uFE35', bg: '#F7B7BF', faceColor: '#8F1F2D' },
-    broken: { mouth: '\u2014', bg: 'transparent', faceColor: '#9E6324', dotted: true }
+  const buildCalendar = useCallback((
+    targetDate: Date,
+    stats: DailyUsageMap,
+    snapshots: DailyLimitSnapshots,
+    currentLimits: Record<string, number>,
+    savedMoods: DailyMoodSnapshots
+  ) => {
+    const year = targetDate.getFullYear();
+    const month = targetDate.getMonth();
+    const first = new Date(year, month, 1);
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    const prevMonthDays = new Date(year, month, 0).getDate();
+    const startPadding = first.getDay();
+    const items: CalendarItem[] = [];
+
+    for (let i = startPadding; i > 0; i -= 1) {
+      const day = prevMonthDays - i + 1;
+      items.push({ date: String(day), isCurrentMonth: false, mood: MOOD_TYPES.EMPTY });
+    }
+
+    const today = new Date();
+    const isCurrentVisibleMonth = today.getFullYear() === year && today.getMonth() === month;
+
+    for (let day = 1; day <= totalDays; day += 1) {
+      const dateObj = new Date(year, month, day);
+      const dateKey = formatDateKey(dateObj);
+      const dayMap = stats[dateKey];
+      const dayLimits = getLimitsForDate(dateKey, snapshots, currentLimits);
+      const isToday = isCurrentVisibleMonth && today.getDate() === day;
+      const mood = !isToday && savedMoods[dateKey]
+        ? moodFromStored(savedMoods[dateKey])
+        : resolveMood(dayMap, dayLimits);
+      items.push({
+        date: String(day),
+        isCurrentMonth: true,
+        mood,
+        isSelected: isToday
+      });
+    }
+
+    let tail = 1;
+    while (items.length % 7 !== 0) {
+      items.push({ date: String(tail), isCurrentMonth: false, mood: MOOD_TYPES.EMPTY });
+      tail += 1;
+    }
+
+    setCalendarData(items);
+  }, [getLimitsForDate, moodFromStored, resolveMood]);
+
+  const load = useCallback(async (targetDate: Date) => {
+    await ScreenTimeService.storeTodayStats();
+    const [stats, limits, limitSnapshots, savedMoods] = await Promise.all([
+      ScreenTimeService.getStoredDailyStats(),
+      UserStore.getAllLimits(),
+      UserStore.getDailyLimitSnapshots(),
+      UserStore.getDailyMoods()
+    ]);
+    await UserStore.saveTodayLimitSnapshot(limits || {});
+    const todayKey = formatDateKey(new Date());
+    const todayMood = resolveStoredMood((stats as DailyUsageMap)[todayKey], limits || {});
+    await UserStore.saveDailyMood(todayKey, todayMood);
+    buildCalendar(targetDate, stats as DailyUsageMap, limitSnapshots || {}, limits || {}, { ...(savedMoods || {}), [todayKey]: todayMood });
+  }, [buildCalendar, resolveStoredMood]);
+
+  useEffect(() => {
+    load(monthDate);
+  }, [load, monthDate]);
+
+  const monthTitle = useMemo(
+    () => monthDate.toLocaleString('en-US', { month: 'long', year: 'numeric' }),
+    [monthDate]
+  );
+
+  const shiftMonth = (delta: number) => {
+    setMonthDate((prev) => {
+      const next = new Date(prev);
+      next.setMonth(next.getMonth() + delta);
+      return next;
+    });
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.monthNav}>
-          <TouchableOpacity style={styles.arrowBtn} onPress={() => shiftMonth(-1)}>
-            <Text style={styles.arrow}>{'\u2039'}</Text>
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.chevronButton} onPress={() => shiftMonth(-1)}>
+            <Text style={styles.chevron}>‹</Text>
           </TouchableOpacity>
-          <Text style={styles.monthLabel}>{monthLabel}</Text>
-          <TouchableOpacity style={styles.arrowBtn} onPress={() => shiftMonth(1)}>
-            <Text style={styles.arrow}>{'\u203A'}</Text>
+          <Text style={styles.monthTitle}>{monthTitle}</Text>
+          <TouchableOpacity style={styles.chevronButton} onPress={() => shiftMonth(1)}>
+            <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.weekRow}>
-          {weekdays.map((d) => (
-            <View key={d} style={styles.weekChip}>
-              <Text style={styles.weekChipText}>{d}</Text>
+        <View style={styles.daysOfWeekContainer}>
+          {DAYS_OF_WEEK.map((day) => (
+            <View key={day} style={styles.dayPill}>
+              <Text style={styles.dayText}>{day}</Text>
             </View>
           ))}
         </View>
-        <View style={styles.grid}>
-          {days.map((cell) => {
-            const isBlank = cell.day === null;
-            const isToday =
-              !isBlank &&
-              monthDate.getFullYear() === today.getFullYear() &&
-              monthDate.getMonth() === today.getMonth() &&
-              cell.day === today.getDate();
-            const todayMood =
-              !isBlank && cell.state !== 'empty' ? moodConfig[cell.state] : null;
+
+        <View style={styles.gridContainer}>
+          {calendarData.map((item, index) => {
+            const isFaint = !item.isCurrentMonth;
             return (
               <View
-                key={cell.key}
+                key={`${item.date}-${index}`}
                 style={[
-                  styles.cell,
-                  isBlank && styles.blankCell,
-                  isToday && styles.todayCell,
-                  isToday && todayMood ? { backgroundColor: lightenHex(todayMood.bg, 0.42) } : null
+                  styles.cellPill,
+                  item.isSelected ? styles.cellPillSelected : null,
+                  item.isSelected
+                    ? {
+                        backgroundColor: lightenHex(COLORS.moods[item.mood].bg),
+                        borderColor: COLORS.moods[item.mood].line
+                      }
+                    : null
                 ]}
               >
                 <Text
                   style={[
-                    styles.dayText,
-                    isBlank && styles.blankDayText,
-                    isToday && styles.todayDayText,
-                    isToday && todayMood ? { color: todayMood.faceColor } : null
+                    styles.dateText,
+                    isFaint && styles.dateTextFaint,
+                    item.isSelected && styles.dateTextSelected
                   ]}
                 >
-                  {cell.day ?? ''}
+                  {item.date}
                 </Text>
-                {!isBlank && (
-                  cell.state === 'empty' ? (
-                    <View style={[styles.emptyCircle, isToday && styles.todayEmptyCircle]} />
-                  ) : (
-                    <View
-                      style={[
-                        styles.iconWrap,
-                        { backgroundColor: moodConfig[cell.state].bg },
-                        isToday && styles.todayIconWrap,
-                        isToday ? { borderColor: moodConfig[cell.state].faceColor } : null
-                      ]}
-                    >
-                      {moodConfig[cell.state].dotted && <View style={styles.dottedRing} />}
-                      {moodConfig[cell.state].eyebrow && (
-                        <View style={styles.browRow}>
-                          <Text style={[styles.browLeft, { color: moodConfig[cell.state].faceColor }]}>{'╲'}</Text>
-                          <Text style={[styles.browRight, { color: moodConfig[cell.state].faceColor }]}>{'╱'}</Text>
-                        </View>
-                      )}
-                      <View style={styles.eyesRow}>
-                        <View style={[styles.eye, { backgroundColor: moodConfig[cell.state].faceColor }]} />
-                        <View style={[styles.eye, { backgroundColor: moodConfig[cell.state].faceColor }]} />
-                      </View>
-                      <Text style={[styles.mouth, { color: moodConfig[cell.state].faceColor }]}>
-                        {moodConfig[cell.state].mouth}
-                      </Text>
-                    </View>
-                  )
-                )}
+                <MoodFace type={item.mood} />
               </View>
             );
           })}
@@ -219,144 +294,159 @@ export const HomeScreen = () => {
   );
 };
 
+const CELL_WIDTH = (width - 48 - 36) / 7;
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ECEFFA' },
-  content: { paddingHorizontal: 18, paddingTop: 44, paddingBottom: 120 },
-  monthNav: {
+  safeArea: {
+    flex: 1,
+    backgroundColor: COLORS.bg
+  },
+  container: {
+    paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 12 : 16
+  },
+  header: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 24
+  },
+  monthTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.textMain
+  },
+  chevronButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.cardBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2
+  },
+  chevron: {
+    fontSize: 24,
+    color: COLORS.textMain,
+    lineHeight: 26,
+    marginLeft: 1
+  },
+  daysOfWeekContainer: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 16
   },
-  arrowBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
+  dayPill: {
+    width: CELL_WIDTH,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: COLORS.pillBg,
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#DCE4F1'
+    alignItems: 'center'
   },
-  arrow: { fontSize: 26, color: '#1A1A1A', marginTop: -2 },
-  monthLabel: {
-    fontSize: 22,
-    fontWeight: '300',
-    color: '#141414',
-    fontFamily: FONT_REGULAR
+  dayText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontWeight: '500'
   },
-  weekRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  weekChip: {
-    width: '13.7%',
-    height: 40,
-    borderRadius: 18,
-    backgroundColor: '#D9E0EE',
-    alignItems: 'center',
-    justifyContent: 'center'
+  gridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between'
   },
-  weekChipText: { color: '#59647A', fontWeight: '300', fontFamily: FONT_REGULAR, fontSize: 14 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  cell: {
-    width: '13.7%',
-    minHeight: 104,
+  cellPill: {
+    width: CELL_WIDTH,
+    height: 75,
     borderRadius: 22,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#D9E2F1',
-    marginBottom: 9,
+    backgroundColor: COLORS.cardBg,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    shadowColor: '#9AA8C5',
-    shadowOpacity: 0.12,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1
+    paddingTop: 10,
+    paddingBottom: 6,
+    marginBottom: 10
   },
-  blankCell: {
-    backgroundColor: '#E7EBF3',
-    borderColor: '#E7EBF3'
+  cellPillSelected: {
+    backgroundColor: COLORS.selectedCellBg
   },
-  todayCell: {
-    borderColor: '#9AAAFB',
-    backgroundColor: '#EEF1FF',
-    shadowColor: '#7488FF',
-    shadowOpacity: 0.28,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3
+  dateText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: COLORS.textMain,
+    marginBottom: 8
   },
-  dayText: { fontSize: 15, color: '#242424', fontWeight: '300', fontFamily: FONT_REGULAR },
-  todayDayText: { color: '#3D4FB5', fontFamily: FONT_SEMIBOLD },
-  blankDayText: { color: '#C4CAD6' },
-  iconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
+  dateTextFaint: {
+    color: COLORS.textFaint
+  },
+  dateTextSelected: {
+    fontWeight: '700'
+  },
+  faceContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     justifyContent: 'center',
-    backgroundColor: '#F3F5FA',
-    marginBottom: 2
+    alignItems: 'center'
   },
-  todayIconWrap: {
-    borderWidth: 1,
-    borderColor: '#CFD8FF'
+  transparentFace: {
+    backgroundColor: 'transparent'
   },
-  eyesRow: {
+  emptyQuestionMark: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textFaint
+  },
+  emptyDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#C5C6CC'
+  },
+  eyesContainer: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 2
-  },
-  browRow: {
-    flexDirection: 'row',
-    gap: 8,
-    position: 'absolute',
-    top: 5
-  },
-  browLeft: {
-    fontSize: 9,
-    fontFamily: FONT_SEMIBOLD,
-    lineHeight: 9
-  },
-  browRight: {
-    fontSize: 9,
-    fontFamily: FONT_SEMIBOLD,
-    lineHeight: 9
+    justifyContent: 'space-between',
+    width: 12,
+    marginBottom: 3,
+    marginTop: 2
   },
   eye: {
-    width: 4,
-    height: 4,
-    borderRadius: 2
+    width: 3,
+    height: 3,
+    borderRadius: 1.5
   },
-  mouth: {
-    fontSize: 11,
-    lineHeight: 12,
-    fontFamily: FONT_REGULAR
-  },
-  emptyCircle: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#C8CFDA'
-  },
-  todayEmptyCircle: {
-    backgroundColor: '#8FA2FF'
-  },
-  dottedRing: {
+  dottedFaceRing: {
     position: 'absolute',
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: '#D6A03D',
     backgroundColor: 'transparent'
+  },
+  mouthCurve: {
+    width: 10,
+    height: 5,
+    borderBottomWidth: 1.5,
+    borderLeftWidth: 1.5,
+    borderRightWidth: 1.5,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6
+  },
+  mouthFrown: {
+    transform: [{ rotate: '180deg' }],
+    marginTop: 2,
+    borderBottomWidth: 1.5,
+    borderLeftWidth: 1.5,
+    borderRightWidth: 1.5
+  },
+  mouthNeutral: {
+    width: 8,
+    height: 1.5,
+    borderRadius: 1,
+    marginTop: 2
   }
 });
 
-
-
-
-
-
-
+export default HomeScreen;

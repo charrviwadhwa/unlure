@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { View, TouchableOpacity, StyleSheet, Animated, Image, ImageSourcePropType } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Pressable, StyleSheet, Animated, Image, ImageSourcePropType } from 'react-native';
 
 type TabKey = 'home' | 'streak' | 'analytics';
 
@@ -19,16 +19,23 @@ const BAR_PADDING = 6;
 
 const BottomNavComponent: React.FC<BottomNavProps> = ({ active, onChange }) => {
   const translateX = useRef(new Animated.Value(0)).current;
+  const [localActive, setLocalActive] = useState<TabKey>(active);
 
-  useEffect(() => {
-    const index = tabs.findIndex(t => t.key === active);
+  const moveBubble = useCallback((tab: TabKey) => {
+    const index = tabs.findIndex(t => t.key === tab);
+    translateX.stopAnimation();
     Animated.spring(translateX, {
       toValue: index * ITEM_SIZE,
       useNativeDriver: true,
-      friction: 8,
-      tension: 110
+      friction: 6,
+      tension: 180
     }).start();
-  }, [active, translateX]);
+  }, [translateX]);
+
+  useEffect(() => {
+    setLocalActive(active);
+    moveBubble(active);
+  }, [active, moveBubble]);
 
   return (
     <View style={styles.wrapper}>
@@ -40,18 +47,23 @@ const BottomNavComponent: React.FC<BottomNavProps> = ({ active, onChange }) => {
           ]}
         />
         {tabs.map((tab) => {
-          const isActive = active === tab.key;
+          const isActive = localActive === tab.key;
           return (
-            <TouchableOpacity
+            <Pressable
               key={tab.key}
               style={[styles.item, isActive && styles.itemActive]}
-              onPress={() => {
-                if (!isActive) onChange(tab.key);
+              onPressIn={() => {
+                if (!isActive) {
+                  setLocalActive(tab.key);
+                  moveBubble(tab.key);
+                }
               }}
-              activeOpacity={0.8}
+              onPress={() => {
+                if (active !== tab.key) onChange(tab.key);
+              }}
             >
               <Image source={tab.icon} style={[styles.icon, isActive && styles.iconActive]} />
-            </TouchableOpacity>
+            </Pressable>
           );
         })}
       </View>

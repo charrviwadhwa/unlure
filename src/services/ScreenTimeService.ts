@@ -2,6 +2,10 @@ import { NativeModules, Platform } from 'react-native';
 
 const { UsageModule } = NativeModules;
 
+let storeTodayStatsPromise: Promise<boolean> | null = null;
+let storedDailyStatsPromise: Promise<DailyUsageMap> | null = null;
+let installedAppsPromise: Promise<AppInfo[]> | null = null;
+
 export interface AppUsage {
   id: string;
   minutes: number;
@@ -53,26 +57,41 @@ export const ScreenTimeService = {
 
   async storeTodayStats(): Promise<boolean> {
     if (Platform.OS !== 'android') return false;
+    if (storeTodayStatsPromise) return storeTodayStatsPromise;
     try {
-      return await UsageModule.storeTodayStats();
+      storeTodayStatsPromise = UsageModule.storeTodayStats()
+        .then((result: boolean) => {
+          storedDailyStatsPromise = null;
+          return result;
+        })
+        .catch(() => false)
+        .finally(() => {
+          storeTodayStatsPromise = null;
+        });
+      return await storeTodayStatsPromise;
     } catch {
+      storeTodayStatsPromise = null;
       return false;
     }
   },
 
   async getStoredDailyStats(): Promise<DailyUsageMap> {
     if (Platform.OS !== 'android') return {};
+    if (storedDailyStatsPromise) return storedDailyStatsPromise;
     try {
-      return await UsageModule.getStoredDailyStats();
-    } catch {
-      return {};
-    }
+      storedDailyStatsPromise = UsageModule.getStoredDailyStats()
+        .catch(() => ({} as DailyUsageMap));
+      return await storedDailyStatsPromise;
+    } catch { return {}; }
   },
 
   async getInstalledApps(): Promise<AppInfo[]> {
     if (Platform.OS !== 'android') return [];
+    if (installedAppsPromise) return installedAppsPromise;
     try {
-      return await UsageModule.getInstalledApps();
+      installedAppsPromise = UsageModule.getInstalledApps()
+        .catch(() => [] as AppInfo[]);
+      return await installedAppsPromise;
     } catch { return []; }
   }
 };

@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { Image, Platform, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
+﻿import React, { useCallback, useEffect, useState } from 'react';
+import { Image, Platform, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ScreenTimeService, DailyUsageMap } from '../../services/ScreenTimeService';
-import { UserStore } from '../../services/storage';
+import { DailyLimitSnapshots, DailyMoodSnapshots, UserStore } from '../../services/storage';
 
 type StreakAppRow = {
   id: string;
@@ -22,17 +21,21 @@ type DayCell = {
   mood: DayMood;
 };
 
-const moodFace: Record<DayMood, { mouth: string; bg: string; faceColor: string }> = {
-  happy: { mouth: '\uFE40', bg: '#BDE8FF', faceColor: '#2E6279' },
-  lightSmile: { mouth: '\u25E1', bg: '#D6CBFF', faceColor: '#5A43A7' },
-  neutral: { mouth: '\u2014', bg: '#F9E38D', faceColor: '#6B5E24' },
-  dotted: { mouth: '\u2014', bg: 'transparent', faceColor: '#9E6324' }
+const moodFace: Record<DayMood, { bg: string; faceColor: string; type: 'smile' | 'neutral' | 'frown' }> = {
+  happy: { bg: '#D3D0FF', faceColor: '#5C56B6', type: 'smile' },
+  lightSmile: { bg: '#C6E3FF', faceColor: '#528DF5', type: 'smile' },
+  neutral: { bg: '#FCEFB4', faceColor: '#C2A320', type: 'neutral' },
+  dotted: { bg: '#F8F9FB', faceColor: '#D0933C', type: 'frown' }
 };
 
 const FONT_REGULAR = Platform.select({ ios: 'Inter_24pt-Light', android: 'Inter_24pt-Light', default: 'System' });
 const FONT_SEMIBOLD = Platform.select({ ios: 'Inter_24pt-Light', android: 'Inter_24pt-Light', default: 'System' });
 
-const StreakScreen: React.FC = () => {
+interface StreakScreenProps {
+  onEditApps: () => void;
+}
+
+const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
   const [streak, setStreak] = useState(0);
   const [todayApps, setTodayApps] = useState<StreakAppRow[]>([]);
   const [weekCells, setWeekCells] = useState<DayCell[]>([]);
@@ -59,23 +62,56 @@ const StreakScreen: React.FC = () => {
     return d;
   };
 
-  const resolveMood = (dayMap: Record<string, number> | undefined, limits: Record<string, number>): DayMood => {
+  const resolveMood = useCallback((dayMap: Record<string, number> | undefined, limits: Record<string, number>): DayMood => {
     if (!dayMap) return 'neutral';
     const totalLimit = Object.keys(limits).reduce((acc, pkg) => acc + (limits[pkg] || 0), 0);
     if (totalLimit === 0) return 'neutral';
+    const hasExceededApp = Object.keys(limits).some((pkg) => {
+      const limit = limits[pkg];
+      if (!limit) return false;
+      return Math.floor((dayMap[pkg] || 0) / 60000) > limit;
+    });
+    if (hasExceededApp) return 'dotted';
     const limitedUsage = Object.keys(dayMap).reduce((acc, pkg) => {
       const limit = limits[pkg];
       if (!limit) return acc;
       return acc + Math.floor(dayMap[pkg] / 60000);
     }, 0);
     const ratio = limitedUsage / totalLimit;
-    if (ratio > 1) return 'dotted';
-    if (ratio <= 0.3) return 'happy';
-    if (ratio <= 1) return 'lightSmile';
+    if (ratio <= 0.25) return 'happy';
+    if (ratio <= 0.65) return 'lightSmile';
     return 'neutral';
-  };
+  }, []);
 
-  const calculateStreakFromStats = (stats: DailyUsageMap, limits: Record<string, number>) => {
+  const getLimitsForDate = useCallback((
+    dateKey: string,
+    snapshots: DailyLimitSnapshots,
+    currentLimits: Record<string, number>
+  ) => {
+    const todayKey = formatDateKey(new Date());
+    if (snapshots[dateKey]) return snapshots[dateKey];
+    return dateKey === todayKey ? currentLimits : {};
+  }, []);
+
+  const getMoodForDate = useCallback((
+    dateKey: string,
+    dayMap: Record<string, number> | undefined,
+    limitSnapshots: DailyLimitSnapshots,
+    currentLimits: Record<string, number>,
+    savedMoods: DailyMoodSnapshots
+  ): DayMood => {
+    const todayKey = formatDateKey(new Date());
+    if (dateKey !== todayKey && savedMoods[dateKey]) return savedMoods[dateKey];
+    const limits = getLimitsForDate(dateKey, limitSnapshots, currentLimits);
+    return resolveMood(dayMap, limits);
+  }, [getLimitsForDate, resolveMood]);
+
+  const calculateStreakFromStats = useCallback((
+    stats: DailyUsageMap,
+    limitSnapshots: DailyLimitSnapshots,
+    currentLimits: Record<string, number>,
+    savedMoods: DailyMoodSnapshots
+  ) => {
     let count = 0;
     const cursor = new Date();
     cursor.setHours(0, 0, 0, 0);
@@ -83,25 +119,25 @@ const StreakScreen: React.FC = () => {
       const key = formatDateKey(cursor);
       const dayMap = stats[key];
       if (!dayMap) break;
-      const mood = resolveMood(dayMap, limits || {});
+      const mood = getMoodForDate(key, dayMap, limitSnapshots, currentLimits, savedMoods);
       if (mood === 'dotted') break;
       count += 1;
       cursor.setDate(cursor.getDate() - 1);
     }
     return count;
-  };
+  }, [getMoodForDate]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     await ScreenTimeService.storeTodayStats();
-    const [storedStats, currentStreak, installedApps, limits] = await Promise.all([
+    const [storedStats, currentStreak, installedApps, limits, limitSnapshots, savedMoods] = await Promise.all([
       ScreenTimeService.getStoredDailyStats(),
       UserStore.getStreak(),
       ScreenTimeService.getInstalledApps(),
-      UserStore.getAllLimits()
+      UserStore.getAllLimits(),
+      UserStore.getDailyLimitSnapshots(),
+      UserStore.getDailyMoods()
     ]);
-
-    const derivedStreak = calculateStreakFromStats(storedStats as DailyUsageMap, limits || {});
-    setStreak(currentStreak > 0 ? currentStreak : derivedStreak);
+    await UserStore.saveTodayLimitSnapshot(limits || {});
 
     const nameMap = installedApps.reduce<Record<string, string>>((acc, app) => {
       acc[app.packageName] = app.appName;
@@ -110,6 +146,13 @@ const StreakScreen: React.FC = () => {
 
     const todayKey = formatDateKey(new Date());
     const todayMap = (storedStats as DailyUsageMap)[todayKey] || {};
+    const todayMood = resolveMood(todayMap, limits || {});
+    await UserStore.saveDailyMood(todayKey, todayMood);
+    const moodsWithToday = { ...(savedMoods || {}), [todayKey]: todayMood };
+
+    const derivedStreak = calculateStreakFromStats(storedStats as DailyUsageMap, limitSnapshots || {}, limits || {}, moodsWithToday);
+    setStreak(currentStreak > 0 ? currentStreak : derivedStreak);
+
     const rows = Object.keys(todayMap)
       .map((pkg) => ({
         id: pkg,
@@ -138,169 +181,212 @@ const StreakScreen: React.FC = () => {
         label: labels[i],
         dayNumber: d.getDate(),
         completed: d <= now && Boolean(dayMap),
-        mood: resolveMood(dayMap, limits || {})
+        mood: getMoodForDate(key, dayMap, limitSnapshots || {}, limits || {}, moodsWithToday)
       };
     });
     setWeekCells(cells);
+  }, [calculateStreakFromStats, getMoodForDate, resolveMood]);
+
+  const formatTime = (mins: number) => {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (h === 0) return `${m}m`;
+    return m === 0 ? `${h}h` : `${h}h ${m}m`;
   };
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   return (
-    <LinearGradient
-      colors={['#FFC46B', '#FFE2A7', '#FFF7E7', '#F4F7FF']}
-      locations={[0, 0.2, 0.45, 0.72]}
-      start={{ x: 0.5, y: 0 }}
-      end={{ x: 0.5, y: 1 }}
-      style={styles.container}
-    >
-      <SafeAreaView style={styles.safe}>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <View style={styles.heroSection}>
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.pageTitle}>Streak</Text>
+            <Text style={styles.pageDate}>This week</Text>
+          </View>
+          <TouchableOpacity style={styles.editAppsButton} onPress={onEditApps} activeOpacity={0.86}>
+            <Text style={styles.editAppsText}>Edit Apps List</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.heroCard}>
+          <View style={styles.heroTopRow}>
             <View style={styles.heroBadge}>
               <Text style={styles.heroBadgeText}>{isExceededToday ? 'Needs Recovery' : 'On Track'}</Text>
             </View>
+            <Text style={styles.heroMeta}>{`Current streak ${streak}d`}</Text>
+          </View>
+          <View style={styles.heroBody}>
             <Image
               source={isExceededToday ? require('../../assets/Sad.gif') : require('../../assets/Fire (1).gif')}
               style={styles.heroGif}
               resizeMode="contain"
             />
-            <Text style={styles.streakNumber}>{streak}</Text>
-            <Text style={styles.streakLabel}>Days on Fire!</Text>
-            <Text style={styles.streakSub}>{`🔥 Current Streak: ${streak} Days`}</Text>
+            <View>
+              <Text style={styles.streakNumber}>{streak}</Text>
+              <Text style={styles.streakLabel}>Days on fire</Text>
+            </View>
           </View>
+        </View>
 
-          <LinearGradient colors={['#FFFFFF', '#F8FBFF']} style={styles.card}>
-            <View style={styles.titleRow}>
-              <Text style={styles.cardTitle}>Streak Journey</Text>
-              <View style={styles.pill}>
-                <Text style={styles.pillText}>Mood Check</Text>
-              </View>
+        <View style={styles.card}>
+          <View style={styles.titleRow}>
+            <Text style={styles.cardTitle}>Streak Journey</Text>
+            <View style={styles.pill}>
+              <Text style={styles.pillText}>Mood Check</Text>
             </View>
-            <View style={styles.weekStrip}>
-              {weekCells.map((cell) => (
-                <View key={cell.key} style={styles.weekDay}>
-                  <Text style={styles.weekLabel}>{cell.label}</Text>
-                  {cell.completed ? (
-                    <View style={[styles.dayBadge, { backgroundColor: moodFace[cell.mood].bg }]}>
-                      {cell.mood === 'dotted' && <View style={styles.dottedRing} />}
-                      <View style={styles.eyesRow}>
-                        <View style={[styles.eye, { backgroundColor: moodFace[cell.mood].faceColor }]} />
-                        <View style={[styles.eye, { backgroundColor: moodFace[cell.mood].faceColor }]} />
-                      </View>
-                      <Text style={[styles.dayMouth, { color: moodFace[cell.mood].faceColor }]}>
-                        {moodFace[cell.mood].mouth}
-                      </Text>
+          </View>
+          <View style={styles.weekStrip}>
+            {weekCells.map((cell) => (
+              <View key={cell.key} style={styles.weekDay}>
+                <Text style={styles.weekLabel}>{cell.label}</Text>
+                {cell.completed ? (
+                  <View style={[styles.dayBadge, { backgroundColor: moodFace[cell.mood].bg }]}>
+                    {cell.mood === 'dotted' && <View style={styles.dottedRing} />}
+                    <View style={styles.eyesRow}>
+                      <View style={[styles.eye, { backgroundColor: moodFace[cell.mood].faceColor }]} />
+                      <View style={[styles.eye, { backgroundColor: moodFace[cell.mood].faceColor }]} />
                     </View>
-                  ) : (
-                    <Text style={styles.dayNumber}>{cell.dayNumber}</Text>
-                  )}
-                </View>
-              ))}
-            </View>
-          </LinearGradient>
-
-          <LinearGradient colors={['#FFFFFF', '#FBFCFF']} style={styles.card}>
-            <View style={styles.titleRow}>
-              <Text style={styles.cardTitle}>Top Apps</Text>
-              <View style={styles.pill}>
-                <Text style={styles.pillText}>Today</Text>
-              </View>
-            </View>
-            {todayApps.length === 0 ? (
-              <Text style={styles.emptyText}>No tracked usage yet today.</Text>
-            ) : (
-              todayApps.map((app) => {
-                const ratio = app.limitMinutes > 0 ? app.minutes / app.limitMinutes : app.minutes / 120;
-                const fillWidth = Math.min(Math.max(ratio * 100, 3), 100);
-                const fillColor = ratio >= 1 ? '#E5484D' : ratio >= 0.8 ? '#E9A23B' : '#35B46A';
-
-                return (
-                  <View key={app.id} style={styles.appRow}>
-                    <View style={styles.appTopRow}>
-                      <View style={styles.appNameWrap}>
-                        {app.iconBase64 ? (
-                          <Image source={{ uri: `data:image/png;base64,${app.iconBase64}` }} style={styles.appIcon} resizeMode="contain" />
-                        ) : (
-                          <View style={styles.appIconFallback}>
-                            <Text style={styles.appIconFallbackText}>{app.name.charAt(0)}</Text>
-                          </View>
-                        )}
-                        <Text style={styles.appName} numberOfLines={1}>{app.name}</Text>
-                      </View>
-                      <Text style={styles.appMinutes}>
-                        {app.minutes}m{app.limitMinutes > 0 ? ` / ${app.limitMinutes}m` : ''}
-                      </Text>
-                    </View>
-                    <View style={styles.usageTrack}>
-                      <View style={[styles.usageFill, { width: `${fillWidth}%`, backgroundColor: fillColor }]} />
-                    </View>
+                    {moodFace[cell.mood].type === 'neutral' ? (
+                      <View style={[styles.mouthNeutral, { backgroundColor: moodFace[cell.mood].faceColor }]} />
+                    ) : (
+                      <View
+                        style={[
+                          styles.mouthCurve,
+                          { borderColor: moodFace[cell.mood].faceColor },
+                          moodFace[cell.mood].type === 'frown' && styles.mouthFrown
+                        ]}
+                      />
+                    )}
                   </View>
-                );
-              })
-            )}
-          </LinearGradient>
-        </ScrollView>
-      </SafeAreaView>
-    </LinearGradient>
+                ) : (
+                  <Text style={styles.dayNumber}>{cell.dayNumber}</Text>
+                )}
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.titleRow}>
+            <Text style={styles.cardTitle}>Top Apps</Text>
+            <View style={styles.pill}>
+              <Text style={styles.pillText}>Today</Text>
+            </View>
+          </View>
+          {todayApps.length === 0 ? (
+            <Text style={styles.emptyText}>No tracked usage yet today.</Text>
+          ) : (
+            todayApps.map((app) => {
+              const ratio = app.limitMinutes > 0 ? app.minutes / app.limitMinutes : app.minutes / 120;
+              const fillWidth = Math.min(Math.max(ratio * 100, 3), 100);
+              const fillColor = ratio >= 1 ? '#101010' : ratio >= 0.8 ? '#4B4B4B' : '#7A7A7A';
+
+              return (
+                <View key={app.id} style={styles.appRow}>
+                  <View style={styles.appTopRow}>
+                    <View style={styles.appNameWrap}>
+                      {app.iconBase64 ? (
+                        <Image source={{ uri: `data:image/png;base64,${app.iconBase64}` }} style={styles.appIcon} resizeMode="contain" />
+                      ) : (
+                        <View style={styles.appIconFallback}>
+                          <Text style={styles.appIconFallbackText}>{app.name.charAt(0)}</Text>
+                        </View>
+                      )}
+                      <Text style={styles.appName} numberOfLines={1}>{app.name}</Text>
+                    </View>
+                    <Text style={styles.appMinutes}>
+                      {formatTime(app.minutes)}{app.limitMinutes > 0 ? ` / ${formatTime(app.limitMinutes)}` : ''}
+                    </Text>
+                  </View>
+                  <View style={styles.usageTrack}>
+                    <View style={[styles.usageFill, { width: `${fillWidth}%`, backgroundColor: fillColor }]} />
+                  </View>
+                </View>
+              );
+            })
+          )}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  safe: { flex: 1 },
-  content: { paddingHorizontal: 16, paddingTop: 34, paddingBottom: 120, gap: 14 },
-  heroSection: { alignItems: 'center', paddingTop: 8, paddingBottom: 10 },
+  container: { flex: 1, backgroundColor: '#F5F6F9' },
+  content: {
+    paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 12 : 16,
+    paddingBottom: 120
+  },
+  pageTitle: { fontSize: 28, color: '#1C1C1E', fontFamily: FONT_SEMIBOLD, fontWeight: '800' },
+  pageDate: { marginTop: 2, fontSize: 12, color: '#8E8E93', fontFamily: FONT_REGULAR },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 },
+  editAppsButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.58)',
+    backgroundColor: 'rgba(255,255,255,0.45)'
+  },
+  editAppsText: { fontSize: 12, color: '#1C1C1E', fontFamily: FONT_SEMIBOLD },
+  heroCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E7E7EC',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 10
+  },
+  heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   heroBadge: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E3E8F2',
+    borderColor: '#E2E2E2',
     borderRadius: 999,
     paddingHorizontal: 12,
-    paddingVertical: 5,
-    marginBottom: 8
+    paddingVertical: 5
   },
-  heroBadgeText: { fontSize: 11, color: '#3F4A5A', fontFamily: FONT_REGULAR },
-  heroGif: { width: 120, height: 120, marginTop: 6 },
-  streakNumber: { fontSize: 58, lineHeight: 60, color: '#171C26', fontFamily: FONT_REGULAR },
-  streakLabel: { fontSize: 21, color: '#151A25', fontFamily: FONT_REGULAR },
-  streakSub: { marginTop: 4, fontSize: 12, color: '#2C3039', fontFamily: FONT_SEMIBOLD },
+  heroBadgeText: { fontSize: 10, color: '#303030', fontFamily: FONT_REGULAR },
+  heroMeta: { fontSize: 12, color: '#5D5D5D', fontFamily: FONT_REGULAR },
+  heroBody: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
+  heroGif: { width: 92, height: 92, marginRight: 10 },
+  streakNumber: { fontSize: 40, lineHeight: 42, color: '#121212', fontFamily: FONT_SEMIBOLD },
+  streakLabel: { fontSize: 14, color: '#2E2E2E', fontFamily: FONT_REGULAR },
   card: {
-    borderRadius: 22,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#D9E3F4',
-    padding: 14,
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 7 },
-    elevation: 3
+    borderColor: '#E7E7EC',
+    padding: 12,
+    backgroundColor: '#FFFFFF',
+    marginBottom: 10
   },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  cardTitle: { fontSize: 16, color: '#151A25', fontFamily: FONT_SEMIBOLD },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  cardTitle: { fontSize: 14, color: '#1C1C1E', fontFamily: FONT_SEMIBOLD },
   pill: {
     borderRadius: 999,
-    paddingHorizontal: 10,
+    paddingHorizontal: 9,
     paddingVertical: 4,
-    backgroundColor: '#F3F7FF',
+    backgroundColor: '#F0F1F5',
     borderWidth: 1,
-    borderColor: '#DDE7F8'
+    borderColor: '#E7E7EC'
   },
-  pillText: { fontSize: 10, color: '#3F5A84', fontFamily: FONT_REGULAR },
+  pillText: { fontSize: 10, color: '#6E6E73', fontFamily: FONT_REGULAR },
   weekStrip: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: '#F7FAFF',
-    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E2EAF8',
-    paddingVertical: 11,
-    paddingHorizontal: 8
+    borderColor: '#E7E7EC',
+    paddingVertical: 9,
+    paddingHorizontal: 6
   },
   weekDay: { alignItems: 'center', width: '13.7%' },
-  weekLabel: { fontSize: 11, color: '#7A859D', marginBottom: 8, fontFamily: FONT_REGULAR },
+  weekLabel: { fontSize: 10, color: '#8E8E93', marginBottom: 7, fontFamily: FONT_REGULAR },
   dayBadge: {
     width: 32,
     height: 32,
@@ -321,12 +407,30 @@ const styles = StyleSheet.create({
     borderColor: '#D6A03D',
     backgroundColor: 'transparent'
   },
-  eyesRow: { flexDirection: 'row', gap: 6, marginBottom: 1 },
+  eyesRow: { flexDirection: 'row', gap: 6, marginBottom: 3 },
   eye: { width: 3, height: 3, borderRadius: 2 },
-  dayMouth: { fontSize: 10, lineHeight: 11, fontFamily: FONT_REGULAR },
-  dayNumber: { fontSize: 16, color: '#1E2430', fontFamily: FONT_REGULAR },
-  emptyText: { color: '#6F7685', fontFamily: FONT_REGULAR, marginTop: 2 },
-  appRow: { borderTopWidth: 1, borderTopColor: '#EFF2F8', paddingVertical: 8 },
+  mouthCurve: {
+    width: 10,
+    height: 5,
+    borderBottomWidth: 1.5,
+    borderLeftWidth: 1.5,
+    borderRightWidth: 1.5,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6
+  },
+  mouthFrown: {
+    transform: [{ rotate: '180deg' }],
+    marginTop: 2
+  },
+  mouthNeutral: {
+    width: 8,
+    height: 1.5,
+    borderRadius: 1,
+    marginTop: 2
+  },
+  dayNumber: { fontSize: 14, color: '#1E1E1E', fontFamily: FONT_REGULAR },
+  emptyText: { color: '#6F6F6F', fontFamily: FONT_REGULAR, marginTop: 2 },
+  appRow: { borderTopWidth: 1, borderTopColor: '#EDEDED', paddingVertical: 8 },
   appTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   appNameWrap: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 },
   appIcon: { width: 22, height: 22, borderRadius: 6, marginRight: 8 },
@@ -337,16 +441,16 @@ const styles = StyleSheet.create({
     marginRight: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#E9EDF6'
+    backgroundColor: '#ECECEC'
   },
-  appIconFallbackText: { fontSize: 11, color: '#42526B', fontFamily: FONT_REGULAR },
-  appName: { flex: 1, color: '#232A35', fontSize: 14, fontFamily: FONT_REGULAR },
-  appMinutes: { color: '#232A35', fontSize: 14, fontFamily: FONT_SEMIBOLD },
+  appIconFallbackText: { fontSize: 11, color: '#444444', fontFamily: FONT_REGULAR },
+  appName: { flex: 1, color: '#1F1F1F', fontSize: 14, fontFamily: FONT_REGULAR },
+  appMinutes: { color: '#1F1F1F', fontSize: 14, fontFamily: FONT_SEMIBOLD },
   usageTrack: {
     height: 8,
     width: 110,
     borderRadius: 999,
-    backgroundColor: '#DEE6F2',
+    backgroundColor: '#E3E3E3',
     overflow: 'hidden',
     marginTop: 6,
     alignSelf: 'flex-end'
@@ -355,8 +459,3 @@ const styles = StyleSheet.create({
 });
 
 export default StreakScreen;
-
-
-
-
-

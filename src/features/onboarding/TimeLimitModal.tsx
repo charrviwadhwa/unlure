@@ -9,8 +9,8 @@ interface TimeLimitModalProps {
   onCancel: () => void;
 }
 
-const hourData = ['0', '1', '2', '3', '4', '5'];
-const minuteData = ['0', '5', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'];
+const hourData = Array.from({ length: 13 }, (_, i) => String(i));
+const minuteData = Array.from({ length: 60 }, (_, i) => String(i));
 
 export const TimeLimitModal = ({ visible, appName, onConfirm, onCancel }: TimeLimitModalProps) => {
   const [hours, setHours] = useState('0');

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, StatusBar } from 'react-native';
 import { ScreenTimeService, AppInfo } from '../../services/ScreenTimeService';
 import { UserStore } from '../../services/storage';
 import { TimeLimitModal } from './TimeLimitModal';
@@ -38,7 +38,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
     setModalVisible(false);
   };
 
-  if (loading) return <ActivityIndicator size="large" color="#111111" style={{ flex: 1 }} />;
+  if (loading) return <ActivityIndicator size="large" color="#111111" style={styles.loading} />;
 
   return (
     <View style={styles.container}>
@@ -88,7 +88,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
         }}
       />
 
-      <TouchableOpacity style={styles.footerButton} onPress={onComplete}>
+      <TouchableOpacity style={styles.footerButton} onPress={onComplete} activeOpacity={0.88}>
         <Text style={styles.footerText}>Save App List</Text>
       </TouchableOpacity>
 
@@ -103,24 +103,62 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5', padding: 20 },
+  loading: { flex: 1, backgroundColor: '#F5F6F9' },
+  container: {
+    flex: 1,
+    backgroundColor: '#F5F6F9',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 12 : 16
+  },
   headerWrap: { marginBottom: 12 },
-  header: { fontSize: 26, fontWeight: '700', color: '#111111' },
-  subheader: { fontSize: 13, color: '#4A4A4A', marginTop: 6 },
-  permissionCard: { backgroundColor: '#FFF', padding: 14, borderRadius: 16, marginBottom: 12, elevation: 2 },
-  permissionTitle: { fontSize: 14, fontWeight: '700', color: '#111111', marginBottom: 4 },
+  header: { fontSize: 22, color: '#1C1C1E', fontWeight: '700' },
+  subheader: { fontSize: 12, color: '#6E6E73', marginTop: 6 },
+  permissionCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E7E7EC'
+  },
+  permissionTitle: { fontSize: 15, fontWeight: '700', color: '#1C1C1E', marginBottom: 4 },
   permissionText: { fontSize: 12, color: '#4A4A4A', marginBottom: 10 },
-  permissionButton: { alignSelf: 'flex-start', backgroundColor: '#111111', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10 },
-  permissionButtonText: { color: '#FFF', fontWeight: '600', fontSize: 12 },
-  searchBar: { backgroundColor: '#FFF', padding: 14, borderRadius: 14, marginBottom: 12, elevation: 2, color: '#111111' },
-  item: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#FFF', borderRadius: 18, marginBottom: 10 },
-  selectedItem: { backgroundColor: '#EDEDED', borderColor: '#111111', borderWidth: 1 },
+  permissionButton: { alignSelf: 'flex-start', backgroundColor: '#111111', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 12 },
+  permissionButtonText: { color: '#FFF', fontWeight: '700', fontSize: 12 },
+  searchBar: {
+    backgroundColor: '#FFFFFF',
+    padding: 14,
+    borderRadius: 14,
+    marginBottom: 12,
+    color: '#111111',
+    borderWidth: 1,
+    borderColor: '#E7E7EC'
+  },
+  item: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E7E7EC'
+  },
+  selectedItem: { backgroundColor: '#F2F3F6', borderColor: '#111111' },
   appName: { fontSize: 15, fontWeight: '600', color: '#111111' },
   limitText: { fontSize: 12, color: '#111111', fontWeight: '700', marginTop: 4 },
   limitHint: { fontSize: 12, color: '#777777', marginTop: 4 },
-  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: '#8A8A8A', alignItems: 'center', justifyContent: 'center' },
+  radio: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: '#8A8A8A', alignItems: 'center', justifyContent: 'center' },
   radioActive: { backgroundColor: '#111111', borderColor: '#111111' },
   radioText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
-  footerButton: { backgroundColor: '#111111', padding: 18, borderRadius: 18, alignItems: 'center', marginTop: 6 },
-  footerText: { color: '#FFF', fontWeight: '700' }
+  footerButton: {
+    backgroundColor: '#111111',
+    paddingVertical: 18,
+    borderRadius: 22,
+    alignItems: 'center',
+    marginTop: 4,
+    marginBottom: 12
+  },
+  footerText: { color: '#FFF', fontWeight: '700', fontSize: 16 }
 });

@@ -13,10 +13,16 @@ import { UserStore } from './src/services/storage';
 const App = () => {
   const [currentStep, setCurrentStep] = useState<'entry' | 'selection' | 'main'>('entry');
   const [activeTab, setActiveTab] = useState<'home' | 'streak' | 'analytics'>('home');
+  const [mountedTabs, setMountedTabs] = useState<Record<'home' | 'streak' | 'analytics', boolean>>({
+    home: true,
+    streak: false,
+    analytics: false
+  });
   const [isReady, setIsReady] = useState(false);
   const isMain = currentStep === 'main';
 
   const handleTabChange = useCallback((tab: 'home' | 'streak' | 'analytics') => {
+    setMountedTabs(prev => (prev[tab] ? prev : { ...prev, [tab]: true }));
     setActiveTab(prev => (prev === tab ? prev : tab));
   }, []);
 
@@ -49,15 +55,21 @@ const App = () => {
 
         {currentStep === 'main' && (
           <View style={styles.main}>
-            <View pointerEvents={isMain && activeTab === 'home' ? 'auto' : 'none'} style={[styles.tabScreen, activeTab === 'home' ? styles.tabVisible : styles.tabHidden]}>
-              <OverviewScreen />
-            </View>
-            <View pointerEvents={isMain && activeTab === 'streak' ? 'auto' : 'none'} style={[styles.tabScreen, activeTab === 'streak' ? styles.tabVisible : styles.tabHidden]}>
-              <StreakScreen />
-            </View>
-            <View pointerEvents={isMain && activeTab === 'analytics' ? 'auto' : 'none'} style={[styles.tabScreen, activeTab === 'analytics' ? styles.tabVisible : styles.tabHidden]}>
-              <HomeScreen />
-            </View>
+            {mountedTabs.home && (
+              <View pointerEvents={isMain && activeTab === 'home' ? 'auto' : 'none'} style={[styles.tabScreen, activeTab === 'home' ? styles.tabVisible : styles.tabHidden]}>
+                <OverviewScreen />
+              </View>
+            )}
+            {mountedTabs.streak && (
+              <View pointerEvents={isMain && activeTab === 'streak' ? 'auto' : 'none'} style={[styles.tabScreen, activeTab === 'streak' ? styles.tabVisible : styles.tabHidden]}>
+                <StreakScreen onEditApps={() => setCurrentStep('selection')} />
+              </View>
+            )}
+            {mountedTabs.analytics && (
+              <View pointerEvents={isMain && activeTab === 'analytics' ? 'auto' : 'none'} style={[styles.tabScreen, activeTab === 'analytics' ? styles.tabVisible : styles.tabHidden]}>
+                <HomeScreen />
+              </View>
+            )}
             <View style={styles.bottomNavWrap}>
               <BottomNav active={activeTab} onChange={handleTabChange} />
             </View>

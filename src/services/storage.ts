@@ -1,30 +1,35 @@
 // src/services/storage.ts
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Define the "Schema" for our local storage
-interface AppLimit {
-  packageName: string;
-  limitMinutes: number;
-}
-
 const DAILY_MOOD_RETENTION_DAYS = 180;
+type LimitMap = Record<string, number>;
+export type DailyLimitSnapshots = Record<string, LimitMap>;
+export type StoredMood = 'happy' | 'lightSmile' | 'neutral' | 'dotted';
+export type DailyMoodSnapshots = Record<string, StoredMood>;
 
 const pruneOldDateKeys = (
-  keyedData: Record<string, string>,
+  keyedData: Record<string, unknown>,
   retentionDays: number
-): Record<string, string> => {
+): Record<string, unknown> => {
   const cutoff = new Date();
   cutoff.setHours(0, 0, 0, 0);
   cutoff.setDate(cutoff.getDate() - retentionDays);
   const cutoffMs = cutoff.getTime();
 
-  return Object.entries(keyedData).reduce<Record<string, string>>((acc, [dateKey, value]) => {
+  return Object.entries(keyedData).reduce<Record<string, unknown>>((acc, [dateKey, value]) => {
     const parsed = new Date(`${dateKey}T00:00:00`).getTime();
     if (!Number.isNaN(parsed) && parsed >= cutoffMs) {
       acc[dateKey] = value;
     }
     return acc;
   }, {});
+};
+
+const formatDateKey = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 };
 
 export const UserStore = {
@@ -42,12 +47,24 @@ export const UserStore = {
   async setAppLimit(packageName: string, minutes: number): Promise<void> {
     const limits = await this.getAllLimits();
     limits[packageName] = minutes;
-    await AsyncStorage.setItem('@app_limits', JSON.stringify(limits));
+    await this.saveAllLimits(limits);
   },
 
-  async getAllLimits(): Promise<Record<string, number>> {
+  async getAllLimits(): Promise<LimitMap> {
     const data = await AsyncStorage.getItem('@app_limits');
     return data ? JSON.parse(data) : {};
+  },
+
+  async getDailyLimitSnapshots(): Promise<DailyLimitSnapshots> {
+    const data = await AsyncStorage.getItem('@daily_limit_snapshots');
+    return data ? JSON.parse(data) : {};
+  },
+
+  async saveTodayLimitSnapshot(limits: LimitMap): Promise<void> {
+    const snapshots = await this.getDailyLimitSnapshots();
+    snapshots[formatDateKey(new Date())] = { ...limits };
+    const pruned = pruneOldDateKeys(snapshots, DAILY_MOOD_RETENTION_DAYS) as DailyLimitSnapshots;
+    await AsyncStorage.setItem('@daily_limit_snapshots', JSON.stringify(pruned));
   },
 
   // --- NEW: Streak Logic ---
@@ -65,15 +82,15 @@ export const UserStore = {
     }
   },
 
-  async getDailyMoods(): Promise<Record<string, string>> {
+  async getDailyMoods(): Promise<DailyMoodSnapshots> {
     const data = await AsyncStorage.getItem('@daily_moods');
     return data ? JSON.parse(data) : {};
   },
 
-  async saveDailyMood(dateKey: string, mood: string): Promise<void> {
+  async saveDailyMood(dateKey: string, mood: StoredMood): Promise<void> {
     const moods = await this.getDailyMoods();
     moods[dateKey] = mood;
-    const prunedMoods = pruneOldDateKeys(moods, DAILY_MOOD_RETENTION_DAYS);
+    const prunedMoods = pruneOldDateKeys(moods, DAILY_MOOD_RETENTION_DAYS) as DailyMoodSnapshots;
     await AsyncStorage.setItem('@daily_moods', JSON.stringify(prunedMoods));
   },
 
@@ -92,7 +109,8 @@ export const UserStore = {
     await this.setLastStreakDate(dateKey);
   },
   // src/services/storage.ts
-async saveAllLimits(limits: Record<string, number>): Promise<void> {
-  await AsyncStorage.setItem('@app_limits', JSON.stringify(limits));
-}
+  async saveAllLimits(limits: LimitMap): Promise<void> {
+    await AsyncStorage.setItem('@app_limits', JSON.stringify(limits));
+    await this.saveTodayLimitSnapshot(limits);
+  }
 };
