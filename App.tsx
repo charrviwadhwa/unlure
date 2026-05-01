@@ -4,7 +4,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import EntryScreen from './src/features/onboarding/EntryScreen';
 import { AppSelectionScreen } from './src/features/onboarding/AppSelectionScreen'; 
-import { OverviewScreen } from './src/features/home/OverviewScreen';
+import  OverviewScreen  from './src/features/home/OverviewScreen';
 import StreakScreen from './src/features/journey/StreakScreen';
 import { HomeScreen } from './src/features/detox/HomeScreen';
 import { BottomNav } from './src/components/BottomNav';
@@ -50,7 +50,7 @@ const App = () => {
         {currentStep === 'main' && (
           <View style={styles.main}>
             <View pointerEvents={isMain && activeTab === 'home' ? 'auto' : 'none'} style={[styles.tabScreen, activeTab === 'home' ? styles.tabVisible : styles.tabHidden]}>
-              <OverviewScreen onEditApps={() => setCurrentStep('selection')} />
+              <OverviewScreen />
             </View>
             <View pointerEvents={isMain && activeTab === 'streak' ? 'auto' : 'none'} style={[styles.tabScreen, activeTab === 'streak' ? styles.tabVisible : styles.tabHidden]}>
               <StreakScreen />

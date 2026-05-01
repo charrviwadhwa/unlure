@@ -1,5 +1,5 @@
-﻿import React, { useEffect, useState } from 'react';
-import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ScreenTimeService, DailyUsageMap } from '../../services/ScreenTimeService';
 import { UserStore } from '../../services/storage';
 
@@ -8,6 +8,9 @@ type MonthCell = {
   day: number | null;
   state: 'happy' | 'lightSmile' | 'neutral' | 'angry' | 'broken' | 'empty';
 };
+
+const FONT_REGULAR = Platform.select({ ios: 'Inter_24pt-Light', android: 'Inter_24pt-Light', default: 'System' });
+const FONT_SEMIBOLD = Platform.select({ ios: 'Inter_24pt-Light', android: 'Inter_24pt-Light', default: 'System' });
 
 export const HomeScreen = () => {
   const [monthDate, setMonthDate] = useState(new Date());
@@ -121,11 +124,11 @@ export const HomeScreen = () => {
   };
 
   const moodConfig: Record<Exclude<MonthCell['state'], 'empty'>, { mouth: string; bg: string; faceColor: string; eyebrow?: boolean; dotted?: boolean }> = {
-    happy: { mouth: '﹀', bg: '#BDE8FF', faceColor: '#2E6279' },
-    lightSmile: { mouth: '◡', bg: '#D6CBFF', faceColor: '#5A43A7' },
-    neutral: { mouth: '—', bg: '#F9E38D', faceColor: '#6B5E24' },
-    angry: { mouth: '︵', bg: '#F7B7BF', faceColor: '#8F1F2D' },
-    broken: { mouth: '—', bg: 'transparent', faceColor: '#9E6324', dotted: true }
+    happy: { mouth: '\uFE40', bg: '#BDE8FF', faceColor: '#2E6279' },
+    lightSmile: { mouth: '\u25E1', bg: '#D6CBFF', faceColor: '#5A43A7' },
+    neutral: { mouth: '\u2014', bg: '#F9E38D', faceColor: '#6B5E24' },
+    angry: { mouth: '\uFE35', bg: '#F7B7BF', faceColor: '#8F1F2D' },
+    broken: { mouth: '\u2014', bg: 'transparent', faceColor: '#9E6324', dotted: true }
   };
 
   return (
@@ -240,7 +243,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '300',
     color: '#141414',
-    fontFamily: 'Montserrat-Light'
+    fontFamily: FONT_REGULAR
   },
   weekRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   weekChip: {
@@ -251,7 +254,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center'
   },
-  weekChipText: { color: '#59647A', fontWeight: '300', fontFamily: 'Montserrat-Light', fontSize: 14 },
+  weekChipText: { color: '#59647A', fontWeight: '300', fontFamily: FONT_REGULAR, fontSize: 14 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   cell: {
     width: '13.7%',
@@ -283,8 +286,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 3
   },
-  dayText: { fontSize: 15, color: '#242424', fontWeight: '300', fontFamily: 'Montserrat-Light' },
-  todayDayText: { color: '#3D4FB5', fontWeight: '700' },
+  dayText: { fontSize: 15, color: '#242424', fontWeight: '300', fontFamily: FONT_REGULAR },
+  todayDayText: { color: '#3D4FB5', fontFamily: FONT_SEMIBOLD },
   blankDayText: { color: '#C4CAD6' },
   iconWrap: {
     width: 38,
@@ -312,12 +315,12 @@ const styles = StyleSheet.create({
   },
   browLeft: {
     fontSize: 9,
-    fontWeight: '700',
+    fontFamily: FONT_SEMIBOLD,
     lineHeight: 9
   },
   browRight: {
     fontSize: 9,
-    fontWeight: '700',
+    fontFamily: FONT_SEMIBOLD,
     lineHeight: 9
   },
   eye: {
@@ -328,7 +331,7 @@ const styles = StyleSheet.create({
   mouth: {
     fontSize: 11,
     lineHeight: 12,
-    fontFamily: 'Montserrat-Light'
+    fontFamily: FONT_REGULAR
   },
   emptyCircle: {
     width: 16,
@@ -350,3 +353,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent'
   }
 });
+
+
+
+
+
+
+

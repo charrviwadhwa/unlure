@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Image, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { ScreenTimeService, DailyUsageMap } from '../../services/ScreenTimeService';
 import { UserStore } from '../../services/storage';
@@ -23,11 +23,14 @@ type DayCell = {
 };
 
 const moodFace: Record<DayMood, { mouth: string; bg: string; faceColor: string }> = {
-  happy: { mouth: '﹀', bg: '#BDE8FF', faceColor: '#2E6279' },
-  lightSmile: { mouth: '◡', bg: '#D6CBFF', faceColor: '#5A43A7' },
-  neutral: { mouth: '—', bg: '#F9E38D', faceColor: '#6B5E24' },
-  dotted: { mouth: '—', bg: 'transparent', faceColor: '#9E6324' }
+  happy: { mouth: '\uFE40', bg: '#BDE8FF', faceColor: '#2E6279' },
+  lightSmile: { mouth: '\u25E1', bg: '#D6CBFF', faceColor: '#5A43A7' },
+  neutral: { mouth: '\u2014', bg: '#F9E38D', faceColor: '#6B5E24' },
+  dotted: { mouth: '\u2014', bg: 'transparent', faceColor: '#9E6324' }
 };
+
+const FONT_REGULAR = Platform.select({ ios: 'Inter_24pt-Light', android: 'Inter_24pt-Light', default: 'System' });
+const FONT_SEMIBOLD = Platform.select({ ios: 'Inter_24pt-Light', android: 'Inter_24pt-Light', default: 'System' });
 
 const StreakScreen: React.FC = () => {
   const [streak, setStreak] = useState(0);
@@ -259,11 +262,11 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     marginBottom: 8
   },
-  heroBadgeText: { fontSize: 11, color: '#3F4A5A', fontFamily: 'Montserrat-Light' },
+  heroBadgeText: { fontSize: 11, color: '#3F4A5A', fontFamily: FONT_REGULAR },
   heroGif: { width: 120, height: 120, marginTop: 6 },
-  streakNumber: { fontSize: 58, lineHeight: 60, color: '#171C26', fontFamily: 'Montserrat-Light' },
-  streakLabel: { fontSize: 21, color: '#151A25', fontFamily: 'Montserrat-Light' },
-  streakSub: { marginTop: 4, fontSize: 12, color: '#2C3039', fontFamily: 'Montserrat-Light', fontWeight: '700' },
+  streakNumber: { fontSize: 58, lineHeight: 60, color: '#171C26', fontFamily: FONT_REGULAR },
+  streakLabel: { fontSize: 21, color: '#151A25', fontFamily: FONT_REGULAR },
+  streakSub: { marginTop: 4, fontSize: 12, color: '#2C3039', fontFamily: FONT_SEMIBOLD },
   card: {
     borderRadius: 22,
     borderWidth: 1,
@@ -276,7 +279,7 @@ const styles = StyleSheet.create({
     elevation: 3
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  cardTitle: { fontSize: 16, color: '#151A25', fontFamily: 'Montserrat-Light', fontWeight: '700' },
+  cardTitle: { fontSize: 16, color: '#151A25', fontFamily: FONT_SEMIBOLD },
   pill: {
     borderRadius: 999,
     paddingHorizontal: 10,
@@ -285,7 +288,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#DDE7F8'
   },
-  pillText: { fontSize: 10, color: '#3F5A84', fontFamily: 'Montserrat-Light' },
+  pillText: { fontSize: 10, color: '#3F5A84', fontFamily: FONT_REGULAR },
   weekStrip: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -297,7 +300,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8
   },
   weekDay: { alignItems: 'center', width: '13.7%' },
-  weekLabel: { fontSize: 11, color: '#7A859D', marginBottom: 8, fontFamily: 'Montserrat-Light' },
+  weekLabel: { fontSize: 11, color: '#7A859D', marginBottom: 8, fontFamily: FONT_REGULAR },
   dayBadge: {
     width: 32,
     height: 32,
@@ -320,9 +323,9 @@ const styles = StyleSheet.create({
   },
   eyesRow: { flexDirection: 'row', gap: 6, marginBottom: 1 },
   eye: { width: 3, height: 3, borderRadius: 2 },
-  dayMouth: { fontSize: 10, lineHeight: 11, fontFamily: 'Montserrat-Light' },
-  dayNumber: { fontSize: 16, color: '#1E2430', fontFamily: 'Montserrat-Light' },
-  emptyText: { color: '#6F7685', fontFamily: 'Montserrat-Light', marginTop: 2 },
+  dayMouth: { fontSize: 10, lineHeight: 11, fontFamily: FONT_REGULAR },
+  dayNumber: { fontSize: 16, color: '#1E2430', fontFamily: FONT_REGULAR },
+  emptyText: { color: '#6F7685', fontFamily: FONT_REGULAR, marginTop: 2 },
   appRow: { borderTopWidth: 1, borderTopColor: '#EFF2F8', paddingVertical: 8 },
   appTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   appNameWrap: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 },
@@ -336,9 +339,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#E9EDF6'
   },
-  appIconFallbackText: { fontSize: 11, color: '#42526B', fontWeight: '700', fontFamily: 'Montserrat-Light' },
-  appName: { flex: 1, color: '#232A35', fontSize: 14, fontFamily: 'Montserrat-Light' },
-  appMinutes: { color: '#232A35', fontSize: 14, fontFamily: 'Montserrat-Light', fontWeight: '700' },
+  appIconFallbackText: { fontSize: 11, color: '#42526B', fontFamily: FONT_REGULAR },
+  appName: { flex: 1, color: '#232A35', fontSize: 14, fontFamily: FONT_REGULAR },
+  appMinutes: { color: '#232A35', fontSize: 14, fontFamily: FONT_SEMIBOLD },
   usageTrack: {
     height: 8,
     width: 110,
@@ -352,3 +355,8 @@ const styles = StyleSheet.create({
 });
 
 export default StreakScreen;
+
+
+
+
+
