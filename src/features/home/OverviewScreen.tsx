@@ -1,19 +1,23 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   StyleSheet,
   Text,
   View,
+  Image,
   SafeAreaView,
   ScrollView,
   TouchableOpacity,
   Modal,
   Pressable,
   Animated,
+  RefreshControl,
   Dimensions,
   Platform,
   StatusBar,
+  AppState,
 } from 'react-native';
 import { ScreenTimeService, DailyUsageMap } from '../../services/ScreenTimeService';
+import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
 
 const { width } = Dimensions.get('window');
 
@@ -40,6 +44,7 @@ type AppRow = {
   id: string;
   name: string;
   minutes: number;
+  iconBase64?: string;
 };
 
 type CategoryKey =
@@ -118,6 +123,22 @@ const CATEGORY_LABELS: Record<CategoryKey, string> = {
   others: 'Others'
 };
 
+const CATEGORY_ICONS: Record<CategoryKey | 'otherSummary', string> = {
+  social: '@',
+  games: '+',
+  entertainment: '▶',
+  creativity: '✎',
+  productivityFinance: '$',
+  education: 'A',
+  informationReading: '≡',
+  healthFitness: '+',
+  utilities: '⚙',
+  shoppingFood: '□',
+  travel: '⌖',
+  others: '…',
+  otherSummary: '…'
+};
+
 const createEmptyCategoryTotals = () =>
   CATEGORY_KEYS.reduce<Record<CategoryKey, number>>((acc, key) => {
     acc[key] = 0;
@@ -177,12 +198,18 @@ const formatTime = (mins: number) => {
 };
 
 export default function ScreenTimeDashboard() {
-  const [viewMode, setViewMode] = useState('week');
+  const [viewMode, setViewMode] = useState('day');
   const [todayApps, setTodayApps] = useState<AppRow[]>([]);
   const [storedStats, setStoredStats] = useState<DailyUsageMap>({});
+  const [appNames, setAppNames] = useState<Record<string, string>>({});
+  const [appIcons, setAppIcons] = useState<Record<string, string | undefined>>({});
   const [selectedCategory, setSelectedCategory] = useState<ChartCategory | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [todayKey, setTodayKey] = useState(formatDateKey(new Date()));
   const [fadeAnim] = useState(new Animated.Value(1));
-  const [toggleAnim] = useState(new Animated.Value(0));
+  const [toggleAnim] = useState(new Animated.Value(1));
+  const sheetTranslateY = useRef(new Animated.Value(320)).current;
   const isWeek = viewMode === 'week';
 
   const load = useCallback(async () => {
@@ -196,14 +223,24 @@ export default function ScreenTimeDashboard() {
       acc[app.packageName] = app.appName;
       return acc;
     }, {});
+    const iconMap = installedApps.reduce<Record<string, string | undefined>>((acc, app) => {
+      acc[app.packageName] = app.iconBase64;
+      return acc;
+    }, {});
+    setAppNames(nameMap);
+    setAppIcons(iconMap);
 
-    const todayKey = formatDateKey(new Date());
-    const todayMap = dailyStats[todayKey] || {};
+    const now = new Date();
+    const nextTodayKey = formatDateKey(now);
+    setCurrentTime(now);
+    setTodayKey(nextTodayKey);
+    const todayMap = dailyStats[nextTodayKey] || {};
     const rows = Object.keys(todayMap)
       .map((pkg) => ({
         id: pkg,
         name: nameMap[pkg] || labelFromPackage(pkg),
-        minutes: Math.floor(todayMap[pkg] / 60000)
+        minutes: Math.floor(todayMap[pkg] / 60000),
+        iconBase64: iconMap[pkg]
       }))
       .filter((row) => row.minutes > 0)
       .sort((a, b) => b.minutes - a.minutes);
@@ -216,21 +253,45 @@ export default function ScreenTimeDashboard() {
     load();
   }, [load]);
 
-  const today = new Date();
-  const todayLabel = `Today, ${today.toLocaleDateString('en-US', { day: 'numeric', month: 'long' })}`;
-  const updatedLabel = `updated today at ${today.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+  useEffect(() => {
+    const interval = setInterval(load, 30000);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        load();
+      }
+    });
+
+    return () => {
+      clearInterval(interval);
+      subscription.remove();
+    };
+  }, [load]);
+
+  useMidnightRefresh(load);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [load]);
+
+  const todayLabel = `Today, ${currentTime.toLocaleDateString('en-US', { day: 'numeric', month: 'long' })}`;
+  const updatedLabel = `updated today at ${currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
 
   const weekDays = useMemo(
     () =>
       Array.from({ length: 7 }, (_, i) => {
-        const date = new Date();
+        const date = new Date(`${todayKey}T00:00:00`);
         date.setDate(date.getDate() - (6 - i));
         return {
           key: formatDateKey(date),
           label: date.toLocaleDateString('en-US', { weekday: 'short' }).charAt(0)
         };
       }),
-    []
+    [todayKey]
   );
 
   const categoryMinutes = useMemo(() => {
@@ -262,13 +323,42 @@ export default function ScreenTimeDashboard() {
       const dayMap = storedStats[day.key] || {};
       const totals = createEmptyCategoryTotals();
       Object.entries(dayMap).forEach(([pkg, ms]) => {
-        const appName = todayApps.find((app) => app.id === pkg)?.name || labelFromPackage(pkg);
+        const appName = appNames[pkg] || labelFromPackage(pkg);
         const category = categorizeApp(appName, pkg);
         totals[category] += Math.floor(ms / 60000);
       });
       return { day: day.label, totals };
     });
-  }, [storedStats, todayApps, weekDays]);
+  }, [appNames, storedStats, weekDays]);
+
+  const weekCategoryApps = useMemo(() => {
+    const grouped = CATEGORY_KEYS.reduce<Record<CategoryKey, AppRow[]>>((acc, key) => {
+      acc[key] = [];
+      return acc;
+    }, {} as Record<CategoryKey, AppRow[]>);
+
+    weekDays.forEach((day) => {
+      const dayMap = storedStats[day.key] || {};
+      Object.entries(dayMap).forEach(([pkg, ms]) => {
+        const name = appNames[pkg] || labelFromPackage(pkg);
+        const category = categorizeApp(name, pkg);
+        const minutes = Math.floor(ms / 60000);
+        if (minutes <= 0) return;
+        const existing = grouped[category].find((app) => app.id === pkg);
+        if (existing) {
+          existing.minutes += minutes;
+        } else {
+          grouped[category].push({ id: pkg, name, minutes, iconBase64: appIcons[pkg] });
+        }
+      });
+    });
+
+    (Object.keys(grouped) as CategoryKey[]).forEach((key) => {
+      grouped[key] = grouped[key].sort((a, b) => b.minutes - a.minutes);
+    });
+
+    return grouped;
+  }, [appIcons, appNames, storedStats, weekDays]);
 
   const weekTotalMinutes = useMemo(
     () => weekData.reduce((acc, d) => acc + CATEGORY_KEYS.reduce((sum, key) => sum + d.totals[key], 0), 0),
@@ -289,7 +379,14 @@ export default function ScreenTimeDashboard() {
   const dayTotalMinutes = CATEGORY_KEYS.reduce((acc, key) => acc + categoryMinutes[key], 0);
   const weekMaxMinutes = Math.max(...weekData.map((d) => CATEGORY_KEYS.reduce((acc, key) => acc + d.totals[key], 0)), 1);
   const dayMaxMinutes = Math.max(...dayChartCategories.map((item) => item.minutes), 1);
+  const maxTodayAppMinutes = Math.max(...todayApps.map((app) => app.minutes), 1);
+  const maxWeekCategoryMinutes = Math.max(...weekChartCategories.map((category) => category.minutes), 1);
   const dayScale = 280 / dayMaxMinutes;
+  const selectedApps = selectedCategory
+    ? selectedCategory.includedKeys
+        .flatMap((key) => (isWeek ? weekCategoryApps[key] : categoryApps[key]))
+        .sort((a, b) => b.minutes - a.minutes)
+    : [];
 
   const handleToggleMode = (mode: 'week' | 'day') => {
     if (mode === viewMode) return;
@@ -308,10 +405,31 @@ export default function ScreenTimeDashboard() {
     }).start();
   };
 
+  useEffect(() => {
+    if (!selectedCategory) return;
+    sheetTranslateY.setValue(320);
+    Animated.timing(sheetTranslateY, {
+      toValue: 0,
+      duration: 220,
+      useNativeDriver: true
+    }).start();
+  }, [selectedCategory, sheetTranslateY]);
+
+  const closeCategorySheet = useCallback(() => {
+    setSelectedCategory(null);
+  }, []);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          overScrollMode="never"
+          bounces={false}
+          alwaysBounceVertical={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.textMain} />}
+        >
           
           {/* --- COMMON HEADER --- */}
           <View style={styles.header}>
@@ -426,20 +544,34 @@ export default function ScreenTimeDashboard() {
               <Text style={styles.updatedText}>{updatedLabel}</Text>
 
               <Text style={styles.sectionTitle}>Categories</Text>
-              <View style={styles.categoryList}>
-                {dayChartCategories.map((category) => (
-                  <TouchableOpacity
+              <View style={styles.iosList}>
+                {weekChartCategories.map((category) => (
+                  <Pressable
                     key={category.key}
-                    style={styles.categoryListItem}
-                    activeOpacity={0.85}
+                    style={({ pressed }) => [styles.iosUsageRow, pressed && styles.iosUsageRowPressed]}
                     onPress={() => setSelectedCategory(category)}
                   >
-                    <View style={styles.categoryListLeft}>
-                      <View style={[styles.categoryDot, { backgroundColor: category.color.border }]} />
-                      <Text style={styles.categoryName}>{category.label}</Text>
+                    <View style={styles.iosUsageMain}>
+                      <View style={[styles.iosGlyph, { backgroundColor: category.color.light }]}>
+                        <Text style={[styles.iosGlyphText, { color: category.color.border }]}>{CATEGORY_ICONS[category.key]}</Text>
+                      </View>
+                      <Text style={styles.iosUsageName} numberOfLines={1}>{category.label}</Text>
                     </View>
-                    <Text style={styles.categoryTimeText}>{formatTime(category.minutes)}</Text>
-                  </TouchableOpacity>
+                    <View style={styles.iosUsageRight}>
+                      <Text style={styles.iosUsageTime}>{formatTime(category.minutes)}</Text>
+                      <View style={styles.iosMiniTrack}>
+                        <View
+                          style={[
+                            styles.iosMiniFill,
+                            {
+                              width: `${Math.max((category.minutes / maxWeekCategoryMinutes) * 100, 4)}%`,
+                              backgroundColor: category.color.border
+                            }
+                          ]}
+                        />
+                      </View>
+                    </View>
+                  </Pressable>
                 ))}
               </View>
             </View>
@@ -472,9 +604,50 @@ export default function ScreenTimeDashboard() {
               <View style={styles.dayFooter}>
                 <View>
                   <Text style={styles.totalTodayText}>total today</Text>
-                  <Text style={styles.subText}>Average time this week  {formatTime(weekAverageMinutes)}</Text>
+                  <Text style={styles.subText}>Resets at midnight</Text>
                 </View>
                 <Text style={styles.timeBigTextDay}>{formatTime(dayTotalMinutes)}</Text>
+              </View>
+
+              <Text style={styles.sectionTitle}>Apps today</Text>
+              <View style={styles.iosList}>
+                {todayApps.slice(0, 6).map((app) => {
+                  const category = categorizeApp(app.name, app.id);
+                  const theme = COLORS[category];
+                  return (
+                    <View style={styles.iosUsageRow} key={app.id}>
+                      <View style={styles.iosUsageMain}>
+                        {app.iconBase64 ? (
+                          <Image source={{ uri: `data:image/png;base64,${app.iconBase64}` }} style={styles.appIconImage} resizeMode="cover" />
+                        ) : (
+                          <View style={styles.appIconFallback}>
+                            <Text style={[styles.iosGlyphText, { color: theme.border }]}>{app.name.charAt(0).toUpperCase()}</Text>
+                          </View>
+                        )}
+                        <Text style={styles.iosUsageName} numberOfLines={1}>{app.name}</Text>
+                      </View>
+                      <View style={styles.iosUsageRight}>
+                        <Text style={styles.iosUsageTime}>{formatTime(app.minutes)}</Text>
+                        <View style={styles.iosMiniTrack}>
+                          <View
+                            style={[
+                              styles.iosMiniFill,
+                              {
+                                width: `${Math.max((app.minutes / maxTodayAppMinutes) * 100, 4)}%`,
+                                backgroundColor: theme.border
+                              }
+                            ]}
+                          />
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })}
+                {todayApps.length === 0 ? (
+                  <View style={styles.iosEmpty}>
+                    <Text style={styles.sheetEmpty}>No app usage tracked yet today.</Text>
+                  </View>
+                ) : null}
               </View>
 
             </View>
@@ -483,25 +656,34 @@ export default function ScreenTimeDashboard() {
 
         </ScrollView>
       </View>
-      <Modal visible={Boolean(selectedCategory)} transparent statusBarTranslucent animationType="slide" onRequestClose={() => setSelectedCategory(null)}>
+      <Modal visible={Boolean(selectedCategory)} transparent statusBarTranslucent animationType="none" onRequestClose={closeCategorySheet}>
         <View style={styles.modalRoot}>
-          <Pressable style={styles.sheetBackdrop} onPress={() => setSelectedCategory(null)} />
-          <View style={styles.sheetWrap}>
+          <Pressable style={styles.sheetBackdrop} onPress={closeCategorySheet} />
+          <Animated.View style={[styles.sheetWrap, { transform: [{ translateY: sheetTranslateY }] }]}>
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>
               {selectedCategory ? `${selectedCategory.label} Apps` : 'Apps'}
             </Text>
-            {selectedCategory && selectedCategory.includedKeys.flatMap((key) => categoryApps[key]).length > 0 ? (
-              selectedCategory.includedKeys.flatMap((key) => categoryApps[key]).sort((a, b) => b.minutes - a.minutes).map((app) => (
+            {selectedApps.length > 0 ? (
+              selectedApps.map((app) => (
                 <View key={app.id} style={styles.sheetRow}>
-                  <Text style={styles.sheetAppName} numberOfLines={1}>{app.name}</Text>
+                  <View style={styles.sheetAppLeft}>
+                    {app.iconBase64 ? (
+                      <Image source={{ uri: `data:image/png;base64,${app.iconBase64}` }} style={styles.sheetAppIcon} resizeMode="cover" />
+                    ) : (
+                      <View style={styles.sheetAppFallback}>
+                        <Text style={styles.sheetAppFallbackText}>{app.name.charAt(0).toUpperCase()}</Text>
+                      </View>
+                    )}
+                    <Text style={styles.sheetAppName} numberOfLines={1}>{app.name}</Text>
+                  </View>
                   <Text style={styles.sheetAppTime}>{formatTime(app.minutes)}</Text>
                 </View>
               ))
             ) : (
               <Text style={styles.sheetEmpty}>No usage in this category yet.</Text>
             )}
-          </View>
+          </Animated.View>
         </View>
       </Modal>
     </SafeAreaView>
@@ -515,10 +697,10 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 15 : 15,
   },
   scrollContent: {
     paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 15 : 15,
     paddingBottom: 140,
   },
   header: {
@@ -694,46 +876,99 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: '600',
     color: COLORS.textMain,
-    marginBottom: 16,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0,
   },
-  categoryList: {
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E4E6EC',
-    overflow: 'hidden'
+  iosList: {
+    marginBottom: 10,
   },
-  categoryListItem: {
+  iosUsageRow: {
+    minHeight: 52,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EFEFF4',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E6E8EF'
+    justifyContent: 'space-between'
   },
-  categoryListLeft: {
+  iosUsageRowPressed: {
+    opacity: 0.72,
+    transform: [{ scale: 0.992 }]
+  },
+  iosUsageMain: {
+    flex: 1,
     flexDirection: 'row',
-    alignItems: 'center'
+    alignItems: 'center',
+    marginRight: 14
   },
-  categoryDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
+  iosGlyph: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 10
   },
-  categoryName: {
-    fontSize: 14,
-    color: COLORS.textMain,
-    fontWeight: '600'
+  iosGlyphDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5
   },
-  categoryTimeText: {
-    fontSize: 14,
+  iosGlyphText: {
+    fontSize: 11,
+    fontWeight: '700'
+  },
+  appIconImage: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    marginRight: 10
+  },
+  appIconFallback: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F2F2F7',
+    marginRight: 10
+  },
+  iosUsageName: {
+    flex: 1,
     color: COLORS.textMain,
+    fontSize: 14,
     fontWeight: '500'
+  },
+  iosUsageRight: {
+    width: 78,
+    alignItems: 'flex-end'
+  },
+  iosUsageTime: {
+    color: COLORS.textMain,
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 5
+  },
+  iosMiniTrack: {
+    width: 66,
+    height: 3,
+    borderRadius: 999,
+    backgroundColor: '#E5E5EA',
+    overflow: 'hidden'
+  },
+  iosMiniFill: {
+    height: '100%',
+    borderRadius: 999
+  },
+  iosEmpty: {
+    width: '100%',
+    minHeight: 64,
+    paddingVertical: 14,
+    justifyContent: 'center'
   },
   modalRoot: {
     flex: 1,
@@ -741,7 +976,7 @@ const styles = StyleSheet.create({
   },
   sheetBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.25)'
+    backgroundColor: 'rgba(0,0,0,0.38)'
   },
   sheetWrap: {
     backgroundColor: '#FFFFFF',
@@ -750,7 +985,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 10,
     paddingBottom: 28,
-    minHeight: 260
+    minHeight: 260,
+    shadowOpacity: 0,
+    elevation: 0
   },
   sheetHandle: {
     width: 42,
@@ -774,9 +1011,34 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#EFEFF4'
   },
+  sheetAppLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 10
+  },
+  sheetAppIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 7,
+    marginRight: 10
+  },
+  sheetAppFallback: {
+    width: 26,
+    height: 26,
+    borderRadius: 7,
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F2F2F7'
+  },
+  sheetAppFallbackText: {
+    fontSize: 11,
+    color: '#6E6E73',
+    fontWeight: '800'
+  },
   sheetAppName: {
     flex: 1,
-    marginRight: 10,
     color: '#1C1C1E',
     fontSize: 15,
     fontWeight: '500'
@@ -839,6 +1101,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#EAEAEA',
     paddingTop: 20,
+    marginBottom: 26
   },
   totalTodayText: {
     fontSize: 16,

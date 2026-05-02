@@ -1,6 +1,5 @@
 package com.unlure;
 
-import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.app.usage.UsageEvents;
 import android.content.Context;
@@ -86,44 +85,38 @@ public void getDailyStats(Promise promise) {
     calendar.set(Calendar.MILLISECOND, 0);
     long startTime = calendar.getTimeInMillis();
 
-    // queryAndAggregate is more accurate for "Today" than a standard list query
-    java.util.Map<String, UsageStats> statsMap = usm.queryAndAggregateUsageStats(startTime, endTime);
-    
+    HashMap<String, Long> appTotals = queryUsageTotals(usm, pm, startTime, endTime);
     WritableArray array = Arguments.createArray();
-    if (statsMap != null) {
-        for (UsageStats usageStats : statsMap.values()) {
-            if (usageStats.getTotalTimeInForeground() > 0 && pm.getLaunchIntentForPackage(usageStats.getPackageName()) != null) {
-                WritableMap map = Arguments.createMap();
-                map.putString("id", usageStats.getPackageName());
-                map.putDouble("totalTime", (double) usageStats.getTotalTimeInForeground());
-                array.pushMap(map);
-            }
+    for (Map.Entry<String, Long> entry : appTotals.entrySet()) {
+        if (entry.getValue() > 0) {
+            WritableMap map = Arguments.createMap();
+            map.putString("id", entry.getKey());
+            map.putDouble("totalTime", (double) entry.getValue());
+            array.pushMap(map);
         }
     }
     promise.resolve(array);
 }
 
     private HashMap<String, Long> queryUsageTotals(UsageStatsManager usm, PackageManager pm, long startTime, long endTime) {
-        HashMap<String, Long> fromEvents = queryUsageTotalsFromEvents(usm, pm, startTime, endTime);
-        if (!fromEvents.isEmpty()) return fromEvents;
-
-        java.util.Map<String, UsageStats> statsMap = usm.queryAndAggregateUsageStats(startTime, endTime);
-        HashMap<String, Long> appTotals = new HashMap<>();
-        if (statsMap != null) {
-            for (UsageStats usageStats : statsMap.values()) {
-                if (usageStats.getTotalTimeInForeground() > 0 && pm.getLaunchIntentForPackage(usageStats.getPackageName()) != null) {
-                    appTotals.put(usageStats.getPackageName(), usageStats.getTotalTimeInForeground());
-                }
-            }
-        }
-        return appTotals;
+        return queryUsageTotalsFromEvents(usm, pm, startTime, endTime);
     }
 
     private HashMap<String, Long> queryUsageTotalsFromEvents(UsageStatsManager usm, PackageManager pm, long startTime, long endTime) {
         HashMap<String, Long> totals = new HashMap<>();
-        HashMap<String, Long> lastStart = new HashMap<>();
+        HashMap<String, Long> activeStarts = new HashMap<>();
+        HashMap<String, Integer> openActivityCounts = new HashMap<>();
+        HashMap<String, Boolean> activeAtStart = getActivePackagesAtStart(usm, pm, startTime);
+        long maxWindow = Math.max(endTime - startTime, 0L);
+
+        for (String pkg : activeAtStart.keySet()) {
+            activeStarts.put(pkg, startTime);
+            openActivityCounts.put(pkg, 1);
+        }
 
         UsageEvents usageEvents = usm.queryEvents(startTime, endTime);
+        if (usageEvents == null) return totals;
+
         UsageEvents.Event event = new UsageEvents.Event();
         while (usageEvents.hasNextEvent()) {
             usageEvents.getNextEvent(event);
@@ -131,29 +124,106 @@ public void getDailyStats(Promise promise) {
             if (pkg == null || pm.getLaunchIntentForPackage(pkg) == null) continue;
 
             int type = event.getEventType();
+            long eventTime = Math.min(Math.max(event.getTimeStamp(), startTime), endTime);
+
             if (type == UsageEvents.Event.MOVE_TO_FOREGROUND || type == UsageEvents.Event.ACTIVITY_RESUMED) {
-                lastStart.put(pkg, event.getTimeStamp());
-            } else if (
-                type == UsageEvents.Event.MOVE_TO_BACKGROUND ||
-                type == UsageEvents.Event.ACTIVITY_PAUSED ||
-                type == UsageEvents.Event.ACTIVITY_STOPPED
-            ) {
-                Long start = lastStart.remove(pkg);
-                if (start != null && event.getTimeStamp() > start) {
-                    long delta = event.getTimeStamp() - start;
-                    totals.put(pkg, totals.getOrDefault(pkg, 0L) + delta);
+                int currentOpen = openActivityCounts.getOrDefault(pkg, 0);
+                if (currentOpen == 0) {
+                    activeStarts.put(pkg, eventTime);
+                }
+                openActivityCounts.put(pkg, currentOpen + 1);
+            } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND || type == UsageEvents.Event.ACTIVITY_PAUSED) {
+                int currentOpen = openActivityCounts.getOrDefault(pkg, 0);
+                if (currentOpen > 0) {
+                    currentOpen -= 1;
+                    openActivityCounts.put(pkg, currentOpen);
+                }
+
+                if (currentOpen == 0) {
+                    Long start = activeStarts.remove(pkg);
+                    if (start != null && eventTime > start) {
+                        long delta = Math.min(eventTime - start, maxWindow);
+                        if (delta > 0) {
+                            long nextTotal = totals.getOrDefault(pkg, 0L) + delta;
+                            totals.put(pkg, Math.min(nextTotal, maxWindow));
+                        }
+                    }
+                }
+            } else if (type == UsageEvents.Event.ACTIVITY_STOPPED) {
+                if (openActivityCounts.getOrDefault(pkg, 0) == 0) {
+                    Long start = activeStarts.remove(pkg);
+                    if (start != null && eventTime > start) {
+                        long delta = Math.min(eventTime - start, maxWindow);
+                        if (delta > 0) {
+                            long nextTotal = totals.getOrDefault(pkg, 0L) + delta;
+                            totals.put(pkg, Math.min(nextTotal, maxWindow));
+                        }
+                    }
+                }
+            } else if (type == UsageEvents.Event.DEVICE_SHUTDOWN || type == UsageEvents.Event.DEVICE_STARTUP) {
+                for (Map.Entry<String, Long> entry : activeStarts.entrySet()) {
+                    String activePkg = entry.getKey();
+                    long start = entry.getValue();
+                    if (eventTime > start) {
+                        long delta = Math.min(eventTime - start, maxWindow);
+                        long nextTotal = totals.getOrDefault(activePkg, 0L) + delta;
+                        totals.put(activePkg, Math.min(nextTotal, maxWindow));
+                    }
+                }
+                activeStarts.clear();
+                openActivityCounts.clear();
+            }
+        }
+
+        for (Map.Entry<String, Long> entry : activeStarts.entrySet()) {
+            String pkg = entry.getKey();
+            long start = entry.getValue();
+            if (endTime > start) {
+                long delta = Math.min(endTime - start, maxWindow);
+                if (delta > 0) {
+                    long nextTotal = totals.getOrDefault(pkg, 0L) + delta;
+                    totals.put(pkg, Math.min(nextTotal, maxWindow));
                 }
             }
         }
 
-        for (Map.Entry<String, Long> entry : lastStart.entrySet()) {
-            long start = entry.getValue();
-            if (endTime > start) {
-                totals.put(entry.getKey(), totals.getOrDefault(entry.getKey(), 0L) + (endTime - start));
+        return totals;
+    }
+
+    private HashMap<String, Boolean> getActivePackagesAtStart(UsageStatsManager usm, PackageManager pm, long startTime) {
+        HashMap<String, Integer> lastEvents = new HashMap<>();
+        long lookbackStart = startTime - (12L * 60L * 60L * 1000L);
+        UsageEvents previousEvents = usm.queryEvents(lookbackStart, startTime);
+        if (previousEvents == null) return new HashMap<>();
+
+        UsageEvents.Event event = new UsageEvents.Event();
+        while (previousEvents.hasNextEvent()) {
+            previousEvents.getNextEvent(event);
+            String pkg = event.getPackageName();
+            if (pkg == null || pm.getLaunchIntentForPackage(pkg) == null) continue;
+
+            int type = event.getEventType();
+            if (
+                type == UsageEvents.Event.MOVE_TO_FOREGROUND ||
+                type == UsageEvents.Event.ACTIVITY_RESUMED ||
+                type == UsageEvents.Event.MOVE_TO_BACKGROUND ||
+                type == UsageEvents.Event.ACTIVITY_PAUSED ||
+                type == UsageEvents.Event.ACTIVITY_STOPPED ||
+                type == UsageEvents.Event.DEVICE_SHUTDOWN ||
+                type == UsageEvents.Event.DEVICE_STARTUP
+            ) {
+                lastEvents.put(pkg, type);
             }
         }
 
-        return totals;
+        HashMap<String, Boolean> active = new HashMap<>();
+        for (Map.Entry<String, Integer> entry : lastEvents.entrySet()) {
+            int type = entry.getValue();
+            if (type == UsageEvents.Event.MOVE_TO_FOREGROUND || type == UsageEvents.Event.ACTIVITY_RESUMED) {
+                active.put(entry.getKey(), true);
+            }
+        }
+        return active;
     }
 
     @ReactMethod

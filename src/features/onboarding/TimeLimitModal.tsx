@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Image } from 'react-native';
 import { Picker } from 'react-native-wheel-pick';
 
 interface TimeLimitModalProps {
   visible: boolean;
   appName: string;
+  iconBase64?: string;
   onConfirm: (totalMinutes: number) => void;
   onCancel: () => void;
 }
@@ -12,7 +13,7 @@ interface TimeLimitModalProps {
 const hourData = Array.from({ length: 13 }, (_, i) => String(i));
 const minuteData = Array.from({ length: 60 }, (_, i) => String(i));
 
-export const TimeLimitModal = ({ visible, appName, onConfirm, onCancel }: TimeLimitModalProps) => {
+export const TimeLimitModal = ({ visible, appName, iconBase64, onConfirm, onCancel }: TimeLimitModalProps) => {
   const [hours, setHours] = useState('0');
   const [minutes, setMinutes] = useState('30');
 
@@ -21,7 +22,16 @@ export const TimeLimitModal = ({ visible, appName, onConfirm, onCancel }: TimeLi
       <View style={styles.overlay}>
         <View style={styles.content}>
           <Text style={styles.label}>Set Limit</Text>
-          <Text style={styles.appName}>{appName}</Text>
+          <View style={styles.appHeader}>
+            {iconBase64 ? (
+              <Image source={{ uri: `data:image/png;base64,${iconBase64}` }} style={styles.appIcon} resizeMode="cover" />
+            ) : (
+              <View style={styles.appIconFallback}>
+                <Text style={styles.appIconFallbackText}>{appName.charAt(0).toUpperCase()}</Text>
+              </View>
+            )}
+            <Text style={styles.appName} numberOfLines={1}>{appName}</Text>
+          </View>
 
           <View style={styles.pickerContainer}>
             {/* Hours Infinite Roller */}
@@ -79,7 +89,19 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   content: { backgroundColor: '#FFF', borderTopLeftRadius: 35, borderTopRightRadius: 35, padding: 30, paddingBottom: 40 },
   label: { fontSize: 12, color: '#666', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1.5 },
-  appName: { fontSize: 28, fontWeight: '800', color: '#111111', marginBottom: 25 },
+  appHeader: { flexDirection: 'row', alignItems: 'center', marginTop: 8, marginBottom: 25 },
+  appIcon: { width: 38, height: 38, borderRadius: 10, marginRight: 12 },
+  appIconFallback: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    marginRight: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F2F2F7'
+  },
+  appIconFallbackText: { color: '#6E6E73', fontSize: 15, fontWeight: '800' },
+  appName: { flex: 1, fontSize: 26, fontWeight: '800', color: '#111111' },
   pickerContainer: { 
     flexDirection: 'row', 
     backgroundColor: '#F2F2F2',

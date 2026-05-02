@@ -59,7 +59,7 @@ export const ScreenTimeService = {
     if (Platform.OS !== 'android') return false;
     if (storeTodayStatsPromise) return storeTodayStatsPromise;
     try {
-      storeTodayStatsPromise = UsageModule.storeTodayStats()
+      const promise = UsageModule.storeTodayStats()
         .then((result: boolean) => {
           storedDailyStatsPromise = null;
           return result;
@@ -68,7 +68,8 @@ export const ScreenTimeService = {
         .finally(() => {
           storeTodayStatsPromise = null;
         });
-      return await storeTodayStatsPromise;
+      storeTodayStatsPromise = promise;
+      return await promise;
     } catch {
       storeTodayStatsPromise = null;
       return false;
@@ -79,19 +80,21 @@ export const ScreenTimeService = {
     if (Platform.OS !== 'android') return {};
     if (storedDailyStatsPromise) return storedDailyStatsPromise;
     try {
-      storedDailyStatsPromise = UsageModule.getStoredDailyStats()
+      const promise = UsageModule.getStoredDailyStats()
         .catch(() => ({} as DailyUsageMap));
-      return await storedDailyStatsPromise;
+      storedDailyStatsPromise = promise;
+      return await promise;
     } catch { return {}; }
   },
 
-  async getInstalledApps(): Promise<AppInfo[]> {
+  async getInstalledApps(forceRefresh = false): Promise<AppInfo[]> {
     if (Platform.OS !== 'android') return [];
-    if (installedAppsPromise) return installedAppsPromise;
+    if (!forceRefresh && installedAppsPromise) return installedAppsPromise;
     try {
-      installedAppsPromise = UsageModule.getInstalledApps()
+      const promise = UsageModule.getInstalledApps()
         .catch(() => [] as AppInfo[]);
-      return await installedAppsPromise;
+      installedAppsPromise = promise;
+      return await promise;
     } catch { return []; }
   }
 };

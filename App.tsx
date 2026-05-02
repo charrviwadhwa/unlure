@@ -70,7 +70,7 @@ const App = () => {
                 <HomeScreen />
               </View>
             )}
-            <View style={styles.bottomNavWrap}>
+            <View pointerEvents="box-none" style={styles.bottomNavWrap}>
               <BottomNav active={activeTab} onChange={handleTabChange} />
             </View>
           </View>

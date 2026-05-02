@@ -4,6 +4,8 @@ import {
   Text,
   View,
   SafeAreaView,
+  ScrollView,
+  RefreshControl,
   TouchableOpacity,
   Dimensions,
   Platform,
@@ -11,16 +13,17 @@ import {
 } from 'react-native';
 import { ScreenTimeService, DailyUsageMap } from '../../services/ScreenTimeService';
 import { DailyLimitSnapshots, DailyMoodSnapshots, StoredMood, UserStore } from '../../services/storage';
+import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
 
 const { width } = Dimensions.get('window');
 
 const COLORS = {
-  bg: '#F5F6F9',
+  bg: '#FFFFFF',
   cardBg: '#FFFFFF',
-  textMain: '#1C1C1E',
+  textMain: '#000000',
   textSecondary: '#8E8E93',
   textFaint: '#D1D1D6',
-  pillBg: '#F0F1F5',
+  pillBg: '#F2F2F7',
   selectedCellBg: '#E7E5FF',
   moods: {
     great: { bg: '#D3D0FF', line: '#5C56B6' },
@@ -89,6 +92,7 @@ const MoodFace = ({ type }: { type: MoodType }) => {
 export const HomeScreen = () => {
   const [monthDate, setMonthDate] = useState(new Date());
   const [calendarData, setCalendarData] = useState<CalendarItem[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
   const formatDateKey = (date: Date) => {
     const y = date.getFullYear();
@@ -224,6 +228,23 @@ export const HomeScreen = () => {
     load(monthDate);
   }, [load, monthDate]);
 
+  const refreshCurrentMonth = useCallback(() => {
+    const now = new Date();
+    setMonthDate(now);
+    load(now);
+  }, [load]);
+
+  useMidnightRefresh(refreshCurrentMonth);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await load(monthDate);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [load, monthDate]);
+
   const monthTitle = useMemo(
     () => monthDate.toLocaleString('en-US', { month: 'long', year: 'numeric' }),
     [monthDate]
@@ -239,15 +260,27 @@ export const HomeScreen = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.textMain} />}
+        showsVerticalScrollIndicator={false}
+        overScrollMode="never"
+        bounces={false}
+        alwaysBounceVertical={false}
+      >
         <View style={styles.header}>
-          <TouchableOpacity style={styles.chevronButton} onPress={() => shiftMonth(-1)}>
-            <Text style={styles.chevron}>‹</Text>
-          </TouchableOpacity>
-          <Text style={styles.monthTitle}>{monthTitle}</Text>
-          <TouchableOpacity style={styles.chevronButton} onPress={() => shiftMonth(1)}>
-            <Text style={styles.chevron}>›</Text>
-          </TouchableOpacity>
+          <View>
+            <Text style={styles.pageTitle}>Month</Text>
+            <Text style={styles.monthTitle}>{monthTitle}</Text>
+          </View>
+          <View style={styles.monthControls}>
+            <TouchableOpacity style={styles.chevronButton} onPress={() => shiftMonth(-1)} activeOpacity={0.76}>
+              <Text style={styles.chevron}>{'<'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.chevronButton} onPress={() => shiftMonth(1)} activeOpacity={0.76}>
+              <Text style={styles.chevron}>{'>'}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.daysOfWeekContainer}>
@@ -289,12 +322,12 @@ export const HomeScreen = () => {
             );
           })}
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
 
-const CELL_WIDTH = (width - 48 - 36) / 7;
+const CELL_WIDTH = (width - 48 - 42) / 7;
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -303,7 +336,8 @@ const styles = StyleSheet.create({
   },
   container: {
     paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 12 : 16
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 15 : 15,
+    paddingBottom: 150
   },
   header: {
     flexDirection: 'row',
@@ -311,47 +345,61 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24
   },
-  monthTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+  pageTitle: {
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: '800',
     color: COLORS.textMain
   },
+  monthTitle: {
+    marginTop: 4,
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textSecondary
+  },
+  monthControls: {
+    flexDirection: 'row',
+    gap: 8,
+    padding: 4,
+    borderRadius: 22,
+    backgroundColor: COLORS.pillBg
+  },
   chevronButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: COLORS.cardBg,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 1
   },
   chevron: {
-    fontSize: 24,
+    fontSize: 18,
     color: COLORS.textMain,
-    lineHeight: 26,
-    marginLeft: 1
+    lineHeight: 20,
+    fontWeight: '800'
   },
   daysOfWeekContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16
+    marginBottom: 12
   },
   dayPill: {
     width: CELL_WIDTH,
-    height: 26,
-    borderRadius: 13,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: COLORS.pillBg,
     justifyContent: 'center',
     alignItems: 'center'
   },
   dayText: {
-    fontSize: 12,
+    fontSize: 11,
     color: COLORS.textSecondary,
-    fontWeight: '500'
+    fontWeight: '700'
   },
   gridContainer: {
     flexDirection: 'row',
@@ -360,22 +408,26 @@ const styles = StyleSheet.create({
   },
   cellPill: {
     width: CELL_WIDTH,
-    height: 75,
-    borderRadius: 22,
-    backgroundColor: COLORS.cardBg,
+    height: 58,
+    borderRadius: 20,
+    backgroundColor: '#F8F8FA',
     alignItems: 'center',
-    paddingTop: 10,
+    justifyContent: 'center',
+    paddingTop: 6,
     paddingBottom: 6,
-    marginBottom: 10
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#F2F2F5'
   },
   cellPillSelected: {
     backgroundColor: COLORS.selectedCellBg
   },
   dateText: {
-    fontSize: 15,
-    fontWeight: '500',
+    fontSize: 14,
+    lineHeight: 17,
+    fontWeight: '700',
     color: COLORS.textMain,
-    marginBottom: 8
+    marginBottom: 6
   },
   dateTextFaint: {
     color: COLORS.textFaint
@@ -384,9 +436,9 @@ const styles = StyleSheet.create({
     fontWeight: '700'
   },
   faceContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center'
   },
@@ -399,9 +451,9 @@ const styles = StyleSheet.create({
     color: COLORS.textFaint
   },
   emptyDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: '#C5C6CC'
   },
   eyesContainer: {
@@ -418,9 +470,9 @@ const styles = StyleSheet.create({
   },
   dottedFaceRing: {
     position: 'absolute',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 21,
+    height: 21,
+    borderRadius: 11,
     borderWidth: 1.5,
     borderStyle: 'dashed',
     backgroundColor: 'transparent'

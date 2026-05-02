@@ -1,7 +1,8 @@
-﻿import React, { useCallback, useEffect, useState } from 'react';
-import { Image, Platform, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Image, Platform, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ScreenTimeService, DailyUsageMap } from '../../services/ScreenTimeService';
 import { DailyLimitSnapshots, DailyMoodSnapshots, UserStore } from '../../services/storage';
+import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
 
 type StreakAppRow = {
   id: string;
@@ -28,8 +29,8 @@ const moodFace: Record<DayMood, { bg: string; faceColor: string; type: 'smile' |
   dotted: { bg: '#F8F9FB', faceColor: '#D0933C', type: 'frown' }
 };
 
-const FONT_REGULAR = Platform.select({ ios: 'Inter_24pt-Light', android: 'Inter_24pt-Light', default: 'System' });
-const FONT_SEMIBOLD = Platform.select({ ios: 'Inter_24pt-Light', android: 'Inter_24pt-Light', default: 'System' });
+const FONT_REGULAR = Platform.select({ ios: 'System', android: 'sans-serif', default: 'System' });
+const FONT_SEMIBOLD = Platform.select({ ios: 'System', android: 'sans-serif-medium', default: 'System' });
 
 interface StreakScreenProps {
   onEditApps: () => void;
@@ -40,6 +41,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
   const [todayApps, setTodayApps] = useState<StreakAppRow[]>([]);
   const [weekCells, setWeekCells] = useState<DayCell[]>([]);
   const [isExceededToday, setIsExceededToday] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const formatDateKey = (date: Date) => {
     const y = date.getFullYear();
@@ -143,27 +145,36 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
       acc[app.packageName] = app.appName;
       return acc;
     }, {});
+    const iconMap = installedApps.reduce<Record<string, string | undefined>>((acc, app) => {
+      acc[app.packageName] = app.iconBase64;
+      return acc;
+    }, {});
 
     const todayKey = formatDateKey(new Date());
     const todayMap = (storedStats as DailyUsageMap)[todayKey] || {};
-    const todayMood = resolveMood(todayMap, limits || {});
+    const activeLimits = limits || {};
+    const todayMood = resolveMood(todayMap, activeLimits);
     await UserStore.saveDailyMood(todayKey, todayMood);
     const moodsWithToday = { ...(savedMoods || {}), [todayKey]: todayMood };
 
-    const derivedStreak = calculateStreakFromStats(storedStats as DailyUsageMap, limitSnapshots || {}, limits || {}, moodsWithToday);
+    const derivedStreak = calculateStreakFromStats(storedStats as DailyUsageMap, limitSnapshots || {}, activeLimits, moodsWithToday);
     setStreak(currentStreak > 0 ? currentStreak : derivedStreak);
 
-    const rows = Object.keys(todayMap)
+    const rows = Object.keys(activeLimits)
+      .filter((pkg) => (activeLimits[pkg] || 0) > 0)
       .map((pkg) => ({
         id: pkg,
         name: nameMap[pkg] || labelFromPackage(pkg),
         minutes: Math.floor((todayMap[pkg] || 0) / 60000),
-        limitMinutes: limits[pkg] || 0,
-        iconBase64: installedApps.find((app) => app.packageName === pkg)?.iconBase64
+        limitMinutes: activeLimits[pkg] || 0,
+        iconBase64: iconMap[pkg]
       }))
-      .filter((app) => app.minutes > 0)
-      .sort((a, b) => b.minutes - a.minutes)
-      .slice(0, 5);
+      .sort((a, b) => {
+        const aRatio = a.limitMinutes > 0 ? a.minutes / a.limitMinutes : 0;
+        const bRatio = b.limitMinutes > 0 ? b.minutes / b.limitMinutes : 0;
+        return bRatio - aRatio || b.minutes - a.minutes;
+      })
+      .slice(0, 6);
     setTodayApps(rows);
     setIsExceededToday(rows.some((app) => app.limitMinutes > 0 && app.minutes > app.limitMinutes));
 
@@ -181,7 +192,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
         label: labels[i],
         dayNumber: d.getDate(),
         completed: d <= now && Boolean(dayMap),
-        mood: getMoodForDate(key, dayMap, limitSnapshots || {}, limits || {}, moodsWithToday)
+        mood: getMoodForDate(key, dayMap, limitSnapshots || {}, activeLimits, moodsWithToday)
       };
     });
     setWeekCells(cells);
@@ -198,45 +209,62 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
     load();
   }, [load]);
 
+  useMidnightRefresh(load);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [load]);
+
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        overScrollMode="never"
+        bounces={false}
+        alwaysBounceVertical={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#111111" />}
+      >
         <View style={styles.headerRow}>
-          <View>
+          <View style={styles.headerCopy}>
             <Text style={styles.pageTitle}>Streak</Text>
             <Text style={styles.pageDate}>This week</Text>
           </View>
-          <TouchableOpacity style={styles.editAppsButton} onPress={onEditApps} activeOpacity={0.86}>
-            <Text style={styles.editAppsText}>Edit Apps List</Text>
-          </TouchableOpacity>
         </View>
 
-        <View style={styles.heroCard}>
-          <View style={styles.heroTopRow}>
-            <View style={styles.heroBadge}>
-              <Text style={styles.heroBadgeText}>{isExceededToday ? 'Needs Recovery' : 'On Track'}</Text>
+        <View style={styles.heroStack}>
+          <View style={styles.heroBackplate} />
+          <View style={styles.heroCard}>
+            <View style={styles.heroTopRow}>
+              <Text style={styles.heroKicker}>{isExceededToday ? 'Needs recovery' : 'On track today'}</Text>
+              <Text style={styles.heroMeta}>{`${streak} day streak`}</Text>
             </View>
-            <Text style={styles.heroMeta}>{`Current streak ${streak}d`}</Text>
-          </View>
-          <View style={styles.heroBody}>
-            <Image
-              source={isExceededToday ? require('../../assets/Sad.gif') : require('../../assets/Fire (1).gif')}
-              style={styles.heroGif}
-              resizeMode="contain"
-            />
-            <View>
-              <Text style={styles.streakNumber}>{streak}</Text>
-              <Text style={styles.streakLabel}>Days on fire</Text>
+            <View style={styles.heroBody}>
+              <View style={styles.heroCopy}>
+                <View style={styles.streakNumberWrap}>
+                  <Text style={styles.streakNumberEcho}>{streak}</Text>
+                  <Text style={styles.streakNumber}>{streak}</Text>
+                </View>
+                <Text style={styles.streakLabel}>{isExceededToday ? 'A limited app crossed its cap' : 'Days on fire'}</Text>
+              </View>
+              <Image
+                source={isExceededToday ? require('../../assets/Sad.gif') : require('../../assets/Fire (1).gif')}
+                style={styles.heroGif}
+                resizeMode="contain"
+              />
             </View>
           </View>
         </View>
 
-        <View style={styles.card}>
+        <View style={styles.sectionBlock}>
           <View style={styles.titleRow}>
-            <Text style={styles.cardTitle}>Streak Journey</Text>
-            <View style={styles.pill}>
-              <Text style={styles.pillText}>Mood Check</Text>
-            </View>
+            <Text style={styles.sectionTitle}>Streak Journey</Text>
+            <Text style={styles.sectionMeta}>Mood check</Text>
           </View>
           <View style={styles.weekStrip}>
             {weekCells.map((cell) => (
@@ -269,45 +297,51 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
           </View>
         </View>
 
-        <View style={styles.card}>
+        <View style={styles.sectionBlock}>
           <View style={styles.titleRow}>
-            <Text style={styles.cardTitle}>Top Apps</Text>
-            <View style={styles.pill}>
-              <Text style={styles.pillText}>Today</Text>
-            </View>
+            <Text style={styles.sectionTitle}>Limited Apps</Text>
+            <TouchableOpacity style={styles.editAppsButton} onPress={onEditApps} activeOpacity={0.76}>
+              <View style={styles.editAppsIcon}>
+                <Text style={styles.editAppsIconText}>✎</Text>
+              </View>
+              <Text style={styles.editAppsText}>Edit</Text>
+            </TouchableOpacity>
           </View>
-          {todayApps.length === 0 ? (
-            <Text style={styles.emptyText}>No tracked usage yet today.</Text>
-          ) : (
-            todayApps.map((app) => {
-              const ratio = app.limitMinutes > 0 ? app.minutes / app.limitMinutes : app.minutes / 120;
-              const fillWidth = Math.min(Math.max(ratio * 100, 3), 100);
-              const fillColor = ratio >= 1 ? '#101010' : ratio >= 0.8 ? '#4B4B4B' : '#7A7A7A';
+          <View style={styles.limitedList}>
+            {todayApps.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyTitle}>No limits yet</Text>
+                <Text style={styles.emptyText}>Pick the apps you want to control, then they will appear here.</Text>
+              </View>
+            ) : (
+              todayApps.map((app) => {
+                const ratio = app.limitMinutes > 0 ? app.minutes / app.limitMinutes : 0;
+                const fillWidth = app.minutes > 0 ? Math.min(Math.max(ratio * 100, 4), 100) : 0;
+                const fillColor = ratio >= 1 ? '#111111' : ratio >= 0.8 ? '#6E6E73' : '#A6A6AA';
 
-              return (
-                <View key={app.id} style={styles.appRow}>
-                  <View style={styles.appTopRow}>
-                    <View style={styles.appNameWrap}>
-                      {app.iconBase64 ? (
-                        <Image source={{ uri: `data:image/png;base64,${app.iconBase64}` }} style={styles.appIcon} resizeMode="contain" />
-                      ) : (
-                        <View style={styles.appIconFallback}>
-                          <Text style={styles.appIconFallbackText}>{app.name.charAt(0)}</Text>
-                        </View>
-                      )}
-                      <Text style={styles.appName} numberOfLines={1}>{app.name}</Text>
+                return (
+                  <View key={app.id} style={styles.appRow}>
+                    <View style={styles.appTopRow}>
+                      <View style={styles.appNameWrap}>
+                        {app.iconBase64 ? (
+                          <Image source={{ uri: `data:image/png;base64,${app.iconBase64}` }} style={styles.appIcon} resizeMode="cover" />
+                        ) : (
+                          <View style={styles.appIconFallback}>
+                            <Text style={styles.appIconFallbackText}>{app.name.charAt(0).toUpperCase()}</Text>
+                          </View>
+                        )}
+                        <Text style={styles.appName} numberOfLines={1}>{app.name}</Text>
+                      </View>
+                      <Text style={styles.appMinutes}>{`${formatTime(app.minutes)} / ${formatTime(app.limitMinutes)}`}</Text>
                     </View>
-                    <Text style={styles.appMinutes}>
-                      {formatTime(app.minutes)}{app.limitMinutes > 0 ? ` / ${formatTime(app.limitMinutes)}` : ''}
-                    </Text>
+                    <View style={styles.usageTrack}>
+                      <View style={[styles.usageFill, { width: `${fillWidth}%`, backgroundColor: fillColor }]} />
+                    </View>
                   </View>
-                  <View style={styles.usageTrack}>
-                    <View style={[styles.usageFill, { width: `${fillWidth}%`, backgroundColor: fillColor }]} />
-                  </View>
-                </View>
-              );
-            })
-          )}
+                );
+              })
+            )}
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -315,100 +349,216 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F6F9' },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
   content: {
     paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 12 : 16,
-    paddingBottom: 120
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 15 : 15,
+    paddingBottom: 140
   },
-  pageTitle: { fontSize: 28, color: '#1C1C1E', fontFamily: FONT_SEMIBOLD, fontWeight: '800' },
-  pageDate: { marginTop: 2, fontSize: 12, color: '#8E8E93', fontFamily: FONT_REGULAR },
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 22
+  },
+  headerCopy: {
+    flex: 1
+  },
+  pageTitle: {
+    fontSize: 34,
+    lineHeight: 38,
+    color: '#000000',
+    fontFamily: FONT_SEMIBOLD,
+    fontWeight: '800'
+  },
+  pageDate: {
+    marginTop: 4,
+    fontSize: 14,
+    color: '#8E8E93',
+    fontFamily: FONT_REGULAR,
+    fontWeight: '500'
+  },
   editAppsButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.58)',
-    backgroundColor: 'rgba(255,255,255,0.45)'
+    height: 30,
+    paddingHorizontal: 0,
+    borderRadius: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent'
   },
-  editAppsText: { fontSize: 12, color: '#1C1C1E', fontFamily: FONT_SEMIBOLD },
+  editAppsIcon: {
+    width: 15,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 5
+  },
+  editAppsIconText: {
+    color: '#007AFF',
+    fontSize: 12,
+    lineHeight: 14,
+    fontFamily: FONT_SEMIBOLD,
+    fontWeight: '800'
+  },
+  editAppsText: {
+    fontSize: 12,
+    color: '#007AFF',
+    fontFamily: FONT_SEMIBOLD,
+    fontWeight: '700'
+  },
+  heroStack: {
+    minHeight: 174,
+    marginBottom: 30,
+    position: 'relative'
+  },
+  heroBackplate: {
+    position: 'absolute',
+    left: 10,
+    right: 10,
+    top: 16,
+    bottom: 0,
+    borderRadius: 30,
+    backgroundColor: '#F2F2F7'
+  },
   heroCard: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E7E7EC',
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 10
+    minHeight: 156,
+    borderRadius: 30,
+    padding: 20,
+    backgroundColor: '#111111',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.14,
+    shadowRadius: 26,
+    elevation: 9
   },
-  heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  heroBadge: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E2E2',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 5
+  heroTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
   },
-  heroBadgeText: { fontSize: 10, color: '#303030', fontFamily: FONT_REGULAR },
-  heroMeta: { fontSize: 12, color: '#5D5D5D', fontFamily: FONT_REGULAR },
-  heroBody: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
-  heroGif: { width: 92, height: 92, marginRight: 10 },
-  streakNumber: { fontSize: 40, lineHeight: 42, color: '#121212', fontFamily: FONT_SEMIBOLD },
-  streakLabel: { fontSize: 14, color: '#2E2E2E', fontFamily: FONT_REGULAR },
-  card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E7E7EC',
-    padding: 12,
-    backgroundColor: '#FFFFFF',
-    marginBottom: 10
+  heroKicker: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.72)',
+    fontFamily: FONT_SEMIBOLD,
+    fontWeight: '700'
   },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  cardTitle: { fontSize: 14, color: '#1C1C1E', fontFamily: FONT_SEMIBOLD },
-  pill: {
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    backgroundColor: '#F0F1F5',
-    borderWidth: 1,
-    borderColor: '#E7E7EC'
+  heroMeta: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.58)',
+    fontFamily: FONT_REGULAR,
+    fontWeight: '600'
   },
-  pillText: { fontSize: 10, color: '#6E6E73', fontFamily: FONT_REGULAR },
+  heroBody: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    marginTop: 22
+  },
+  heroCopy: {
+    flex: 1,
+    paddingRight: 14
+  },
+  heroGif: {
+    width: 94,
+    height: 94
+  },
+  streakNumberWrap: {
+    alignSelf: 'flex-start',
+    position: 'relative'
+  },
+  streakNumberEcho: {
+    position: 'absolute',
+    left: 0,
+    top: 5,
+    fontSize: 68,
+    lineHeight: 72,
+    color: 'rgba(255,255,255,0.22)',
+    fontFamily: FONT_SEMIBOLD,
+    fontWeight: '700'
+  },
+  streakNumber: {
+    fontSize: 68,
+    lineHeight: 72,
+    color: '#FFFFFF',
+    fontFamily: FONT_SEMIBOLD,
+    fontWeight: '700'
+  },
+  streakLabel: {
+    marginTop: 2,
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.76)',
+    fontFamily: FONT_REGULAR,
+    fontWeight: '500'
+  },
+  sectionBlock: {
+    marginBottom: 30
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12
+  },
+  sectionTitle: {
+    fontSize: 17,
+    color: '#000000',
+    fontFamily: FONT_SEMIBOLD,
+    fontWeight: '700'
+  },
+  sectionMeta: {
+    fontSize: 12,
+    color: '#8E8E93',
+    fontFamily: FONT_REGULAR,
+    fontWeight: '600',
+    textTransform: 'lowercase'
+  },
   weekStrip: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E7E7EC',
-    paddingVertical: 9,
-    paddingHorizontal: 6
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#EFEFF4',
+    paddingVertical: 14
   },
-  weekDay: { alignItems: 'center', width: '13.7%' },
-  weekLabel: { fontSize: 10, color: '#8E8E93', marginBottom: 7, fontFamily: FONT_REGULAR },
+  weekDay: {
+    alignItems: 'center',
+    width: '13.7%'
+  },
+  weekLabel: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginBottom: 10,
+    fontFamily: FONT_SEMIBOLD,
+    fontWeight: '700'
+  },
   dayBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#FFFFFF',
     position: 'relative'
   },
   dottedRing: {
     position: 'absolute',
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     borderWidth: 2,
     borderStyle: 'dashed',
     borderColor: '#D6A03D',
     backgroundColor: 'transparent'
   },
-  eyesRow: { flexDirection: 'row', gap: 6, marginBottom: 3 },
-  eye: { width: 3, height: 3, borderRadius: 2 },
+  eyesRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 3
+  },
+  eye: {
+    width: 3,
+    height: 3,
+    borderRadius: 2
+  },
   mouthCurve: {
     width: 10,
     height: 5,
@@ -428,34 +578,93 @@ const styles = StyleSheet.create({
     borderRadius: 1,
     marginTop: 2
   },
-  dayNumber: { fontSize: 14, color: '#1E1E1E', fontFamily: FONT_REGULAR },
-  emptyText: { color: '#6F6F6F', fontFamily: FONT_REGULAR, marginTop: 2 },
-  appRow: { borderTopWidth: 1, borderTopColor: '#EDEDED', paddingVertical: 8 },
-  appTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  appNameWrap: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 },
-  appIcon: { width: 22, height: 22, borderRadius: 6, marginRight: 8 },
+  dayNumber: {
+    fontSize: 17,
+    color: '#1C1C1E',
+    fontFamily: FONT_REGULAR,
+    fontWeight: '500'
+  },
+  limitedList: {
+    borderTopWidth: 1,
+    borderTopColor: '#EFEFF4'
+  },
+  emptyState: {
+    paddingVertical: 18
+  },
+  emptyTitle: {
+    color: '#1C1C1E',
+    fontSize: 15,
+    fontFamily: FONT_SEMIBOLD,
+    fontWeight: '700',
+    marginBottom: 4
+  },
+  emptyText: {
+    color: '#8E8E93',
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: FONT_REGULAR
+  },
+  appRow: {
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EFEFF4'
+  },
+  appTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  appNameWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 14
+  },
+  appIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    marginRight: 11
+  },
   appIconFallback: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    marginRight: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    marginRight: 11,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ECECEC'
+    backgroundColor: '#F2F2F7'
   },
-  appIconFallbackText: { fontSize: 11, color: '#444444', fontFamily: FONT_REGULAR },
-  appName: { flex: 1, color: '#1F1F1F', fontSize: 14, fontFamily: FONT_REGULAR },
-  appMinutes: { color: '#1F1F1F', fontSize: 14, fontFamily: FONT_SEMIBOLD },
+  appIconFallbackText: {
+    fontSize: 12,
+    color: '#6E6E73',
+    fontFamily: FONT_SEMIBOLD,
+    fontWeight: '800'
+  },
+  appName: {
+    flex: 1,
+    color: '#000000',
+    fontSize: 15,
+    fontFamily: FONT_REGULAR,
+    fontWeight: '500'
+  },
+  appMinutes: {
+    color: '#000000',
+    fontSize: 14,
+    fontFamily: FONT_SEMIBOLD,
+    fontWeight: '700'
+  },
   usageTrack: {
-    height: 8,
-    width: 110,
+    height: 4,
     borderRadius: 999,
-    backgroundColor: '#E3E3E3',
+    backgroundColor: '#E5E5EA',
     overflow: 'hidden',
-    marginTop: 6,
-    alignSelf: 'flex-end'
+    marginTop: 10
   },
-  usageFill: { height: '100%', borderRadius: 999 }
+  usageFill: {
+    height: '100%',
+    borderRadius: 999
+  }
 });
 
 export default StreakScreen;
