@@ -55,6 +55,20 @@ export const UserStore = {
     return data ? JSON.parse(data) : {};
   },
 
+  async getTrackingStartDate(): Promise<string | null> {
+    return await AsyncStorage.getItem('@tracking_start_date');
+  },
+
+  async ensureTrackingStartDate(): Promise<string> {
+    const existing = await this.getTrackingStartDate();
+    if (existing) return existing;
+    const today = formatDateKey(new Date());
+    await AsyncStorage.setItem('@tracking_start_date', today);
+    await AsyncStorage.setItem('@current_streak', '0');
+    await AsyncStorage.setItem('@last_streak_date', today);
+    return today;
+  },
+
   async getDailyLimitSnapshots(): Promise<DailyLimitSnapshots> {
     const data = await AsyncStorage.getItem('@daily_limit_snapshots');
     return data ? JSON.parse(data) : {};
@@ -110,6 +124,7 @@ export const UserStore = {
   },
   // src/services/storage.ts
   async saveAllLimits(limits: LimitMap): Promise<void> {
+    await this.ensureTrackingStartDate();
     await AsyncStorage.setItem('@app_limits', JSON.stringify(limits));
     await this.saveTodayLimitSnapshot(limits);
   }

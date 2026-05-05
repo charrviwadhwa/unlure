@@ -16,6 +16,7 @@ import {
   StatusBar,
   AppState,
 } from 'react-native';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { ScreenTimeService, DailyUsageMap } from '../../services/ScreenTimeService';
 import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
 
@@ -139,6 +140,8 @@ const CATEGORY_ICONS: Record<CategoryKey | 'otherSummary', string> = {
   otherSummary: '…'
 };
 
+const GLYPH_SIZE = 16;
+
 const createEmptyCategoryTotals = () =>
   CATEGORY_KEYS.reduce<Record<CategoryKey, number>>((acc, key) => {
     acc[key] = 0;
@@ -195,6 +198,102 @@ const formatTime = (mins: number) => {
   const m = mins % 60;
   if (h === 0) return `${m}m`;
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
+};
+
+const CategoryGlyph = ({ category, color }: { category: CategoryKey | 'otherSummary'; color: string }) => {
+  const common = { stroke: color, strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+  switch (category) {
+    case 'social':
+      return (
+        <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
+          <Circle cx={8} cy={9} r={3} fill="none" {...common} />
+          <Circle cx={17} cy={8} r={2.5} fill="none" {...common} />
+          <Path d="M3.8 18c.7-2.8 2.4-4.2 4.2-4.2s3.5 1.4 4.2 4.2" fill="none" {...common} />
+          <Path d="M13.8 15.8c.7-1.3 1.8-2 3.1-2 1.5 0 2.8 1 3.3 3" fill="none" {...common} />
+        </Svg>
+      );
+    case 'games':
+      return (
+        <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
+          <Path d="M7 9v6M4 12h6" fill="none" {...common} />
+          <Circle cx={16.5} cy={10.5} r={1.2} fill={color} />
+          <Circle cx={19} cy={14} r={1.2} fill={color} />
+          <Path d="M6.5 6.5h11c2.3 0 3.9 1.8 4.1 4.1l.4 5.2c.2 2.2-1.3 3.7-3.1 2.7l-2.5-1.5H7.6l-2.5 1.5C3.3 19.5 1.8 18 2 15.8l.4-5.2c.2-2.3 1.8-4.1 4.1-4.1z" fill="none" {...common} />
+        </Svg>
+      );
+    case 'entertainment':
+      return (
+        <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
+          <Rect x={3} y={5} width={18} height={14} rx={3} fill="none" {...common} />
+          <Path d="M10 9l5 3-5 3V9z" fill={color} stroke="none" />
+        </Svg>
+      );
+    case 'creativity':
+      return (
+        <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
+          <Path d="M5 17.5l1.2-4.3L15.6 3.8c1-1 2.5-1 3.5 0l1.1 1.1c1 1 1 2.5 0 3.5l-9.4 9.4L6.5 19 5 17.5z" fill="none" {...common} />
+          <Path d="M14.2 5.2l4.6 4.6" fill="none" {...common} />
+        </Svg>
+      );
+    case 'productivityFinance':
+      return (
+        <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
+          <Rect x={4} y={5} width={16} height={15} rx={3} fill="none" {...common} />
+          <Path d="M8 3v4M16 3v4M4 10h16M8 15h3M14 15h2" fill="none" {...common} />
+        </Svg>
+      );
+    case 'education':
+      return (
+        <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
+          <Path d="M4 6.5h7c1.1 0 2 .9 2 2V19c0-1.1-.9-2-2-2H4V6.5z" fill="none" {...common} />
+          <Path d="M20 6.5h-7c-1.1 0-2 .9-2 2V19c0-1.1.9-2 2-2h7V6.5z" fill="none" {...common} />
+        </Svg>
+      );
+    case 'informationReading':
+      return (
+        <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
+          <Path d="M6 6h12M6 11h12M6 16h8" fill="none" {...common} />
+          <Circle cx={18} cy={16} r={1.5} fill={color} />
+        </Svg>
+      );
+    case 'healthFitness':
+      return (
+        <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
+          <Path d="M12 20s-7-4.2-8.7-8.8C2.2 8 4.1 5 7.2 5c1.8 0 3.1 1 4.8 3 1.7-2 3-3 4.8-3 3.1 0 5 3 3.9 6.2C19 15.8 12 20 12 20z" fill="none" {...common} />
+        </Svg>
+      );
+    case 'utilities':
+      return (
+        <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
+          <Circle cx={12} cy={12} r={3} fill="none" {...common} />
+          <Path d="M12 3v3M12 18v3M4.2 7.5l2.6 1.5M17.2 15l2.6 1.5M19.8 7.5 17.2 9M6.8 15l-2.6 1.5" fill="none" {...common} />
+        </Svg>
+      );
+    case 'shoppingFood':
+      return (
+        <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
+          <Path d="M7 9h10l-1 10H8L7 9z" fill="none" {...common} />
+          <Path d="M9 9c0-2 1.2-4 3-4s3 2 3 4" fill="none" {...common} />
+        </Svg>
+      );
+    case 'travel':
+      return (
+        <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
+          <Path d="M3 12l18-7-7 18-3-8-8-3z" fill="none" {...common} />
+          <Path d="M11 15l4-4" fill="none" {...common} />
+        </Svg>
+      );
+    case 'others':
+    case 'otherSummary':
+    default:
+      return (
+        <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
+          <Circle cx={6} cy={12} r={1.8} fill={color} />
+          <Circle cx={12} cy={12} r={1.8} fill={color} />
+          <Circle cx={18} cy={12} r={1.8} fill={color} />
+        </Svg>
+      );
+  }
 };
 
 export default function ScreenTimeDashboard() {
@@ -552,8 +651,11 @@ export default function ScreenTimeDashboard() {
                     onPress={() => setSelectedCategory(category)}
                   >
                     <View style={styles.iosUsageMain}>
-                      <View style={[styles.iosGlyph, { backgroundColor: category.color.light }]}>
-                        <Text style={[styles.iosGlyphText, { color: category.color.border }]}>{CATEGORY_ICONS[category.key]}</Text>
+                      <View
+                        accessibilityLabel={CATEGORY_ICONS[category.key]}
+                        style={[styles.iosGlyph, { backgroundColor: category.color.light }]}
+                      >
+                        <CategoryGlyph category={category.key} color={category.color.border} />
                       </View>
                       <Text style={styles.iosUsageName} numberOfLines={1}>{category.label}</Text>
                     </View>

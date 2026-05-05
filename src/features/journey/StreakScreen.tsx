@@ -112,12 +112,15 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
     stats: DailyUsageMap,
     limitSnapshots: DailyLimitSnapshots,
     currentLimits: Record<string, number>,
-    savedMoods: DailyMoodSnapshots
+    savedMoods: DailyMoodSnapshots,
+    trackingStartDate: string
   ) => {
     let count = 0;
+    const startMs = new Date(`${trackingStartDate}T00:00:00`).getTime();
     const cursor = new Date();
     cursor.setHours(0, 0, 0, 0);
     while (true) {
+      if (cursor.getTime() < startMs) break;
       const key = formatDateKey(cursor);
       const dayMap = stats[key];
       if (!dayMap) break;
@@ -131,13 +134,13 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
 
   const load = useCallback(async () => {
     await ScreenTimeService.storeTodayStats();
-    const [storedStats, currentStreak, installedApps, limits, limitSnapshots, savedMoods] = await Promise.all([
+    const [storedStats, installedApps, limits, limitSnapshots, savedMoods, trackingStartDate] = await Promise.all([
       ScreenTimeService.getStoredDailyStats(),
-      UserStore.getStreak(),
       ScreenTimeService.getInstalledApps(),
       UserStore.getAllLimits(),
       UserStore.getDailyLimitSnapshots(),
-      UserStore.getDailyMoods()
+      UserStore.getDailyMoods(),
+      UserStore.ensureTrackingStartDate()
     ]);
     await UserStore.saveTodayLimitSnapshot(limits || {});
 
@@ -157,8 +160,8 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
     await UserStore.saveDailyMood(todayKey, todayMood);
     const moodsWithToday = { ...(savedMoods || {}), [todayKey]: todayMood };
 
-    const derivedStreak = calculateStreakFromStats(storedStats as DailyUsageMap, limitSnapshots || {}, activeLimits, moodsWithToday);
-    setStreak(currentStreak > 0 ? currentStreak : derivedStreak);
+    const derivedStreak = calculateStreakFromStats(storedStats as DailyUsageMap, limitSnapshots || {}, activeLimits, moodsWithToday, trackingStartDate);
+    setStreak(derivedStreak);
 
     const rows = Object.keys(activeLimits)
       .filter((pkg) => (activeLimits[pkg] || 0) > 0)
@@ -182,17 +185,19 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
     const monday = getMondayStart(new Date());
     const now = new Date();
     now.setHours(23, 59, 59, 999);
+    const trackingStartMs = new Date(`${trackingStartDate}T00:00:00`).getTime();
     const cells: DayCell[] = Array.from({ length: 7 }, (_, i) => {
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
       const key = formatDateKey(d);
       const dayMap = (storedStats as DailyUsageMap)[key];
+      const isBeforeTrackingStart = d.getTime() < trackingStartMs;
       return {
         key,
         label: labels[i],
         dayNumber: d.getDate(),
-        completed: d <= now && Boolean(dayMap),
-        mood: getMoodForDate(key, dayMap, limitSnapshots || {}, activeLimits, moodsWithToday)
+        completed: !isBeforeTrackingStart && d <= now && Boolean(dayMap),
+        mood: isBeforeTrackingStart ? 'neutral' : getMoodForDate(key, dayMap, limitSnapshots || {}, activeLimits, moodsWithToday)
       };
     });
     setWeekCells(cells);
@@ -219,6 +224,10 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
       setRefreshing(false);
     }
   }, [load]);
+
+  const heroStreakLabel = streak === 1 ? 'Day on fire' : 'Days on fire';
+  const weekProgressCount = weekCells.filter((cell) => cell.completed && cell.mood !== 'dotted').length;
+  const weekProgressLabel = isExceededToday ? 'Bring today back under limit' : `${weekProgressCount} of 7 days this week`;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -250,7 +259,8 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
                   <Text style={styles.streakNumberEcho}>{streak}</Text>
                   <Text style={styles.streakNumber}>{streak}</Text>
                 </View>
-                <Text style={styles.streakLabel}>{isExceededToday ? 'A limited app crossed its cap' : 'Days on fire'}</Text>
+                <Text style={styles.streakLabel}>{isExceededToday ? 'A limited app crossed its cap' : heroStreakLabel}</Text>
+                <Text style={styles.streakSubLabel}>{weekProgressLabel}</Text>
               </View>
               <Image
                 source={isExceededToday ? require('../../assets/Sad.gif') : require('../../assets/Fire (1).gif')}
@@ -264,7 +274,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
         <View style={styles.sectionBlock}>
           <View style={styles.titleRow}>
             <Text style={styles.sectionTitle}>Streak Journey</Text>
-            <Text style={styles.sectionMeta}>Mood check</Text>
+            <Text style={styles.sectionMeta}>daily check</Text>
           </View>
           <View style={styles.weekStrip}>
             {weekCells.map((cell) => (
@@ -301,9 +311,6 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
           <View style={styles.titleRow}>
             <Text style={styles.sectionTitle}>Limited Apps</Text>
             <TouchableOpacity style={styles.editAppsButton} onPress={onEditApps} activeOpacity={0.76}>
-              <View style={styles.editAppsIcon}>
-                <Text style={styles.editAppsIconText}>✎</Text>
-              </View>
               <Text style={styles.editAppsText}>Edit</Text>
             </TouchableOpacity>
           </View>
@@ -317,7 +324,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
               todayApps.map((app) => {
                 const ratio = app.limitMinutes > 0 ? app.minutes / app.limitMinutes : 0;
                 const fillWidth = app.minutes > 0 ? Math.min(Math.max(ratio * 100, 4), 100) : 0;
-                const fillColor = ratio >= 1 ? '#111111' : ratio >= 0.8 ? '#6E6E73' : '#A6A6AA';
+                const fillColor = ratio > 1 ? '#D65A5A' : app.minutes === 0 ? '#D7D7DC' : '#7ACB67';
 
                 return (
                   <View key={app.id} style={styles.appRow}>
@@ -332,10 +339,14 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
                         )}
                         <Text style={styles.appName} numberOfLines={1}>{app.name}</Text>
                       </View>
-                      <Text style={styles.appMinutes}>{`${formatTime(app.minutes)} / ${formatTime(app.limitMinutes)}`}</Text>
-                    </View>
-                    <View style={styles.usageTrack}>
-                      <View style={[styles.usageFill, { width: `${fillWidth}%`, backgroundColor: fillColor }]} />
+                      <View style={styles.appUsageRight}>
+                        <Text style={[styles.appMinutes, app.minutes === 0 && styles.appMinutesUnused]}>
+                          {`${formatTime(app.minutes)} / ${formatTime(app.limitMinutes)}`}
+                        </Text>
+                        <View style={styles.usageTrack}>
+                          <View style={[styles.usageFill, { width: `${fillWidth}%`, backgroundColor: fillColor }]} />
+                        </View>
+                      </View>
                     </View>
                   </View>
                 );
@@ -385,20 +396,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent'
-  },
-  editAppsIcon: {
-    width: 15,
-    height: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 5
-  },
-  editAppsIconText: {
-    color: '#007AFF',
-    fontSize: 12,
-    lineHeight: 14,
-    fontFamily: FONT_SEMIBOLD,
-    fontWeight: '800'
   },
   editAppsText: {
     fontSize: 12,
@@ -459,8 +456,9 @@ const styles = StyleSheet.create({
     paddingRight: 14
   },
   heroGif: {
-    width: 94,
-    height: 94
+    width: 118,
+    height: 118,
+    marginBottom: -4
   },
   streakNumberWrap: {
     alignSelf: 'flex-start',
@@ -490,6 +488,13 @@ const styles = StyleSheet.create({
     fontFamily: FONT_REGULAR,
     fontWeight: '500'
   },
+  streakSubLabel: {
+    marginTop: 5,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.48)',
+    fontFamily: FONT_REGULAR,
+    fontWeight: '600'
+  },
   sectionBlock: {
     marginBottom: 30
   },
@@ -518,11 +523,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: '#EFEFF4',
-    paddingVertical: 14
+    paddingVertical: 14,
+    position: 'relative'
   },
   weekDay: {
     alignItems: 'center',
-    width: '13.7%'
+    width: '13.7%',
+    zIndex: 1
   },
   weekLabel: {
     fontSize: 12,
@@ -654,12 +661,21 @@ const styles = StyleSheet.create({
     fontFamily: FONT_SEMIBOLD,
     fontWeight: '700'
   },
+  appMinutesUnused: {
+    color: '#8E8E93',
+    fontWeight: '600'
+  },
+  appUsageRight: {
+    width: 116,
+    alignItems: 'flex-end'
+  },
   usageTrack: {
+    width: 96,
     height: 4,
     borderRadius: 999,
     backgroundColor: '#E5E5EA',
     overflow: 'hidden',
-    marginTop: 10
+    marginTop: 8
   },
   usageFill: {
     height: '100%',

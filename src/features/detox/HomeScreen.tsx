@@ -11,6 +11,7 @@ import {
   Platform,
   StatusBar
 } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { ScreenTimeService, DailyUsageMap } from '../../services/ScreenTimeService';
 import { DailyLimitSnapshots, DailyMoodSnapshots, StoredMood, UserStore } from '../../services/storage';
 import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
@@ -24,7 +25,6 @@ const COLORS = {
   textSecondary: '#8E8E93',
   textFaint: '#D1D1D6',
   pillBg: '#F2F2F7',
-  selectedCellBg: '#E7E5FF',
   moods: {
     great: { bg: '#D3D0FF', line: '#5C56B6' },
     good: { bg: '#C6E3FF', line: '#528DF5' },
@@ -44,18 +44,43 @@ const MOOD_TYPES = {
 } as const;
 
 type MoodType = (typeof MOOD_TYPES)[keyof typeof MOOD_TYPES];
-type CalendarItem = { date: string; isCurrentMonth: boolean; mood: MoodType; isSelected?: boolean };
+type CalendarItem = {
+  date: string;
+  dateKey?: string;
+  isCurrentMonth: boolean;
+  mood: MoodType;
+  isToday?: boolean;
+};
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MOOD_LABELS: Record<MoodType, string> = {
+  great: 'Great',
+  good: 'Good',
+  neutral: 'Close',
+  awful: 'Over limit',
+  empty: 'No tracking'
+};
+const LEGEND_ITEMS: MoodType[] = [MOOD_TYPES.GREAT, MOOD_TYPES.GOOD, MOOD_TYPES.NEUTRAL, MOOD_TYPES.AWFUL];
+
+const ChevronIcon = ({ direction }: { direction: 'left' | 'right' }) => (
+  <Svg width={18} height={18} viewBox="0 0 24 24">
+    <Path
+      d={direction === 'left' ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6'}
+      fill="none"
+      stroke="#000000"
+      strokeWidth={2.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
 
 const MoodFace = ({ type }: { type: MoodType }) => {
   const theme = COLORS.moods[type];
 
   if (type === MOOD_TYPES.EMPTY) {
     return (
-      <View style={[styles.faceContainer, styles.transparentFace]}>
-        <View style={styles.emptyDot} />
-      </View>
+      <View style={[styles.faceContainer, styles.transparentFace]} />
     );
   }
 
@@ -64,7 +89,7 @@ const MoodFace = ({ type }: { type: MoodType }) => {
   const isDotted = type === MOOD_TYPES.AWFUL;
 
   return (
-    <View style={[styles.faceContainer, { backgroundColor: theme.bg }, !isDotted && { borderColor: theme.line, borderWidth: 1 }]}>
+    <View style={[styles.faceContainer, { backgroundColor: theme.bg }, !isDotted && styles.faceBorder, !isDotted && { borderColor: theme.line }]}>
       {isDotted ? <View style={[styles.dottedFaceRing, { borderColor: theme.line }]} /> : null}
       <View style={styles.eyesContainer}>
         <View>
@@ -89,17 +114,22 @@ const MoodFace = ({ type }: { type: MoodType }) => {
   );
 };
 
+const formatDateKey = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 export const HomeScreen = () => {
   const [monthDate, setMonthDate] = useState(new Date());
   const [calendarData, setCalendarData] = useState<CalendarItem[]>([]);
+  const [statsCache, setStatsCache] = useState<DailyUsageMap>({});
+  const [limitsCache, setLimitsCache] = useState<Record<string, number>>({});
+  const [limitSnapshotsCache, setLimitSnapshotsCache] = useState<DailyLimitSnapshots>({});
+  const [savedMoodsCache, setSavedMoodsCache] = useState<DailyMoodSnapshots>({});
+  const [trackingStartDate, setTrackingStartDate] = useState(formatDateKey(new Date()));
   const [refreshing, setRefreshing] = useState(false);
-
-  const formatDateKey = (date: Date) => {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  };
 
   const resolveMood = useCallback((dayMap: Record<string, number> | undefined, limits: Record<string, number>): MoodType => {
     if (!dayMap) return MOOD_TYPES.EMPTY;
@@ -150,10 +180,9 @@ export const HomeScreen = () => {
   const lightenHex = (hex: string, amount = 0.48) => {
     const clean = hex.replace('#', '');
     const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean;
-    const num = parseInt(full, 16);
-    const r = (num >> 16) & 255;
-    const g = (num >> 8) & 255;
-    const b = num & 255;
+    const r = parseInt(full.slice(0, 2), 16);
+    const g = parseInt(full.slice(2, 4), 16);
+    const b = parseInt(full.slice(4, 6), 16);
     const lr = Math.round(r + (255 - r) * amount);
     const lg = Math.round(g + (255 - g) * amount);
     const lb = Math.round(b + (255 - b) * amount);
@@ -165,7 +194,8 @@ export const HomeScreen = () => {
     stats: DailyUsageMap,
     snapshots: DailyLimitSnapshots,
     currentLimits: Record<string, number>,
-    savedMoods: DailyMoodSnapshots
+    savedMoods: DailyMoodSnapshots,
+    startDateKey: string
   ) => {
     const year = targetDate.getFullYear();
     const month = targetDate.getMonth();
@@ -182,21 +212,26 @@ export const HomeScreen = () => {
 
     const today = new Date();
     const isCurrentVisibleMonth = today.getFullYear() === year && today.getMonth() === month;
+    const trackingStartMs = new Date(`${startDateKey}T00:00:00`).getTime();
 
     for (let day = 1; day <= totalDays; day += 1) {
       const dateObj = new Date(year, month, day);
       const dateKey = formatDateKey(dateObj);
+      const isBeforeTrackingStart = dateObj.getTime() < trackingStartMs;
       const dayMap = stats[dateKey];
       const dayLimits = getLimitsForDate(dateKey, snapshots, currentLimits);
       const isToday = isCurrentVisibleMonth && today.getDate() === day;
-      const mood = !isToday && savedMoods[dateKey]
-        ? moodFromStored(savedMoods[dateKey])
-        : resolveMood(dayMap, dayLimits);
+      const mood = isBeforeTrackingStart
+        ? MOOD_TYPES.EMPTY
+        : !isToday && savedMoods[dateKey]
+          ? moodFromStored(savedMoods[dateKey])
+          : resolveMood(dayMap, dayLimits);
       items.push({
         date: String(day),
+        dateKey,
         isCurrentMonth: true,
         mood,
-        isSelected: isToday
+        isToday
       });
     }
 
@@ -211,22 +246,36 @@ export const HomeScreen = () => {
 
   const load = useCallback(async (targetDate: Date) => {
     await ScreenTimeService.storeTodayStats();
-    const [stats, limits, limitSnapshots, savedMoods] = await Promise.all([
+    const [stats, limits, limitSnapshots, savedMoods, loadedTrackingStartDate] = await Promise.all([
       ScreenTimeService.getStoredDailyStats(),
       UserStore.getAllLimits(),
       UserStore.getDailyLimitSnapshots(),
-      UserStore.getDailyMoods()
+      UserStore.getDailyMoods(),
+      UserStore.ensureTrackingStartDate()
     ]);
     await UserStore.saveTodayLimitSnapshot(limits || {});
     const todayKey = formatDateKey(new Date());
     const todayMood = resolveStoredMood((stats as DailyUsageMap)[todayKey], limits || {});
     await UserStore.saveDailyMood(todayKey, todayMood);
-    buildCalendar(targetDate, stats as DailyUsageMap, limitSnapshots || {}, limits || {}, { ...(savedMoods || {}), [todayKey]: todayMood });
+    const nextStats = stats as DailyUsageMap;
+    const nextLimits = limits || {};
+    const nextLimitSnapshots = limitSnapshots || {};
+    const nextSavedMoods = { ...(savedMoods || {}), [todayKey]: todayMood };
+    setStatsCache(nextStats);
+    setLimitsCache(nextLimits);
+    setLimitSnapshotsCache(nextLimitSnapshots);
+    setSavedMoodsCache(nextSavedMoods);
+    setTrackingStartDate(loadedTrackingStartDate);
+    buildCalendar(targetDate, nextStats, nextLimitSnapshots, nextLimits, nextSavedMoods, loadedTrackingStartDate);
   }, [buildCalendar, resolveStoredMood]);
 
   useEffect(() => {
-    load(monthDate);
-  }, [load, monthDate]);
+    load(new Date());
+  }, [load]);
+
+  useEffect(() => {
+    buildCalendar(monthDate, statsCache, limitSnapshotsCache, limitsCache, savedMoodsCache, trackingStartDate);
+  }, [buildCalendar, limitSnapshotsCache, limitsCache, monthDate, savedMoodsCache, statsCache, trackingStartDate]);
 
   const refreshCurrentMonth = useCallback(() => {
     const now = new Date();
@@ -250,6 +299,13 @@ export const HomeScreen = () => {
     [monthDate]
   );
 
+  const monthSummary = useMemo(() => {
+    const currentMonthItems = calendarData.filter((item) => item.isCurrentMonth);
+    const cleanDays = currentMonthItems.filter((item) => item.mood !== MOOD_TYPES.EMPTY && item.mood !== MOOD_TYPES.AWFUL).length;
+    const overDays = currentMonthItems.filter((item) => item.mood === MOOD_TYPES.AWFUL).length;
+    return `${cleanDays} clean ${cleanDays === 1 ? 'day' : 'days'} • ${overDays} over-limit ${overDays === 1 ? 'day' : 'days'}`;
+  }, [calendarData]);
+
   const shiftMonth = (delta: number) => {
     setMonthDate((prev) => {
       const next = new Date(prev);
@@ -272,13 +328,15 @@ export const HomeScreen = () => {
           <View>
             <Text style={styles.pageTitle}>Month</Text>
             <Text style={styles.monthTitle}>{monthTitle}</Text>
+            <Text style={styles.monthSummary}>{monthSummary}</Text>
           </View>
           <View style={styles.monthControls}>
             <TouchableOpacity style={styles.chevronButton} onPress={() => shiftMonth(-1)} activeOpacity={0.76}>
-              <Text style={styles.chevron}>{'<'}</Text>
+              <ChevronIcon direction="left" />
             </TouchableOpacity>
+            <View style={styles.chevronDivider} />
             <TouchableOpacity style={styles.chevronButton} onPress={() => shiftMonth(1)} activeOpacity={0.76}>
-              <Text style={styles.chevron}>{'>'}</Text>
+              <ChevronIcon direction="right" />
             </TouchableOpacity>
           </View>
         </View>
@@ -299,8 +357,8 @@ export const HomeScreen = () => {
                 key={`${item.date}-${index}`}
                 style={[
                   styles.cellPill,
-                  item.isSelected ? styles.cellPillSelected : null,
-                  item.isSelected
+                  item.mood === MOOD_TYPES.EMPTY && styles.cellPillEmpty,
+                  item.isToday
                     ? {
                         backgroundColor: lightenHex(COLORS.moods[item.mood].bg),
                         borderColor: COLORS.moods[item.mood].line
@@ -312,7 +370,8 @@ export const HomeScreen = () => {
                   style={[
                     styles.dateText,
                     isFaint && styles.dateTextFaint,
-                    item.isSelected && styles.dateTextSelected
+                    item.mood === MOOD_TYPES.EMPTY && item.isCurrentMonth && styles.dateTextQuiet,
+                    item.isToday && styles.dateTextSelected
                   ]}
                 >
                   {item.date}
@@ -321,6 +380,15 @@ export const HomeScreen = () => {
               </View>
             );
           })}
+        </View>
+
+        <View style={styles.legendRow}>
+          {LEGEND_ITEMS.map((mood) => (
+            <View key={mood} style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: COLORS.moods[mood].bg, borderColor: COLORS.moods[mood].line }]} />
+              <Text style={styles.legendText}>{MOOD_LABELS[mood]}</Text>
+            </View>
+          ))}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -342,8 +410,8 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24
+    alignItems: 'flex-end',
+    marginBottom: 22
   },
   pageTitle: {
     fontSize: 34,
@@ -357,31 +425,36 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.textSecondary
   },
+  monthSummary: {
+    marginTop: 6,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+    color: '#A0A0A6'
+  },
   monthControls: {
     flexDirection: 'row',
-    gap: 8,
-    padding: 4,
+    alignItems: 'center',
+    height: 44,
+    paddingHorizontal: 5,
     borderRadius: 22,
-    backgroundColor: COLORS.pillBg
+    backgroundColor: COLORS.pillBg,
+    borderWidth: 1,
+    borderColor: '#ECECF2'
   },
   chevronButton: {
-    width: 34,
+    width: 38,
     height: 34,
     borderRadius: 17,
-    backgroundColor: COLORS.cardBg,
+    backgroundColor: 'transparent',
     justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 1
+    alignItems: 'center'
   },
-  chevron: {
-    fontSize: 18,
-    color: COLORS.textMain,
-    lineHeight: 20,
-    fontWeight: '800'
+  chevronDivider: {
+    width: 1,
+    height: 20,
+    borderRadius: 1,
+    backgroundColor: '#D8D8DE'
   },
   daysOfWeekContainer: {
     flexDirection: 'row',
@@ -408,19 +481,20 @@ const styles = StyleSheet.create({
   },
   cellPill: {
     width: CELL_WIDTH,
-    height: 58,
+    height: 62,
     borderRadius: 20,
     backgroundColor: '#F8F8FA',
     alignItems: 'center',
     justifyContent: 'center',
     paddingTop: 6,
-    paddingBottom: 6,
+    paddingBottom: 5,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#F2F2F5'
   },
-  cellPillSelected: {
-    backgroundColor: COLORS.selectedCellBg
+  cellPillEmpty: {
+    backgroundColor: '#FBFBFC',
+    borderColor: '#F4F4F6'
   },
   dateText: {
     fontSize: 14,
@@ -432,6 +506,9 @@ const styles = StyleSheet.create({
   dateTextFaint: {
     color: COLORS.textFaint
   },
+  dateTextQuiet: {
+    color: '#C5C6CC'
+  },
   dateTextSelected: {
     fontWeight: '700'
   },
@@ -442,19 +519,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center'
   },
+  faceBorder: {
+    borderWidth: 1
+  },
   transparentFace: {
     backgroundColor: 'transparent'
-  },
-  emptyQuestionMark: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.textFaint
-  },
-  emptyDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#C5C6CC'
   },
   eyesContainer: {
     flexDirection: 'row',
@@ -498,7 +567,34 @@ const styles = StyleSheet.create({
     height: 1.5,
     borderRadius: 1,
     marginTop: 2
-  }
+  },
+  legendRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 6,
+    marginBottom: 16
+  },
+  legendItem: {
+    height: 28,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F8FA'
+  },
+  legendDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    borderWidth: 1,
+    marginRight: 6
+  },
+  legendText: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontWeight: '700'
+  },
 });
 
 export default HomeScreen;

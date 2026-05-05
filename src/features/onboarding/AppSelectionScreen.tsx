@@ -41,6 +41,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
   const [selectedLimits, setSelectedLimits] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [footerHeight, setFooterHeight] = useState(0);
   const [search, setSearch] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [activeApp, setActiveApp] = useState<AppInfo | null>(null);
@@ -131,7 +132,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
         windowSize={5}
         refreshing={refreshing}
         onRefresh={onRefresh}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingBottom: footerHeight + 18 }]}
         showsVerticalScrollIndicator={false}
         renderItem={({ item }) => {
           const limit = selectedLimits[item.packageName];
@@ -167,9 +168,15 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
         }}
       />
 
-      <TouchableOpacity style={styles.footerButton} onPress={onComplete} activeOpacity={0.88}>
-        <Text style={styles.footerText}>Save App List</Text>
-      </TouchableOpacity>
+      <View
+        pointerEvents="box-none"
+        style={styles.footerWrap}
+        onLayout={(event) => setFooterHeight(event.nativeEvent.layout.height)}
+      >
+        <TouchableOpacity style={styles.footerButton} onPress={onComplete} activeOpacity={0.88}>
+          <Text style={styles.footerText}>Save App List</Text>
+        </TouchableOpacity>
+      </View>
 
       <TimeLimitModal
         visible={modalVisible}
@@ -188,10 +195,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 15 : 15
+    paddingTop: Platform.OS === 'android' ? Math.max((StatusBar.currentHeight ?? 0) + 34, 58) : 18
   },
-  headerWrap: { marginBottom: 20 },
-  header: { fontSize: 34, lineHeight: 38, color: '#000000', fontWeight: '800' },
+  headerWrap: { marginBottom: 20, paddingRight: 18 },
+  header: { fontSize: 32, lineHeight: 36, color: '#000000', fontWeight: '800' },
   subheader: { fontSize: 14, lineHeight: 19, color: '#8E8E93', marginTop: 6, fontWeight: '500' },
   permissionCard: {
     minHeight: 54,
@@ -220,7 +227,7 @@ const styles = StyleSheet.create({
     fontWeight: '500'
   },
   listContent: {
-    paddingBottom: 104
+    paddingBottom: 18
   },
   item: {
     flexDirection: 'row',
@@ -282,11 +289,17 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2
   },
-  footerButton: {
+  footerWrap: {
     position: 'absolute',
-    left: 24,
-    right: 24,
-    bottom: 16,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'android' ? 22 : 18,
+    backgroundColor: '#FFFFFF'
+  },
+  footerButton: {
     backgroundColor: '#111111',
     minHeight: 54,
     justifyContent: 'center',
