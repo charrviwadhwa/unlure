@@ -3,15 +3,17 @@ import { StyleSheet, View, StatusBar } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import EntryScreen from './src/features/onboarding/EntryScreen';
+import { PermissionSetupScreen } from './src/features/onboarding/PermissionSetupScreen';
 import { AppSelectionScreen } from './src/features/onboarding/AppSelectionScreen'; 
 import  OverviewScreen  from './src/features/home/OverviewScreen';
 import StreakScreen from './src/features/journey/StreakScreen';
 import { HomeScreen } from './src/features/detox/HomeScreen';
 import { BottomNav } from './src/components/BottomNav';
 import { UserStore } from './src/services/storage';
+import { ScreenTimeService } from './src/services/ScreenTimeService';
 
 const App = () => {
-  const [currentStep, setCurrentStep] = useState<'entry' | 'selection' | 'main'>('entry');
+  const [currentStep, setCurrentStep] = useState<'entry' | 'permissions' | 'selection' | 'main'>('entry');
   const [activeTab, setActiveTab] = useState<'home' | 'streak' | 'analytics'>('home');
   const [mountedTabs, setMountedTabs] = useState<Record<'home' | 'streak' | 'analytics', boolean>>({
     home: true,
@@ -29,7 +31,15 @@ const App = () => {
   useEffect(() => {
     const initialize = async () => {
       try {
-        const savedLimits = await UserStore.getAllLimits();
+        const [savedLimits, installedApps] = await Promise.all([
+          UserStore.getAllLimits(),
+          ScreenTimeService.getInstalledApps()
+        ]);
+        const appNames = installedApps.reduce<Record<string, string>>((acc, app) => {
+          acc[app.packageName] = app.appName;
+          return acc;
+        }, {});
+        await ScreenTimeService.syncFocusModeConfig(savedLimits, appNames);
         if (Object.keys(savedLimits).length > 0) {
           setCurrentStep('main');
         } else {
@@ -47,7 +57,11 @@ const App = () => {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <View style={styles.container}>
-        {currentStep === 'entry' && <EntryScreen onAnimationComplete={() => setCurrentStep('selection')} />}
+        {currentStep === 'entry' && <EntryScreen onAnimationComplete={() => setCurrentStep('permissions')} />}
+
+        {currentStep === 'permissions' && (
+          <PermissionSetupScreen onComplete={() => setCurrentStep('selection')} />
+        )}
 
         {currentStep === 'selection' && (
           <AppSelectionScreen onComplete={() => setCurrentStep('main')} />

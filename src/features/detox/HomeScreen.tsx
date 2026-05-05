@@ -11,7 +11,7 @@ import {
   Platform,
   StatusBar
 } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { ScreenTimeService, DailyUsageMap } from '../../services/ScreenTimeService';
 import { DailyLimitSnapshots, DailyMoodSnapshots, StoredMood, UserStore } from '../../services/storage';
 import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
@@ -30,7 +30,7 @@ const COLORS = {
     good: { bg: '#C6E3FF', line: '#528DF5' },
     neutral: { bg: '#FCEFB4', line: '#C2A320' },
     bad: { bg: '#FCE1B9', line: '#D0933C' },
-    awful: { bg: '#F8F9FB', line: '#D0933C' },
+    awful: { bg: '#FCE1B9', line: '#D0933C' },
     empty: { bg: '#F8F9FB', line: '#D1D1D6' }
   }
 };
@@ -61,6 +61,20 @@ const MOOD_LABELS: Record<MoodType, string> = {
   empty: 'No tracking'
 };
 const LEGEND_ITEMS: MoodType[] = [MOOD_TYPES.GREAT, MOOD_TYPES.GOOD, MOOD_TYPES.NEUTRAL, MOOD_TYPES.AWFUL];
+const DOTTED_FACE_DOTS = [
+  [12, 2.2],
+  [17, 3.6],
+  [20.4, 7.4],
+  [21.2, 12],
+  [20.4, 16.6],
+  [17, 20.4],
+  [12, 21.8],
+  [7, 20.4],
+  [3.6, 16.6],
+  [2.8, 12],
+  [3.6, 7.4],
+  [7, 3.6]
+];
 
 const ChevronIcon = ({ direction }: { direction: 'left' | 'right' }) => (
   <Svg width={18} height={18} viewBox="0 0 24 24">
@@ -86,11 +100,29 @@ const MoodFace = ({ type }: { type: MoodType }) => {
 
   const isFrown = type === MOOD_TYPES.AWFUL;
   const isNeutral = type === MOOD_TYPES.NEUTRAL;
-  const isDotted = type === MOOD_TYPES.AWFUL;
+
+  if (isFrown) {
+    return (
+      <Svg width={24} height={24} viewBox="0 0 24 24">
+        <Circle cx={12} cy={12} r={9.4} fill={theme.bg} />
+        {DOTTED_FACE_DOTS.map(([cx, cy], index) => (
+          <Circle key={index} cx={cx} cy={cy} r={0.95} fill={theme.line} />
+        ))}
+        <Circle cx={8.5} cy={9.5} r={1.45} fill={theme.line} />
+        <Circle cx={15.5} cy={9.5} r={1.45} fill={theme.line} />
+        <Path
+          d="M8 17c.8-1.8 2.1-2.7 4-2.7s3.2.9 4 2.7"
+          fill="none"
+          stroke={theme.line}
+          strokeWidth={1.7}
+          strokeLinecap="round"
+        />
+      </Svg>
+    );
+  }
 
   return (
-    <View style={[styles.faceContainer, { backgroundColor: theme.bg }, !isDotted && styles.faceBorder, !isDotted && { borderColor: theme.line }]}>
-      {isDotted ? <View style={[styles.dottedFaceRing, { borderColor: theme.line }]} /> : null}
+    <View style={[styles.faceContainer, styles.faceBorder, { backgroundColor: theme.bg, borderColor: theme.line }]}>
       <View style={styles.eyesContainer}>
         <View>
           <View style={[styles.eye, { backgroundColor: theme.line }]} />
@@ -138,7 +170,7 @@ export const HomeScreen = () => {
     const hasExceededApp = Object.keys(limits).some((pkg) => {
       const limit = limits[pkg];
       if (!limit) return false;
-      return Math.floor((dayMap[pkg] || 0) / 60000) > limit;
+      return Math.floor((dayMap[pkg] || 0) / 60000) >= limit;
     });
     if (hasExceededApp) return MOOD_TYPES.AWFUL;
     const limitedUsage = Object.keys(dayMap).reduce((acc, pkg) => {
@@ -536,15 +568,6 @@ const styles = StyleSheet.create({
     width: 3,
     height: 3,
     borderRadius: 1.5
-  },
-  dottedFaceRing: {
-    position: 'absolute',
-    width: 21,
-    height: 21,
-    borderRadius: 11,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    backgroundColor: 'transparent'
   },
   mouthCurve: {
     width: 10,

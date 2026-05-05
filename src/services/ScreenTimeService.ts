@@ -55,6 +55,63 @@ export const ScreenTimeService = {
     }
   },
 
+  async hasUsageAccess(): Promise<boolean> {
+    if (Platform.OS !== 'android') return false;
+    try {
+      return Boolean(await UsageModule.hasUsageAccess());
+    } catch {
+      return false;
+    }
+  },
+
+  async canDrawOverlays(): Promise<boolean> {
+    if (Platform.OS !== 'android') return false;
+    try {
+      return Boolean(await UsageModule.canDrawOverlays());
+    } catch {
+      return false;
+    }
+  },
+
+  async openOverlaySettings(): Promise<void> {
+    if (Platform.OS !== 'android') return;
+    try {
+      await UsageModule.openOverlaySettings();
+    } catch {
+      // no-op
+    }
+  },
+
+  async openAccessibilitySettings(): Promise<void> {
+    if (Platform.OS !== 'android') return;
+    try {
+      await UsageModule.openAccessibilitySettings();
+    } catch {
+      // no-op
+    }
+  },
+
+  async isFocusModeAccessibilityEnabled(): Promise<boolean> {
+    if (Platform.OS !== 'android') return false;
+    try {
+      return Boolean(await UsageModule.isFocusModeAccessibilityEnabled());
+    } catch {
+      return false;
+    }
+  },
+
+  async syncFocusModeConfig(
+    limits: Record<string, number>,
+    appNames: Record<string, string> = {}
+  ): Promise<boolean> {
+    if (Platform.OS !== 'android') return false;
+    try {
+      return Boolean(await UsageModule.syncFocusModeConfig(limits, appNames));
+    } catch {
+      return false;
+    }
+  },
+
   async storeTodayStats(): Promise<boolean> {
     if (Platform.OS !== 'android') return false;
     if (storeTodayStatsPromise) return storeTodayStatsPromise;

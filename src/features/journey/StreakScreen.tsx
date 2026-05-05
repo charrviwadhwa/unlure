@@ -26,7 +26,7 @@ const moodFace: Record<DayMood, { bg: string; faceColor: string; type: 'smile' |
   happy: { bg: '#D3D0FF', faceColor: '#5C56B6', type: 'smile' },
   lightSmile: { bg: '#C6E3FF', faceColor: '#528DF5', type: 'smile' },
   neutral: { bg: '#FCEFB4', faceColor: '#C2A320', type: 'neutral' },
-  dotted: { bg: '#F8F9FB', faceColor: '#D0933C', type: 'frown' }
+  dotted: { bg: '#FCE1B9', faceColor: '#D0933C', type: 'frown' }
 };
 
 const FONT_REGULAR = Platform.select({ ios: 'System', android: 'sans-serif', default: 'System' });
@@ -71,7 +71,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
     const hasExceededApp = Object.keys(limits).some((pkg) => {
       const limit = limits[pkg];
       if (!limit) return false;
-      return Math.floor((dayMap[pkg] || 0) / 60000) > limit;
+      return Math.floor((dayMap[pkg] || 0) / 60000) >= limit;
     });
     if (hasExceededApp) return 'dotted';
     const limitedUsage = Object.keys(dayMap).reduce((acc, pkg) => {
@@ -179,7 +179,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
       })
       .slice(0, 6);
     setTodayApps(rows);
-    setIsExceededToday(rows.some((app) => app.limitMinutes > 0 && app.minutes > app.limitMinutes));
+    setIsExceededToday(rows.some((app) => app.limitMinutes > 0 && app.minutes >= app.limitMinutes));
 
     const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
     const monday = getMondayStart(new Date());
@@ -282,7 +282,6 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
                 <Text style={styles.weekLabel}>{cell.label}</Text>
                 {cell.completed ? (
                   <View style={[styles.dayBadge, { backgroundColor: moodFace[cell.mood].bg }]}>
-                    {cell.mood === 'dotted' && <View style={styles.dottedRing} />}
                     <View style={styles.eyesRow}>
                       <View style={[styles.eye, { backgroundColor: moodFace[cell.mood].faceColor }]} />
                       <View style={[styles.eye, { backgroundColor: moodFace[cell.mood].faceColor }]} />
@@ -324,7 +323,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
               todayApps.map((app) => {
                 const ratio = app.limitMinutes > 0 ? app.minutes / app.limitMinutes : 0;
                 const fillWidth = app.minutes > 0 ? Math.min(Math.max(ratio * 100, 4), 100) : 0;
-                const fillColor = ratio > 1 ? '#D65A5A' : app.minutes === 0 ? '#D7D7DC' : '#7ACB67';
+                const fillColor = ratio >= 1 ? '#D65A5A' : app.minutes === 0 ? '#D7D7DC' : '#7ACB67';
 
                 return (
                   <View key={app.id} style={styles.appRow}>
@@ -340,7 +339,12 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
                         <Text style={styles.appName} numberOfLines={1}>{app.name}</Text>
                       </View>
                       <View style={styles.appUsageRight}>
-                        <Text style={[styles.appMinutes, app.minutes === 0 && styles.appMinutesUnused]}>
+                        <Text
+                          style={[styles.appMinutes, app.minutes === 0 && styles.appMinutesUnused]}
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.78}
+                        >
                           {`${formatTime(app.minutes)} / ${formatTime(app.limitMinutes)}`}
                         </Text>
                         <View style={styles.usageTrack}>
@@ -546,16 +550,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative'
   },
-  dottedRing: {
-    position: 'absolute',
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: '#D6A03D',
-    backgroundColor: 'transparent'
-  },
   eyesRow: {
     flexDirection: 'row',
     gap: 6,
@@ -666,11 +660,11 @@ const styles = StyleSheet.create({
     fontWeight: '600'
   },
   appUsageRight: {
-    width: 116,
+    width: 150,
     alignItems: 'flex-end'
   },
   usageTrack: {
-    width: 96,
+    width: 120,
     height: 4,
     borderRadius: 999,
     backgroundColor: '#E5E5EA',

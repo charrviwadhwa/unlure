@@ -2,10 +2,16 @@ package com.unlure;
 
 import android.app.usage.UsageStatsManager;
 import android.app.usage.UsageEvents;
+import android.app.AppOpsManager;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
 import android.provider.Settings;
+import android.text.TextUtils;
 import com.facebook.react.bridge.Promise;
+import com.facebook.react.bridge.ReadableMap;
+import com.facebook.react.bridge.ReadableMapKeySetIterator;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
@@ -16,8 +22,9 @@ import java.util.List;
 import java.util.Calendar;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import java.util.ArrayList;
+import android.content.pm.ResolveInfo;
 import android.content.SharedPreferences;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.Map;
 import org.json.JSONObject;
@@ -37,6 +44,7 @@ public class UsageModule extends ReactContextBaseJavaModule {
     private static final String PREFS_KEY = "daily_usage_json";
     private static final String PREFS_LAST_DATE_KEY = "last_stored_date";
     private static final String DATE_FORMAT = "yyyy-MM-dd";
+    private static final int DAILY_USAGE_RETENTION_DAYS = 180;
 
     UsageModule(ReactApplicationContext context) {
         super(context);
@@ -226,6 +234,34 @@ public void getDailyStats(Promise promise) {
         return active;
     }
 
+    private JSONObject pruneOldDailyStats(JSONObject root, Calendar startOfToday, SimpleDateFormat sdf) throws JSONException {
+        Calendar cutoff = (Calendar) startOfToday.clone();
+        cutoff.add(Calendar.DATE, -DAILY_USAGE_RETENTION_DAYS);
+        cutoff.set(Calendar.HOUR_OF_DAY, 0);
+        cutoff.set(Calendar.MINUTE, 0);
+        cutoff.set(Calendar.SECOND, 0);
+        cutoff.set(Calendar.MILLISECOND, 0);
+        long cutoffMs = cutoff.getTimeInMillis();
+
+        JSONObject pruned = new JSONObject();
+        java.util.Iterator<String> keys = root.keys();
+        while (keys.hasNext()) {
+            String dateKey = keys.next();
+            try {
+                Calendar parsed = Calendar.getInstance();
+                parsed.setTime(sdf.parse(dateKey));
+                parsed.set(Calendar.HOUR_OF_DAY, 0);
+                parsed.set(Calendar.MINUTE, 0);
+                parsed.set(Calendar.SECOND, 0);
+                parsed.set(Calendar.MILLISECOND, 0);
+                if (parsed.getTimeInMillis() >= cutoffMs) {
+                    pruned.put(dateKey, root.getJSONObject(dateKey));
+                }
+            } catch (Exception ignored) {}
+        }
+        return pruned;
+    }
+
     @ReactMethod
     public void storeTodayStats(Promise promise) {
         UsageStatsManager usm = (UsageStatsManager) getReactApplicationContext().getSystemService(Context.USAGE_STATS_SERVICE);
@@ -250,6 +286,7 @@ public void getDailyStats(Promise promise) {
 
         try {
             JSONObject root = new JSONObject(existing);
+            root = pruneOldDailyStats(root, startOfToday, sdf);
 
             if (lastStoredDate == null || !lastStoredDate.equals(todayKey)) {
                 Calendar startOfYesterday = (Calendar) startOfToday.clone();
@@ -315,27 +352,147 @@ public void getDailyStats(Promise promise) {
     }
 
     @ReactMethod
+    public void hasUsageAccess(Promise promise) {
+        try {
+            AppOpsManager appOps = (AppOpsManager) getReactApplicationContext().getSystemService(Context.APP_OPS_SERVICE);
+            int mode = appOps.checkOpNoThrow(
+                AppOpsManager.OPSTR_GET_USAGE_STATS,
+                android.os.Process.myUid(),
+                getReactApplicationContext().getPackageName()
+            );
+            promise.resolve(mode == AppOpsManager.MODE_ALLOWED);
+        } catch (Exception e) {
+            promise.resolve(false);
+        }
+    }
+
+    @ReactMethod
+    public void canDrawOverlays(Promise promise) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            promise.resolve(true);
+            return;
+        }
+        promise.resolve(Settings.canDrawOverlays(getReactApplicationContext()));
+    }
+
+    @ReactMethod
+    public void openOverlaySettings() {
+        try {
+            Intent intent = new Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:" + getReactApplicationContext().getPackageName())
+            );
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getReactApplicationContext().startActivity(intent);
+        } catch (Exception e) {
+            Intent fallback = new Intent(Settings.ACTION_SETTINGS);
+            fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getReactApplicationContext().startActivity(fallback);
+        }
+    }
+
+    @ReactMethod
+    public void openAccessibilitySettings() {
+        try {
+            Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getReactApplicationContext().startActivity(intent);
+        } catch (Exception e) {
+            Intent fallback = new Intent(Settings.ACTION_SETTINGS);
+            fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getReactApplicationContext().startActivity(fallback);
+        }
+    }
+
+    @ReactMethod
+    public void isFocusModeAccessibilityEnabled(Promise promise) {
+        String serviceName = getReactApplicationContext().getPackageName() + "/" + FocusModeService.class.getName();
+        String enabledServices = Settings.Secure.getString(
+            getReactApplicationContext().getContentResolver(),
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        );
+        boolean accessibilityEnabled = Settings.Secure.getInt(
+            getReactApplicationContext().getContentResolver(),
+            Settings.Secure.ACCESSIBILITY_ENABLED,
+            0
+        ) == 1;
+
+        if (!accessibilityEnabled || enabledServices == null) {
+            promise.resolve(false);
+            return;
+        }
+
+        TextUtils.SimpleStringSplitter splitter = new TextUtils.SimpleStringSplitter(':');
+        splitter.setString(enabledServices);
+        while (splitter.hasNext()) {
+            String enabledService = splitter.next();
+            if (enabledService.equalsIgnoreCase(serviceName)) {
+                promise.resolve(true);
+                return;
+            }
+        }
+        promise.resolve(false);
+    }
+
+    @ReactMethod
+    public void syncFocusModeConfig(ReadableMap limits, ReadableMap names, Promise promise) {
+        try {
+            JSONObject limitsJson = new JSONObject();
+            ReadableMapKeySetIterator limitKeys = limits.keySetIterator();
+            while (limitKeys.hasNextKey()) {
+                String key = limitKeys.nextKey();
+                int minutes = limits.getInt(key);
+                if (minutes > 0) limitsJson.put(key, minutes);
+            }
+
+            JSONObject namesJson = new JSONObject();
+            ReadableMapKeySetIterator nameKeys = names.keySetIterator();
+            while (nameKeys.hasNextKey()) {
+                String key = nameKeys.nextKey();
+                namesJson.put(key, names.getString(key));
+            }
+
+            SharedPreferences prefs = getReactApplicationContext()
+                .getSharedPreferences(FocusModeService.PREFS_NAME, Context.MODE_PRIVATE);
+            prefs.edit()
+                .putString(FocusModeService.KEY_LIMITS_JSON, limitsJson.toString())
+                .putString(FocusModeService.KEY_NAMES_JSON, namesJson.toString())
+                .apply();
+            promise.resolve(true);
+        } catch (Exception e) {
+            promise.reject("ERROR", e.getMessage());
+        }
+    }
+
+    @ReactMethod
 public void getInstalledApps(Promise promise) {
     // Run this on a background thread to prevent UI freezing
     new Thread(() -> {
         try {
             PackageManager pm = getReactApplicationContext().getPackageManager();
             // Fetching just basic info first is faster
-            List<ApplicationInfo> packages = pm.getInstalledApplications(PackageManager.GET_META_DATA);
+            Intent launcherIntent = new Intent(Intent.ACTION_MAIN, null);
+            launcherIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+            List<ResolveInfo> launchableApps = pm.queryIntentActivities(launcherIntent, 0);
+            HashSet<String> seenPackages = new HashSet<>();
             WritableArray appList = Arguments.createArray();
 
-            for (ApplicationInfo appInfo : packages) {
+            for (ResolveInfo resolveInfo : launchableApps) {
                 // 🚨 OPTIMIZATION: Only process apps that a user can actually launch
-                if (pm.getLaunchIntentForPackage(appInfo.packageName) != null) {
-                    WritableMap map = Arguments.createMap();
-                    map.putString("appName", appInfo.loadLabel(pm).toString());
-                    map.putString("packageName", appInfo.packageName);
-                    String iconBase64 = drawableToBase64(appInfo.loadIcon(pm));
-                    if (iconBase64 != null) {
-                        map.putString("iconBase64", iconBase64);
-                    }
-                    appList.pushMap(map);
+                if (resolveInfo.activityInfo == null || resolveInfo.activityInfo.packageName == null) continue;
+                String packageName = resolveInfo.activityInfo.packageName;
+                if (seenPackages.contains(packageName)) continue;
+                seenPackages.add(packageName);
+
+                ApplicationInfo appInfo = resolveInfo.activityInfo.applicationInfo;
+                WritableMap map = Arguments.createMap();
+                map.putString("appName", resolveInfo.loadLabel(pm).toString());
+                map.putString("packageName", packageName);
+                String iconBase64 = drawableToBase64(appInfo.loadIcon(pm));
+                if (iconBase64 != null) {
+                    map.putString("iconBase64", iconBase64);
                 }
+                appList.pushMap(map);
             }
             promise.resolve(appList);
         } catch (Exception e) {

@@ -72,6 +72,14 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
     return apps.filter(a => a.appName.toLowerCase().includes(search.toLowerCase()));
   }, [search, apps]);
 
+  const syncFocusMode = useCallback(async (limits: Record<string, number>) => {
+    const appNames = apps.reduce<Record<string, string>>((acc, app) => {
+      acc[app.packageName] = app.appName;
+      return acc;
+    }, {});
+    await ScreenTimeService.syncFocusModeConfig(limits, appNames);
+  }, [apps]);
+
   const handleConfirmLimit = async (minutes: number) => {
     if (activeApp) {
       const updated = { ...selectedLimits };
@@ -82,6 +90,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
       }
       setSelectedLimits(updated);
       await UserStore.saveAllLimits(updated);
+      await syncFocusMode(updated);
     }
     setModalVisible(false);
   };
@@ -91,6 +100,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
     delete updated[packageName];
     setSelectedLimits(updated);
     await UserStore.saveAllLimits(updated);
+    await syncFocusMode(updated);
   };
 
   const formatLimit = (mins: number) => {
@@ -107,15 +117,6 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
       <View style={styles.headerWrap}>
         <Text style={styles.header}>Choose Apps</Text>
         <Text style={styles.subheader}>Only apps with enabled limits will appear in your streak view.</Text>
-      </View>
-      <View style={styles.permissionCard}>
-        <View style={styles.permissionCopy}>
-          <Text style={styles.permissionTitle}>Usage Access</Text>
-          <Text style={styles.permissionText}>Required for live screen time.</Text>
-        </View>
-        <TouchableOpacity style={styles.permissionButton} onPress={ScreenTimeService.openUsageAccessSettings}>
-          <Text style={styles.permissionButtonText}>Open</Text>
-        </TouchableOpacity>
       </View>
       <TextInput
         style={styles.searchBar}
@@ -173,7 +174,14 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
         style={styles.footerWrap}
         onLayout={(event) => setFooterHeight(event.nativeEvent.layout.height)}
       >
-        <TouchableOpacity style={styles.footerButton} onPress={onComplete} activeOpacity={0.88}>
+        <TouchableOpacity
+          style={styles.footerButton}
+          onPress={async () => {
+            await syncFocusMode(selectedLimits);
+            onComplete();
+          }}
+          activeOpacity={0.88}
+        >
           <Text style={styles.footerText}>Save App List</Text>
         </TouchableOpacity>
       </View>
@@ -185,6 +193,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
         onConfirm={handleConfirmLimit}
         onCancel={() => setModalVisible(false)}
       />
+
     </View>
   );
 };
@@ -197,25 +206,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: Platform.OS === 'android' ? Math.max((StatusBar.currentHeight ?? 0) + 34, 58) : 18
   },
-  headerWrap: { marginBottom: 20, paddingRight: 18 },
+  headerWrap: { marginBottom: 16, paddingRight: 18 },
   header: { fontSize: 32, lineHeight: 36, color: '#000000', fontWeight: '800' },
   subheader: { fontSize: 14, lineHeight: 19, color: '#8E8E93', marginTop: 6, fontWeight: '500' },
-  permissionCard: {
-    minHeight: 54,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#EFEFF4',
-    marginBottom: 14
-  },
-  permissionCopy: { flex: 1, marginRight: 12 },
-  permissionTitle: { fontSize: 15, fontWeight: '700', color: '#000000', marginBottom: 3 },
-  permissionText: { fontSize: 12, color: '#8E8E93', fontWeight: '500' },
-  permissionButton: { backgroundColor: '#111111', paddingVertical: 9, paddingHorizontal: 17, borderRadius: 18 },
-  permissionButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
   searchBar: {
     height: 42,
     backgroundColor: '#F2F2F7',

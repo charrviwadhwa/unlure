@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Unlure</string>
+    <string name="focus_mode_accessibility_description">Detects when selected limited apps are opened so Unlure can show focus reminders and protect your streak.</string>
 </resources>

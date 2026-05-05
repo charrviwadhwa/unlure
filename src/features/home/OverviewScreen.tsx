@@ -141,6 +141,7 @@ const CATEGORY_ICONS: Record<CategoryKey | 'otherSummary', string> = {
 };
 
 const GLYPH_SIZE = 16;
+const WEEK_BAR_MAX_HEIGHT = 140;
 
 const createEmptyCategoryTotals = () =>
   CATEGORY_KEYS.reduce<Record<CategoryKey, number>>((acc, key) => {
@@ -200,6 +201,24 @@ const formatTime = (mins: number) => {
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 };
 
+const formatCompactTime = (mins: number) => formatTime(mins).replace(' ', '');
+
+const formatAxisTime = (mins: number) => {
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+};
+
+const getNiceWeekAxisMax = (maxMinutes: number) => {
+  if (maxMinutes <= 10) return 10;
+  if (maxMinutes <= 30) return 30;
+  if (maxMinutes <= 60) return 60;
+  if (maxMinutes <= 120) return 120;
+  if (maxMinutes <= 240) return 240;
+  return Math.ceil(maxMinutes / 120) * 120;
+};
+
 const CategoryGlyph = ({ category, color }: { category: CategoryKey | 'otherSummary'; color: string }) => {
   const common = { stroke: color, strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
   switch (category) {
@@ -231,8 +250,9 @@ const CategoryGlyph = ({ category, color }: { category: CategoryKey | 'otherSumm
     case 'creativity':
       return (
         <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
-          <Path d="M5 17.5l1.2-4.3L15.6 3.8c1-1 2.5-1 3.5 0l1.1 1.1c1 1 1 2.5 0 3.5l-9.4 9.4L6.5 19 5 17.5z" fill="none" {...common} />
-          <Path d="M14.2 5.2l4.6 4.6" fill="none" {...common} />
+          <Path d="M6 17.5 17.5 6" fill="none" {...common} />
+          <Circle cx={7} cy={17} r={2} fill="none" {...common} />
+          <Circle cx={17} cy={7} r={2} fill="none" {...common} />
         </Svg>
       );
     case 'productivityFinance':
@@ -265,8 +285,10 @@ const CategoryGlyph = ({ category, color }: { category: CategoryKey | 'otherSumm
     case 'utilities':
       return (
         <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
-          <Circle cx={12} cy={12} r={3} fill="none" {...common} />
-          <Path d="M12 3v3M12 18v3M4.2 7.5l2.6 1.5M17.2 15l2.6 1.5M19.8 7.5 17.2 9M6.8 15l-2.6 1.5" fill="none" {...common} />
+          <Path d="M5 7h14M5 12h14M5 17h14" fill="none" {...common} />
+          <Circle cx={9} cy={7} r={1.8} fill={color} />
+          <Circle cx={15} cy={12} r={1.8} fill={color} />
+          <Circle cx={11} cy={17} r={1.8} fill={color} />
         </Svg>
       );
     case 'shoppingFood':
@@ -477,6 +499,9 @@ export default function ScreenTimeDashboard() {
   const weekAverageMinutes = Math.floor(weekTotalMinutes / 7);
   const dayTotalMinutes = CATEGORY_KEYS.reduce((acc, key) => acc + categoryMinutes[key], 0);
   const weekMaxMinutes = Math.max(...weekData.map((d) => CATEGORY_KEYS.reduce((acc, key) => acc + d.totals[key], 0)), 1);
+  const weekAxisMaxMinutes = getNiceWeekAxisMax(weekMaxMinutes);
+  const weekAxisTicks = [weekAxisMaxMinutes, Math.round(weekAxisMaxMinutes * 2 / 3), Math.round(weekAxisMaxMinutes / 3), 0];
+  const weekAverageLineBottom = 24 + Math.min((weekAverageMinutes / weekAxisMaxMinutes) * WEEK_BAR_MAX_HEIGHT, WEEK_BAR_MAX_HEIGHT);
   const dayMaxMinutes = Math.max(...dayChartCategories.map((item) => item.minutes), 1);
   const maxTodayAppMinutes = Math.max(...todayApps.map((app) => app.minutes), 1);
   const maxWeekCategoryMinutes = Math.max(...weekChartCategories.map((category) => category.minutes), 1);
@@ -587,10 +612,11 @@ export default function ScreenTimeDashboard() {
                   of the xLabel (16px) + the margin of the bars (8px) = 24px total 
                 */}
                 <View style={styles.gridLineContainer}>
-                  <View style={styles.gridLine}><Text style={styles.gridText}>6h</Text></View>
-                  <View style={styles.gridLine}><Text style={styles.gridText}>4h</Text></View>
-                  <View style={styles.gridLine}><Text style={styles.gridText}>2h</Text></View>
-                  <View style={styles.gridLine}><Text style={styles.gridText}>0h</Text></View>
+                  {weekAxisTicks.map((tick) => (
+                    <View style={styles.gridLine} key={tick}>
+                      <Text style={styles.gridText}>{formatAxisTime(tick)}</Text>
+                    </View>
+                  ))}
                 </View>
 
                 <View style={styles.barsWrapper}>
@@ -600,7 +626,7 @@ export default function ScreenTimeDashboard() {
                       return {
                         ...category,
                         minutes,
-                        height: minutes > 0 ? Math.max((minutes / weekMaxMinutes) * 140, 6) : 0
+                        height: minutes > 0 ? Math.max((minutes / weekAxisMaxMinutes) * WEEK_BAR_MAX_HEIGHT, 6) : 0
                       };
                     }).filter((segment) => segment.height > 0);
                     return (
@@ -629,6 +655,13 @@ export default function ScreenTimeDashboard() {
                     );
                   })}
                 </View>
+
+                {weekAverageMinutes > 0 && (
+                  <View pointerEvents="none" style={[styles.averageLineWrap, { bottom: weekAverageLineBottom }]}>
+                    <Text style={styles.averageLineLabel}>avg {formatAxisTime(weekAverageMinutes)}</Text>
+                    <View style={styles.averageLine} />
+                  </View>
+                )}
               </View>
 
               {/* Categories Legend */}
@@ -653,7 +686,7 @@ export default function ScreenTimeDashboard() {
                     <View style={styles.iosUsageMain}>
                       <View
                         accessibilityLabel={CATEGORY_ICONS[category.key]}
-                        style={[styles.iosGlyph, { backgroundColor: category.color.light }]}
+                        style={styles.iosGlyph}
                       >
                         <CategoryGlyph category={category.key} color={category.color.border} />
                       </View>
@@ -688,7 +721,9 @@ export default function ScreenTimeDashboard() {
                   <View style={styles.dayBarColumn} key={category.key}>
                     <View style={styles.dayBarLabelContainer}>
                       <Text style={[styles.dayBarLabelTitle, { color: category.color.border }]} numberOfLines={1}>{category.label}</Text>
-                      <Text style={styles.dayBarLabelValue}>{formatTime(category.minutes)}</Text>
+                      <Text style={styles.dayBarLabelValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
+                        {formatCompactTime(category.minutes)}
+                      </Text>
                     </View>
                     <View style={[
                       styles.giantBar,
@@ -760,12 +795,17 @@ export default function ScreenTimeDashboard() {
       </View>
       <Modal visible={Boolean(selectedCategory)} transparent statusBarTranslucent animationType="none" onRequestClose={closeCategorySheet}>
         <View style={styles.modalRoot}>
-          <Pressable style={styles.sheetBackdrop} onPress={closeCategorySheet} />
+          <View style={styles.sheetBackdrop} />
           <Animated.View style={[styles.sheetWrap, { transform: [{ translateY: sheetTranslateY }] }]}>
             <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>
-              {selectedCategory ? `${selectedCategory.label} Apps` : 'Apps'}
-            </Text>
+            <View style={styles.sheetTitleRow}>
+              <Text style={styles.sheetTitle}>
+                {selectedCategory ? `${selectedCategory.label} Apps` : 'Apps'}
+              </Text>
+              <Pressable style={styles.sheetCloseButton} onPress={closeCategorySheet} hitSlop={10}>
+                <Text style={styles.sheetCloseText}>Close</Text>
+              </Pressable>
+            </View>
             {selectedApps.length > 0 ? (
               selectedApps.map((app) => (
                 <View key={app.id} style={styles.sheetRow}>
@@ -923,6 +963,26 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.textSecondary,
   },
+  averageLineWrap: {
+    position: 'absolute',
+    left: 10,
+    right: 35,
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 2
+  },
+  averageLineLabel: {
+    color: '#6E6E73',
+    fontSize: 10,
+    fontWeight: '700',
+    marginRight: 6
+  },
+  averageLine: {
+    flex: 1,
+    borderTopWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#B8B8BE'
+  },
   barsWrapper: {
     flex: 1,
     flexDirection: 'row',
@@ -1013,7 +1073,10 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10
+    marginRight: 10,
+    backgroundColor: '#F7F7FA',
+    borderWidth: 1,
+    borderColor: '#ECECF2'
   },
   iosGlyphDot: {
     width: 10,
@@ -1103,7 +1166,22 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#111111',
+    flex: 1
+  },
+  sheetTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 12
+  },
+  sheetCloseButton: {
+    minHeight: 30,
+    justifyContent: 'center',
+    paddingLeft: 14
+  },
+  sheetCloseText: {
+    color: '#007AFF',
+    fontSize: 13,
+    fontWeight: '700'
   },
   sheetRow: {
     flexDirection: 'row',
@@ -1180,6 +1258,7 @@ const styles = StyleSheet.create({
   },
   dayBarLabelContainer: {
     marginBottom: 8,
+    width: '100%'
   },
   dayBarLabelTitle: {
     fontSize: 12,
@@ -1190,6 +1269,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '400',
     color: COLORS.textMain,
+    includeFontPadding: false
   },
   giantBar: {
     width: '100%',

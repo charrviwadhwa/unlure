@@ -43,6 +43,14 @@ export const UserStore = {
     await AsyncStorage.setItem('@user_name', name);
   },
 
+  async hasAcceptedAccessibilityDisclosure(): Promise<boolean> {
+    return (await AsyncStorage.getItem('@accessibility_disclosure_accepted')) === 'true';
+  },
+
+  async acceptAccessibilityDisclosure(): Promise<void> {
+    await AsyncStorage.setItem('@accessibility_disclosure_accepted', 'true');
+  },
+
   // --- NEW: App Selection & Limits ---
   async setAppLimit(packageName: string, minutes: number): Promise<void> {
     const limits = await this.getAllLimits();
