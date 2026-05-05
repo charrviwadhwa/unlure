@@ -24,7 +24,13 @@ type PermissionRow = {
   action: () => void | Promise<void>;
 };
 
-export const PermissionSetupScreen = ({ onComplete }: { onComplete: () => void }) => {
+export const PermissionSetupScreen = ({
+  onComplete,
+  actionLabel = 'Continue'
+}: {
+  onComplete: () => void;
+  actionLabel?: string;
+}) => {
   const [usageEnabled, setUsageEnabled] = useState(false);
   const [detectionEnabled, setDetectionEnabled] = useState(false);
   const [overlayEnabled, setOverlayEnabled] = useState(false);
@@ -121,7 +127,7 @@ export const PermissionSetupScreen = ({ onComplete }: { onComplete: () => void }
 
       <View style={styles.footer}>
         <TouchableOpacity style={styles.continueButton} onPress={onComplete} activeOpacity={0.88}>
-          <Text style={styles.continueText}>Continue</Text>
+          <Text style={styles.continueText}>{actionLabel}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

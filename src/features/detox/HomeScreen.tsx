@@ -61,20 +61,6 @@ const MOOD_LABELS: Record<MoodType, string> = {
   empty: 'No tracking'
 };
 const LEGEND_ITEMS: MoodType[] = [MOOD_TYPES.GREAT, MOOD_TYPES.GOOD, MOOD_TYPES.NEUTRAL, MOOD_TYPES.AWFUL];
-const DOTTED_FACE_DOTS = [
-  [12, 2.2],
-  [17, 3.6],
-  [20.4, 7.4],
-  [21.2, 12],
-  [20.4, 16.6],
-  [17, 20.4],
-  [12, 21.8],
-  [7, 20.4],
-  [3.6, 16.6],
-  [2.8, 12],
-  [3.6, 7.4],
-  [7, 3.6]
-];
 
 const ChevronIcon = ({ direction }: { direction: 'left' | 'right' }) => (
   <Svg width={18} height={18} viewBox="0 0 24 24">
@@ -104,10 +90,7 @@ const MoodFace = ({ type }: { type: MoodType }) => {
   if (isFrown) {
     return (
       <Svg width={24} height={24} viewBox="0 0 24 24">
-        <Circle cx={12} cy={12} r={9.4} fill={theme.bg} />
-        {DOTTED_FACE_DOTS.map(([cx, cy], index) => (
-          <Circle key={index} cx={cx} cy={cy} r={0.95} fill={theme.line} />
-        ))}
+        <Circle cx={12} cy={12} r={10} fill={theme.bg} stroke={theme.line} strokeWidth={1.6} />
         <Circle cx={8.5} cy={9.5} r={1.45} fill={theme.line} />
         <Circle cx={15.5} cy={9.5} r={1.45} fill={theme.line} />
         <Path

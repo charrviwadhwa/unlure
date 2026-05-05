@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+﻿import React, { useCallback, useEffect, useState } from 'react';
 import { Image, Platform, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ScreenTimeService, DailyUsageMap } from '../../services/ScreenTimeService';
 import { DailyLimitSnapshots, DailyMoodSnapshots, UserStore } from '../../services/storage';
@@ -34,9 +34,10 @@ const FONT_SEMIBOLD = Platform.select({ ios: 'System', android: 'sans-serif-medi
 
 interface StreakScreenProps {
   onEditApps: () => void;
+  onOpenFocusSetup: () => void;
 }
 
-const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
+const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetup }) => {
   const [streak, setStreak] = useState(0);
   const [todayApps, setTodayApps] = useState<StreakAppRow[]>([]);
   const [weekCells, setWeekCells] = useState<DayCell[]>([]);
@@ -244,6 +245,10 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps }) => {
             <Text style={styles.pageTitle}>Streak</Text>
             <Text style={styles.pageDate}>This week</Text>
           </View>
+          <TouchableOpacity style={styles.focusSetupButton} onPress={onOpenFocusSetup} activeOpacity={0.76}>
+            <Image source={require('../../assets/image.png')} style={styles.focusSetupImage} resizeMode="contain" />
+            <Text style={styles.focusSetupText}>Focus</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.heroStack}>
@@ -373,6 +378,7 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 22
   },
   headerCopy: {
@@ -391,6 +397,35 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     fontFamily: FONT_REGULAR,
     fontWeight: '500'
+  },
+  focusSetupButton: {
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F7F7FA',
+    borderWidth: 1,
+    borderColor: '#ECECF2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    paddingLeft: 9,
+    paddingRight: 12,
+    marginLeft: 14,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 1
+  },
+  focusSetupImage: {
+    width: 17,
+    height: 17,
+    marginRight: 6
+  },
+  focusSetupText: {
+    color: '#1C1C1E',
+    fontSize: 12,
+    fontFamily: FONT_SEMIBOLD,
+    fontWeight: '700'
   },
   editAppsButton: {
     height: 30,
@@ -451,9 +486,9 @@ const styles = StyleSheet.create({
   },
   heroBody: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 22
+    marginTop: 12
   },
   heroCopy: {
     flex: 1,
@@ -461,8 +496,7 @@ const styles = StyleSheet.create({
   },
   heroGif: {
     width: 118,
-    height: 118,
-    marginBottom: -4
+    height: 118
   },
   streakNumberWrap: {
     alignSelf: 'flex-start',

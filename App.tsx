@@ -13,7 +13,7 @@ import { UserStore } from './src/services/storage';
 import { ScreenTimeService } from './src/services/ScreenTimeService';
 
 const App = () => {
-  const [currentStep, setCurrentStep] = useState<'entry' | 'permissions' | 'selection' | 'main'>('entry');
+  const [currentStep, setCurrentStep] = useState<'entry' | 'permissions' | 'settings' | 'selection' | 'main'>('entry');
   const [activeTab, setActiveTab] = useState<'home' | 'streak' | 'analytics'>('home');
   const [mountedTabs, setMountedTabs] = useState<Record<'home' | 'streak' | 'analytics', boolean>>({
     home: true,
@@ -63,6 +63,10 @@ const App = () => {
           <PermissionSetupScreen onComplete={() => setCurrentStep('selection')} />
         )}
 
+        {currentStep === 'settings' && (
+          <PermissionSetupScreen actionLabel="Done" onComplete={() => setCurrentStep('main')} />
+        )}
+
         {currentStep === 'selection' && (
           <AppSelectionScreen onComplete={() => setCurrentStep('main')} />
         )}
@@ -76,7 +80,10 @@ const App = () => {
             )}
             {mountedTabs.streak && (
               <View pointerEvents={isMain && activeTab === 'streak' ? 'auto' : 'none'} style={[styles.tabScreen, activeTab === 'streak' ? styles.tabVisible : styles.tabHidden]}>
-                <StreakScreen onEditApps={() => setCurrentStep('selection')} />
+                <StreakScreen
+                  onEditApps={() => setCurrentStep('selection')}
+                  onOpenFocusSetup={() => setCurrentStep('settings')}
+                />
               </View>
             )}
             {mountedTabs.analytics && (
