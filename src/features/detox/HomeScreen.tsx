@@ -9,7 +9,8 @@ import {
   TouchableOpacity,
   Dimensions,
   Platform,
-  StatusBar
+  StatusBar,
+  InteractionManager
 } from 'react-native';
 import { useColorScheme } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
@@ -130,7 +131,7 @@ const formatDateKey = (date: Date) => {
   return `${y}-${m}-${d}`;
 };
 
-export const HomeScreen = () => {
+export const HomeScreen = ({ active = true }: { active?: boolean }) => {
   const isDark = useColorScheme() === 'dark';
   const theme = {
     bg: isDark ? '#121418' : COLORS.bg,
@@ -307,8 +308,10 @@ export const HomeScreen = () => {
   }, [buildCalendar, resolveStoredMood]);
 
   useEffect(() => {
-    load(new Date());
-  }, [load]);
+    if (!active) return;
+    const task = InteractionManager.runAfterInteractions(() => load(new Date()));
+    return () => task.cancel();
+  }, [active, load]);
 
   useEffect(() => {
     buildCalendar(monthDate, statsCache, limitSnapshotsCache, limitsCache, savedMoodsCache, focusDecisionsCache, trackingStartDate);

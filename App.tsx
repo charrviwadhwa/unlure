@@ -53,6 +53,14 @@ const App = () => {
     initialize();
   }, []);
 
+  useEffect(() => {
+    if (!isMain) return;
+    const timer = setTimeout(() => {
+      setMountedTabs({ home: true, streak: true, analytics: true });
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [isMain]);
+
   if (!isReady) return <View style={{ flex: 1, backgroundColor: appBg }} />;
 
   return (
@@ -77,12 +85,13 @@ const App = () => {
           <View style={styles.main}>
             {mountedTabs.home && (
               <View pointerEvents={isMain && activeTab === 'home' ? 'auto' : 'none'} style={[styles.tabScreen, activeTab === 'home' ? styles.tabVisible : styles.tabHidden]}>
-                <OverviewScreen />
+                <OverviewScreen active={activeTab === 'home'} />
               </View>
             )}
             {mountedTabs.streak && (
               <View pointerEvents={isMain && activeTab === 'streak' ? 'auto' : 'none'} style={[styles.tabScreen, activeTab === 'streak' ? styles.tabVisible : styles.tabHidden]}>
                 <StreakScreen
+                  active={activeTab === 'streak'}
                   onEditApps={() => setCurrentStep('selection')}
                   onOpenFocusSetup={() => setCurrentStep('settings')}
                 />
@@ -90,7 +99,7 @@ const App = () => {
             )}
             {mountedTabs.analytics && (
               <View pointerEvents={isMain && activeTab === 'analytics' ? 'auto' : 'none'} style={[styles.tabScreen, activeTab === 'analytics' ? styles.tabVisible : styles.tabHidden]}>
-                <HomeScreen />
+                <HomeScreen active={activeTab === 'analytics'} />
               </View>
             )}
             <View pointerEvents="box-none" style={styles.bottomNavWrap}>

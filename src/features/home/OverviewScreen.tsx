@@ -15,6 +15,7 @@ import {
   Platform,
   StatusBar,
   AppState,
+  InteractionManager,
   useColorScheme,
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
@@ -47,6 +48,7 @@ type AppRow = {
   id: string;
   name: string;
   minutes: number;
+  totalMs: number;
   iconBase64?: string;
 };
 
@@ -168,14 +170,14 @@ const categorizeApp = (name: string, packageName: string): CategoryKey => {
   return 'others';
 };
 
-const buildChartCategories = (totals: Record<CategoryKey, number>): ChartCategory[] => {
+const buildChartCategories = (totals: Record<CategoryKey, number>, topCount = 3): ChartCategory[] => {
   const specificKeys = CATEGORY_KEYS.filter((key) => key !== 'others');
   const sorted = specificKeys
     .map((key) => ({ key, minutes: totals[key] || 0 }))
     .filter((item) => item.minutes > 0)
     .sort((a, b) => b.minutes - a.minutes);
-  const top = sorted.slice(0, 3);
-  const rest = [...sorted.slice(3), { key: 'others' as CategoryKey, minutes: totals.others || 0 }]
+  const top = sorted.slice(0, topCount);
+  const rest = [...sorted.slice(topCount), { key: 'others' as CategoryKey, minutes: totals.others || 0 }]
     .filter((item) => item.minutes > 0);
   const result: ChartCategory[] = top.map(({ key, minutes }) => ({
     key,
@@ -331,7 +333,7 @@ const CategoryGlyph = ({ category, color }: { category: CategoryKey | 'otherSumm
   }
 };
 
-export default function ScreenTimeDashboard() {
+export default function ScreenTimeDashboard({ active = true }: { active?: boolean }) {
   const isDark = useColorScheme() === 'dark';
   const ui = {
     bg: isDark ? '#121418' : COLORS.bg,
@@ -343,7 +345,6 @@ export default function ScreenTimeDashboard() {
   };
   const chartFadeTail = isDark ? '#1E232B' : '#FFFFFF';
   const [viewMode, setViewMode] = useState('day');
-  const [todayApps, setTodayApps] = useState<AppRow[]>([]);
   const [storedStats, setStoredStats] = useState<DailyUsageMap>({});
   const [appNames, setAppNames] = useState<Record<string, string>>({});
   const [appIcons, setAppIcons] = useState<Record<string, string | undefined>>({});
@@ -378,26 +379,17 @@ export default function ScreenTimeDashboard() {
     const nextTodayKey = formatDateKey(now);
     setCurrentTime(now);
     setTodayKey(nextTodayKey);
-    const todayMap = dailyStats[nextTodayKey] || {};
-    const rows = Object.keys(todayMap)
-      .map((pkg) => ({
-        id: pkg,
-        name: nameMap[pkg] || labelFromPackage(pkg),
-        minutes: Math.floor(todayMap[pkg] / 60000),
-        iconBase64: iconMap[pkg]
-      }))
-      .filter((row) => row.minutes > 0)
-      .sort((a, b) => b.minutes - a.minutes);
-
-    setTodayApps(rows);
     setStoredStats(dailyStats);
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (!active) return;
+    const task = InteractionManager.runAfterInteractions(load);
+    return () => task.cancel();
+  }, [active, load]);
 
   useEffect(() => {
+    if (!active) return;
     const interval = setInterval(load, 30000);
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
@@ -409,7 +401,7 @@ export default function ScreenTimeDashboard() {
       clearInterval(interval);
       subscription.remove();
     };
-  }, [load]);
+  }, [active, load]);
 
   useMidnightRefresh(load);
 
@@ -438,14 +430,24 @@ export default function ScreenTimeDashboard() {
     [todayKey]
   );
 
-  const categoryMinutes = useMemo(() => {
-    const totals = createEmptyCategoryTotals();
-    todayApps.forEach((app) => {
-      const category = categorizeApp(app.name, app.id);
-      totals[category] += app.minutes;
-    });
-    return totals;
-  }, [todayApps]);
+  const todayApps = useMemo(() => {
+    const todayMap = storedStats[todayKey] || {};
+    return Object.entries(todayMap)
+      .map(([pkg, ms]) => ({
+        id: pkg,
+        name: appNames[pkg] || labelFromPackage(pkg),
+        minutes: Math.floor(ms / 60000),
+        totalMs: ms,
+        iconBase64: appIcons[pkg]
+      }))
+      .filter((row) => row.totalMs > 0)
+      .sort((a, b) => b.totalMs - a.totalMs);
+  }, [appIcons, appNames, storedStats, todayKey]);
+
+  const visibleTodayApps = useMemo(
+    () => todayApps.filter((app) => app.minutes > 0),
+    [todayApps]
+  );
 
   const categoryApps = useMemo(() => {
     const grouped = CATEGORY_KEYS.reduce<Record<CategoryKey, AppRow[]>>((acc, key) => {
@@ -461,6 +463,14 @@ export default function ScreenTimeDashboard() {
     });
     return grouped;
   }, [todayApps]);
+
+  const categoryMinutes = useMemo(() => {
+    const totals = createEmptyCategoryTotals();
+    CATEGORY_KEYS.forEach((key) => {
+      totals[key] = Math.floor(categoryApps[key].reduce((sum, app) => sum + app.totalMs, 0) / 60000);
+    });
+    return totals;
+  }, [categoryApps]);
 
   const weekData = useMemo(() => {
     return weekDays.map((day) => {
@@ -488,11 +498,12 @@ export default function ScreenTimeDashboard() {
         const category = categorizeApp(name, pkg);
         const minutes = Math.floor(ms / 60000);
         if (minutes <= 0) return;
-        const existing = grouped[category].find((app) => app.id === pkg);
+      const existing = grouped[category].find((app) => app.id === pkg);
         if (existing) {
           existing.minutes += minutes;
+          existing.totalMs += ms;
         } else {
-          grouped[category].push({ id: pkg, name, minutes, iconBase64: appIcons[pkg] });
+          grouped[category].push({ id: pkg, name, minutes, totalMs: ms, iconBase64: appIcons[pkg] });
         }
       });
     });
@@ -514,11 +525,13 @@ export default function ScreenTimeDashboard() {
         const existing = totals[pkg];
         if (existing) {
           existing.minutes += minutes;
+          existing.totalMs += ms;
         } else {
           totals[pkg] = {
             id: pkg,
             name: appNames[pkg] || labelFromPackage(pkg),
             minutes,
+            totalMs: ms,
             iconBase64: appIcons[pkg]
           };
         }
@@ -540,17 +553,17 @@ export default function ScreenTimeDashboard() {
     }, createEmptyCategoryTotals()),
     [weekData]
   );
-  const weekChartCategories = useMemo(() => buildChartCategories(weekCategoryMinutes), [weekCategoryMinutes]);
-  const dayChartCategories = useMemo(() => buildChartCategories(categoryMinutes), [categoryMinutes]);
+  const weekChartCategories = useMemo(() => buildChartCategories(weekCategoryMinutes, 3), [weekCategoryMinutes]);
+  const dayChartCategories = useMemo(() => buildChartCategories(categoryMinutes, 2), [categoryMinutes]);
   const weekAverageMinutes = Math.floor(weekTotalMinutes / 7);
-  const dayTotalMinutes = CATEGORY_KEYS.reduce((acc, key) => acc + categoryMinutes[key], 0);
+  const dayTotalMinutes = Math.floor(todayApps.reduce((acc, app) => acc + app.totalMs, 0) / 60000);
   const weekMaxMinutes = Math.max(...weekData.map((d) => CATEGORY_KEYS.reduce((acc, key) => acc + d.totals[key], 0)), 1);
   const weekAxisScale = getWeekAxisScale(weekMaxMinutes);
   const weekAxisMaxMinutes = weekAxisScale.max;
   const weekAxisTicks = weekAxisScale.ticks;
   const weekAverageLineBottom = 24 + Math.min((weekAverageMinutes / weekAxisMaxMinutes) * WEEK_BAR_MAX_HEIGHT, WEEK_BAR_MAX_HEIGHT);
   const dayMaxMinutes = Math.max(...dayChartCategories.map((item) => item.minutes), 1);
-  const maxTodayAppMinutes = Math.max(...todayApps.map((app) => app.minutes), 1);
+  const maxTodayAppMinutes = Math.max(...visibleTodayApps.map((app) => app.minutes), 1);
   const maxWeekCategoryMinutes = Math.max(...weekChartCategories.map((category) => category.minutes), 1);
   const dayScale = 280 / dayMaxMinutes;
   const selectedApps = selectedCategory
@@ -750,7 +763,7 @@ export default function ScreenTimeDashboard() {
                 {weekChartCategories.map((category) => (
                   <Pressable
                     key={category.key}
-                    style={({ pressed }) => [styles.iosUsageRow, pressed && styles.iosUsageRowPressed]}
+                    style={({ pressed }) => [styles.iosUsageRow, { borderBottomColor: ui.border }, pressed && styles.iosUsageRowPressed]}
                     onPress={() => setSelectedCategory(category)}
                   >
                     <View style={styles.iosUsageMain}>
@@ -832,11 +845,11 @@ export default function ScreenTimeDashboard() {
 
               <Text style={[styles.sectionTitle, { color: ui.text }]}>Apps today</Text>
               <View style={styles.iosList}>
-                {todayApps.slice(0, 6).map((app) => {
+                {visibleTodayApps.map((app) => {
                   const category = categorizeApp(app.name, app.id);
                   const theme = COLORS[category];
                   return (
-                    <View style={styles.iosUsageRow} key={app.id}>
+                    <View style={[styles.iosUsageRow, { borderBottomColor: ui.border }]} key={app.id}>
                       <View style={styles.iosUsageMain}>
                         {app.iconBase64 ? (
                           <Image source={{ uri: `data:image/png;base64,${app.iconBase64}` }} style={styles.appIconImage} resizeMode="cover" />
@@ -848,7 +861,7 @@ export default function ScreenTimeDashboard() {
                         <Text style={[styles.iosUsageName, { color: ui.text }]} numberOfLines={1}>{app.name}</Text>
                       </View>
                       <View style={styles.iosUsageRight}>
-                        <Text style={[styles.iosUsageTime, { color: ui.text }]}>{formatTime(app.minutes)}</Text>
+                      <Text style={[styles.iosUsageTime, { color: ui.text }]}>{formatTime(app.minutes)}</Text>
                         <View style={[styles.iosMiniTrack, { backgroundColor: ui.track }]}>
                           <View
                             style={[
@@ -864,7 +877,7 @@ export default function ScreenTimeDashboard() {
                     </View>
                   );
                 })}
-                {todayApps.length === 0 ? (
+                {visibleTodayApps.length === 0 ? (
                   <View style={styles.iosEmpty}>
                     <Image
                       source={require('../../assets/share-paper-plane.png')}
@@ -898,7 +911,7 @@ export default function ScreenTimeDashboard() {
             </View>
             {selectedApps.length > 0 ? (
               selectedApps.map((app) => (
-                <View key={app.id} style={styles.sheetRow}>
+                <View key={app.id} style={[styles.sheetRow, { borderBottomColor: ui.border }]}>
                   <View style={styles.sheetAppLeft}>
                     {app.iconBase64 ? (
                       <Image source={{ uri: `data:image/png;base64,${app.iconBase64}` }} style={styles.sheetAppIcon} resizeMode="cover" />
@@ -1404,15 +1417,15 @@ const styles = StyleSheet.create({
   },
   dayChartContainerCompact: {
     justifyContent: 'center',
-    gap: 34
+    gap: 18
   },
   dayChartContainerSpread: {
-    justifyContent: 'space-between',
-    gap: 10
+    justifyContent: 'center',
+    gap: 12
   },
   dayBarColumn: {
     alignItems: 'flex-start',
-    width: (width - 48 - 30) / 4,
+    width: Math.min(128, Math.max(96, (width - 48 - 24) / 3)),
   },
   dayBarLabelContainer: {
     marginBottom: 8,

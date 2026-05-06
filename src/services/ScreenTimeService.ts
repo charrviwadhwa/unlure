@@ -5,6 +5,8 @@ const { UsageModule } = NativeModules;
 let storeTodayStatsPromise: Promise<boolean> | null = null;
 let storedDailyStatsPromise: Promise<DailyUsageMap> | null = null;
 let installedAppsPromise: Promise<AppInfo[]> | null = null;
+let lastStoreTodayStatsAt = 0;
+const STORE_TODAY_STATS_TTL_MS = 15000;
 
 export interface AppUsage {
   id: string;
@@ -117,12 +119,17 @@ export const ScreenTimeService = {
     }
   },
 
-  async storeTodayStats(): Promise<boolean> {
+  async storeTodayStats(forceRefresh = false): Promise<boolean> {
     if (Platform.OS !== 'android') return false;
+    const now = Date.now();
+    if (!forceRefresh && storedDailyStatsPromise && now - lastStoreTodayStatsAt < STORE_TODAY_STATS_TTL_MS) {
+      return true;
+    }
     if (storeTodayStatsPromise) return storeTodayStatsPromise;
     try {
       const promise = UsageModule.storeTodayStats()
         .then((result: boolean) => {
+          lastStoreTodayStatsAt = Date.now();
           storedDailyStatsPromise = null;
           return result;
         })

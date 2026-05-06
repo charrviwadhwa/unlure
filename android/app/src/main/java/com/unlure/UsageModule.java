@@ -26,6 +26,7 @@ import android.content.pm.ResolveInfo;
 import android.content.SharedPreferences;
 import java.util.HashSet;
 import java.util.HashMap;
+import java.util.Set;
 import java.util.Map;
 import org.json.JSONObject;
 import org.json.JSONException;
@@ -57,6 +58,31 @@ public class UsageModule extends ReactContextBaseJavaModule {
 
     private boolean isSelfPackage(String packageName) {
         return packageName != null && packageName.equals(getReactApplicationContext().getPackageName());
+    }
+
+    private HashSet<String> getCountableLaunchablePackages(PackageManager pm) {
+        Intent launcherIntent = new Intent(Intent.ACTION_MAIN, null);
+        launcherIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+        List<ResolveInfo> launchableApps = pm.queryIntentActivities(launcherIntent, 0);
+        HashSet<String> packages = new HashSet<>();
+
+        for (ResolveInfo resolveInfo : launchableApps) {
+            if (resolveInfo.activityInfo == null || resolveInfo.activityInfo.packageName == null) continue;
+            String packageName = resolveInfo.activityInfo.packageName;
+            if (isSelfPackage(packageName) || isSystemShellPackage(packageName)) continue;
+            packages.add(packageName);
+        }
+
+        return packages;
+    }
+
+    private boolean isSystemShellPackage(String packageName) {
+        if (packageName == null) return true;
+        return packageName.equals("android") ||
+            packageName.equals("com.android.systemui") ||
+            packageName.contains("launcher") ||
+            packageName.contains("permissioncontroller") ||
+            packageName.contains("packageinstaller");
     }
 
     private String drawableToBase64(Drawable drawable) {
@@ -118,6 +144,7 @@ public void getDailyStats(Promise promise) {
         HashMap<String, Long> totals = new HashMap<>();
         HashMap<String, Long> activeStarts = new HashMap<>();
         HashMap<String, Integer> openActivityCounts = new HashMap<>();
+        Set<String> countablePackages = getCountableLaunchablePackages(pm);
         HashMap<String, Boolean> activeAtStart = getActivePackagesAtStart(usm, pm, startTime);
         long maxWindow = Math.max(endTime - startTime, 0L);
 
@@ -133,7 +160,7 @@ public void getDailyStats(Promise promise) {
         while (usageEvents.hasNextEvent()) {
             usageEvents.getNextEvent(event);
             String pkg = event.getPackageName();
-            if (pkg == null || isSelfPackage(pkg) || pm.getLaunchIntentForPackage(pkg) == null) continue;
+            if (pkg == null || !countablePackages.contains(pkg)) continue;
 
             int type = event.getEventType();
             long eventTime = Math.min(Math.max(event.getTimeStamp(), startTime), endTime);
@@ -204,6 +231,7 @@ public void getDailyStats(Promise promise) {
 
     private HashMap<String, Boolean> getActivePackagesAtStart(UsageStatsManager usm, PackageManager pm, long startTime) {
         HashMap<String, Integer> lastEvents = new HashMap<>();
+        Set<String> countablePackages = getCountableLaunchablePackages(pm);
         long lookbackStart = startTime - (12L * 60L * 60L * 1000L);
         UsageEvents previousEvents = usm.queryEvents(lookbackStart, startTime);
         if (previousEvents == null) return new HashMap<>();
@@ -212,7 +240,7 @@ public void getDailyStats(Promise promise) {
         while (previousEvents.hasNextEvent()) {
             previousEvents.getNextEvent(event);
             String pkg = event.getPackageName();
-            if (pkg == null || isSelfPackage(pkg) || pm.getLaunchIntentForPackage(pkg) == null) continue;
+            if (pkg == null || !countablePackages.contains(pkg)) continue;
 
             int type = event.getEventType();
             if (
@@ -375,6 +403,11 @@ public void getDailyStats(Promise promise) {
             }
         }
 
+        android.util.Log.d(
+            "FocusMode",
+            "getTodayFocusModeDecisions protected=" + protectedApps.toString()
+                + " bypassed=" + bypassedApps.toString()
+        );
         result.putMap("protectedApps", protectedApps);
         result.putMap("bypassedApps", bypassedApps);
         promise.resolve(result);
@@ -490,10 +523,36 @@ public void getDailyStats(Promise promise) {
 
             SharedPreferences prefs = getReactApplicationContext()
                 .getSharedPreferences(FocusModeService.PREFS_NAME, Context.MODE_PRIVATE);
-            prefs.edit()
+            JSONObject previousLimits = new JSONObject(
+                prefs.getString(FocusModeService.KEY_LIMITS_JSON, "{}")
+            );
+            SharedPreferences.Editor editor = prefs.edit()
                 .putString(FocusModeService.KEY_LIMITS_JSON, limitsJson.toString())
-                .putString(FocusModeService.KEY_NAMES_JSON, namesJson.toString())
-                .apply();
+                .putString(FocusModeService.KEY_NAMES_JSON, namesJson.toString());
+
+            SimpleDateFormat sdf = new SimpleDateFormat(DATE_FORMAT, Locale.US);
+            sdf.setTimeZone(TimeZone.getDefault());
+            String todayKey = sdf.format(Calendar.getInstance().getTime());
+            String protectedPrefix = FocusModeService.KEY_PROTECTED_PREFIX + todayKey + "_";
+            String bypassPrefix = FocusModeService.KEY_BYPASS_PREFIX + todayKey + "_";
+            for (String key : prefs.getAll().keySet()) {
+                String packageName = null;
+                if (key.startsWith(protectedPrefix)) {
+                    packageName = key.substring(protectedPrefix.length());
+                } else if (key.startsWith(bypassPrefix)) {
+                    packageName = key.substring(bypassPrefix.length());
+                }
+
+                if (packageName == null) continue;
+
+                int previousLimit = previousLimits.optInt(packageName, 0);
+                int nextLimit = limitsJson.optInt(packageName, 0);
+                if (previousLimit != nextLimit) {
+                    editor.remove(key);
+                }
+            }
+
+            editor.apply();
             promise.resolve(true);
         } catch (Exception e) {
             promise.reject("ERROR", e.getMessage());

@@ -1,5 +1,5 @@
 ﻿import React, { useCallback, useEffect, useState } from 'react';
-import { Image, Platform, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View, useColorScheme } from 'react-native';
+import { Image, InteractionManager, Platform, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View, useColorScheme } from 'react-native';
 import { ScreenTimeService, DailyUsageMap, FocusModeDecisions } from '../../services/ScreenTimeService';
 import { DailyLimitSnapshots, DailyMoodSnapshots, UserStore } from '../../services/storage';
 import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
@@ -36,26 +36,13 @@ const FONT_SEMIBOLD = Platform.select({ ios: 'System', android: 'sans-serif-medi
 const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
 const EMPTY_FOCUS_DECISIONS: FocusModeDecisions = { protectedApps: {}, bypassedApps: {} };
 
-const resolveLimitState = (app: StreakAppRow) => {
-  const ratio = app.limitMinutes > 0 ? app.minutes / app.limitMinutes : 0;
-  if (ratio >= 1 && (app.bypassedToday || !app.protectedToday)) {
-    return { label: 'Broken', color: '#B93535', bg: '#FCE8E8', border: '#F4CACA' };
-  }
-  if (ratio >= 1 && app.protectedToday) {
-    return { label: 'Protected', color: '#9A6A00', bg: '#FFF4CF', border: '#EBCF7A' };
-  }
-  if (ratio >= 0.8) {
-    return { label: 'Near limit', color: '#A66F00', bg: '#FFF5D6', border: '#F2D88E' };
-  }
-  return { label: 'Safe', color: '#4C8C43', bg: '#EEF8EA', border: '#D8EFD2' };
-};
-
 interface StreakScreenProps {
+  active?: boolean;
   onEditApps: () => void;
   onOpenFocusSetup: () => void;
 }
 
-const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetup }) => {
+const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, onOpenFocusSetup }) => {
   const isDark = useColorScheme() === 'dark';
   const theme = {
     bg: isDark ? '#121418' : '#FFFFFF',
@@ -255,8 +242,10 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
   };
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (!active) return;
+    const task = InteractionManager.runAfterInteractions(load);
+    return () => task.cancel();
+  }, [active, load]);
 
   useMidnightRefresh(load);
 
@@ -377,12 +366,14 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
               todayApps.map((app) => {
                 const ratio = app.limitMinutes > 0 ? app.minutes / app.limitMinutes : 0;
                 const fillWidth = app.minutes > 0 ? Math.min(Math.max(ratio * 100, 4), 100) : 0;
-                const state = resolveLimitState(app);
-                const fillColor = state.label === 'Broken'
+                const isBroken = ratio >= 1 && (app.bypassedToday || !app.protectedToday);
+                const isProtected = ratio >= 1 && app.protectedToday;
+                const isNearLimit = ratio >= 0.8;
+                const fillColor = isBroken
                   ? '#D65A5A'
-                  : state.label === 'Protected'
+                  : isProtected
                     ? '#E4A62A'
-                    : state.label === 'Near limit'
+                    : isNearLimit
                       ? '#E4A62A'
                       : app.minutes === 0
                         ? '#D7D7DC'
@@ -402,9 +393,6 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
                         <Text style={[styles.appName, { color: theme.text }]} numberOfLines={1}>{app.name}</Text>
                       </View>
                       <View style={styles.appUsageRight}>
-                        <View style={[styles.statePill, { backgroundColor: state.bg, borderColor: state.border }]}>
-                          <Text style={[styles.stateText, { color: state.color }]}>{state.label}</Text>
-                        </View>
                         <Text
                           style={[styles.appMinutes, { color: theme.text }, app.minutes === 0 && styles.appMinutesUnused]}
                           numberOfLines={1}
@@ -773,20 +761,6 @@ const styles = StyleSheet.create({
   appUsageRight: {
     width: 150,
     alignItems: 'flex-end'
-  },
-  statePill: {
-    height: 22,
-    borderRadius: 11,
-    paddingHorizontal: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 5
-  },
-  stateText: {
-    fontSize: 11,
-    fontFamily: FONT_SEMIBOLD,
-    fontWeight: '800'
   },
   usageTrack: {
     width: 120,

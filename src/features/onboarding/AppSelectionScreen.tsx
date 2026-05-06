@@ -56,9 +56,9 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
   const [modalVisible, setModalVisible] = useState(false);
   const [activeApp, setActiveApp] = useState<AppInfo | null>(null);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (forceRefresh = false) => {
     const [allApps, storedLimits] = await Promise.all([
-      ScreenTimeService.getInstalledApps(true),
+      ScreenTimeService.getInstalledApps(forceRefresh),
       UserStore.getAllLimits()
     ]);
     setApps(allApps);
@@ -72,7 +72,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await loadData();
+      await loadData(true);
     } finally {
       setRefreshing(false);
     }
