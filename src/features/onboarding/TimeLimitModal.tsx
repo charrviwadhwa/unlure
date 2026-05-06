@@ -114,6 +114,6 @@ const styles = StyleSheet.create({
   picker: { width: '100%', height: 200, backgroundColor: 'transparent' },
   buttonRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 35 },
   cancelText: { color: '#666', fontSize: 16, fontWeight: '600' },
-  confirmButton: { backgroundColor: '#111111', paddingHorizontal: 50, paddingVertical: 18, borderRadius: 18, elevation: 6 },
+  confirmButton: { backgroundColor: '#1C1C1E', paddingHorizontal: 50, paddingVertical: 18, borderRadius: 18, elevation: 3 },
   confirmText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 }
 });

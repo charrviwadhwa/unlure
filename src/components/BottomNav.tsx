@@ -74,7 +74,7 @@ const BottomNavComponent: React.FC<BottomNavProps> = ({ active, onChange }) => {
 export const BottomNav = React.memo(BottomNavComponent);
 
 const styles = StyleSheet.create({
-  wrapper: { paddingHorizontal: 20, paddingBottom: 20, alignItems: 'center', backgroundColor: 'transparent' },
+  wrapper: { paddingHorizontal: 20, paddingBottom: 28, alignItems: 'center', backgroundColor: 'transparent' },
   bar: {
     flexDirection: 'row',
     backgroundColor: '#141414',

@@ -15,6 +15,7 @@ import { ScreenTimeService } from '../../services/ScreenTimeService';
 import { UserStore } from '../../services/storage';
 
 type PermissionKey = 'usage' | 'detection' | 'overlay';
+const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
 
 type PermissionRow = {
   key: PermissionKey;
@@ -93,6 +94,7 @@ export const PermissionSetupScreen = ({
         bounces={false}
       >
         <Image source={require('../../assets/Completed 1.png')} style={styles.heroImage} resizeMode="contain" />
+        <Text style={styles.brandMark}>unlure</Text>
         <Text style={styles.title}>Set up Focus Mode</Text>
         <Text style={styles.subtitle}>
           Enable these permissions so Unlure can track limits, detect selected app openings, and show streak-saving warnings.
@@ -142,7 +144,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 24,
     paddingTop: Platform.OS === 'android' ? Math.max((StatusBar.currentHeight ?? 0) + 20, 44) : 18,
-    paddingBottom: 118
+    paddingBottom: 136
   },
   heroImage: {
     width: 142,
@@ -155,6 +157,15 @@ const styles = StyleSheet.create({
     fontSize: 32,
     lineHeight: 36,
     fontWeight: '800'
+  },
+  brandMark: {
+    color: '#6E6E73',
+    fontSize: 18,
+    lineHeight: 22,
+    fontFamily: FONT_SCRIPT,
+    fontWeight: '600',
+    letterSpacing: 0,
+    marginBottom: 4
   },
   subtitle: {
     color: '#7C7C84',
@@ -218,16 +229,19 @@ const styles = StyleSheet.create({
     minWidth: 82,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#111111',
+    backgroundColor: '#F7F7FA',
+    borderWidth: 1,
+    borderColor: '#ECECF2',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 14
   },
   permissionActionEnabled: {
-    backgroundColor: '#E8F8EA'
+    backgroundColor: '#E8F8EA',
+    borderColor: '#CDEFD3'
   },
   permissionActionText: {
-    color: '#FFFFFF',
+    color: '#1C1C1E',
     fontSize: 13,
     fontWeight: '800'
   },
@@ -247,14 +261,14 @@ const styles = StyleSheet.create({
   continueButton: {
     minHeight: 54,
     borderRadius: 27,
-    backgroundColor: '#111111',
+    backgroundColor: '#1C1C1E',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    elevation: 8
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4
   },
   continueText: {
     color: '#FFFFFF',

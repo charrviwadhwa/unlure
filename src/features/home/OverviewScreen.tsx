@@ -17,24 +17,25 @@ import {
   AppState,
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import LinearGradient from 'react-native-linear-gradient';
 import { ScreenTimeService, DailyUsageMap } from '../../services/ScreenTimeService';
 import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
 
 const { width } = Dimensions.get('window');
 
 const COLORS = {
-  social: { solid: '#528DF5', light: '#DEEAFE', border: '#7CA0E6' },
-  games: { solid: '#9B6EF3', light: '#EEE8FE', border: '#A987EC' },
-  entertainment: { solid: '#E8B63F', light: '#FDF0D5', border: '#E2BD6D' },
-  creativity: { solid: '#F06F9A', light: '#FDE7EF', border: '#E989A9' },
-  productivityFinance: { solid: '#4DB1B4', light: '#E1F6F5', border: '#81C5C7' },
-  education: { solid: '#5A9A62', light: '#E4F3E7', border: '#7FB586' },
-  informationReading: { solid: '#8A7D6D', light: '#F0ECE6', border: '#A29584' },
-  healthFitness: { solid: '#EF7F52', light: '#FDE9DF', border: '#E79A79' },
-  utilities: { solid: '#6F8FAF', light: '#E8EEF5', border: '#86A1BC' },
-  shoppingFood: { solid: '#D66D75', light: '#FBE7E9', border: '#DF8A91' },
-  travel: { solid: '#45A6D8', light: '#E3F2FA', border: '#74B9DE' },
-  others: { solid: '#9B9BA3', light: '#EFEFF2', border: '#B8B8BE' },
+  social: { solid: '#528DF5', light: '#E5EEFF', border: '#5F8FF2' },
+  games: { solid: '#9B6EF3', light: '#F0E9FF', border: '#9A74EF' },
+  entertainment: { solid: '#F2B84B', light: '#FFF3D8', border: '#E6B451' },
+  creativity: { solid: '#F06F9A', light: '#FDE7EF', border: '#EA6F99' },
+  productivityFinance: { solid: '#26B6B0', light: '#DDF7F4', border: '#35AAA6' },
+  education: { solid: '#52B66A', light: '#E3F8E9', border: '#5EAE71' },
+  informationReading: { solid: '#7A8CFF', light: '#EAEDFF', border: '#7585F2' },
+  healthFitness: { solid: '#FF7A59', light: '#FFE9E1', border: '#F27656' },
+  utilities: { solid: '#3DA9FC', light: '#E4F3FF', border: '#4D9FE8' },
+  shoppingFood: { solid: '#FF6B8A', light: '#FFE8EE', border: '#F06A87' },
+  travel: { solid: '#19B8D8', light: '#DDF8FC', border: '#2BAFC8' },
+  others: { solid: '#8C7CFF', light: '#EFECFF', border: '#8878F0' },
   textMain: '#000000',
   textSecondary: '#8E8E93',
   bg: '#FFFFFF',
@@ -141,7 +142,8 @@ const CATEGORY_ICONS: Record<CategoryKey | 'otherSummary', string> = {
 };
 
 const GLYPH_SIZE = 16;
-const WEEK_BAR_MAX_HEIGHT = 140;
+const WEEK_BAR_MAX_HEIGHT = 118;
+const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
 
 const createEmptyCategoryTotals = () =>
   CATEGORY_KEYS.reduce<Record<CategoryKey, number>>((acc, key) => {
@@ -210,13 +212,14 @@ const formatAxisTime = (mins: number) => {
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 };
 
-const getNiceWeekAxisMax = (maxMinutes: number) => {
-  if (maxMinutes <= 10) return 10;
-  if (maxMinutes <= 30) return 30;
-  if (maxMinutes <= 60) return 60;
-  if (maxMinutes <= 120) return 120;
-  if (maxMinutes <= 240) return 240;
-  return Math.ceil(maxMinutes / 120) * 120;
+const getWeekAxisScale = (maxMinutes: number) => {
+  const padded = Math.max(maxMinutes * 1.2, 20);
+  const roughStep = padded / 4;
+  const niceSteps = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240];
+  const step = niceSteps.find((value) => value >= roughStep) || Math.ceil(roughStep / 60) * 60;
+  const max = step * 4;
+  const ticks = [max, max - step, max - step * 2, max - step * 3, 0];
+  return { max, ticks };
 };
 
 const CategoryGlyph = ({ category, color }: { category: CategoryKey | 'otherSummary'; color: string }) => {
@@ -481,6 +484,29 @@ export default function ScreenTimeDashboard() {
     return grouped;
   }, [appIcons, appNames, storedStats, weekDays]);
 
+  const weekTopApp = useMemo(() => {
+    const totals: Record<string, AppRow> = {};
+    weekDays.forEach((day) => {
+      const dayMap = storedStats[day.key] || {};
+      Object.entries(dayMap).forEach(([pkg, ms]) => {
+        const minutes = Math.floor(ms / 60000);
+        if (minutes <= 0) return;
+        const existing = totals[pkg];
+        if (existing) {
+          existing.minutes += minutes;
+        } else {
+          totals[pkg] = {
+            id: pkg,
+            name: appNames[pkg] || labelFromPackage(pkg),
+            minutes,
+            iconBase64: appIcons[pkg]
+          };
+        }
+      });
+    });
+    return Object.values(totals).sort((a, b) => b.minutes - a.minutes)[0] || null;
+  }, [appIcons, appNames, storedStats, weekDays]);
+
   const weekTotalMinutes = useMemo(
     () => weekData.reduce((acc, d) => acc + CATEGORY_KEYS.reduce((sum, key) => sum + d.totals[key], 0), 0),
     [weekData]
@@ -499,8 +525,9 @@ export default function ScreenTimeDashboard() {
   const weekAverageMinutes = Math.floor(weekTotalMinutes / 7);
   const dayTotalMinutes = CATEGORY_KEYS.reduce((acc, key) => acc + categoryMinutes[key], 0);
   const weekMaxMinutes = Math.max(...weekData.map((d) => CATEGORY_KEYS.reduce((acc, key) => acc + d.totals[key], 0)), 1);
-  const weekAxisMaxMinutes = getNiceWeekAxisMax(weekMaxMinutes);
-  const weekAxisTicks = [weekAxisMaxMinutes, Math.round(weekAxisMaxMinutes * 2 / 3), Math.round(weekAxisMaxMinutes / 3), 0];
+  const weekAxisScale = getWeekAxisScale(weekMaxMinutes);
+  const weekAxisMaxMinutes = weekAxisScale.max;
+  const weekAxisTicks = weekAxisScale.ticks;
   const weekAverageLineBottom = 24 + Math.min((weekAverageMinutes / weekAxisMaxMinutes) * WEEK_BAR_MAX_HEIGHT, WEEK_BAR_MAX_HEIGHT);
   const dayMaxMinutes = Math.max(...dayChartCategories.map((item) => item.minutes), 1);
   const maxTodayAppMinutes = Math.max(...todayApps.map((app) => app.minutes), 1);
@@ -557,7 +584,10 @@ export default function ScreenTimeDashboard() {
           
           {/* --- COMMON HEADER --- */}
           <View style={styles.header}>
-            <Text style={styles.title}>Screen time</Text>
+            <View style={styles.titleWrap}>
+              <Text style={styles.brandMark}>unlure</Text>
+              <Text style={styles.title}>Screen time</Text>
+            </View>
             
             <View style={styles.toggleContainer}>
               <Animated.View
@@ -604,6 +634,16 @@ export default function ScreenTimeDashboard() {
               <Text style={styles.subTextMain}>Total usage this week</Text>
               <Text style={styles.subText}>Daily Average this week {formatTime(weekAverageMinutes)}</Text>
 
+              <View style={styles.weekInsightRow}>
+                <View style={styles.weekInsightBlock}>
+                  <Text style={styles.weekInsightLabel}>Most used app</Text>
+                  <Text style={styles.weekInsightValue} numberOfLines={1}>
+                    {weekTopApp ? weekTopApp.name : 'No usage yet'}
+                  </Text>
+                </View>
+                <Text style={styles.weekInsightTime}>{weekTopApp ? formatTime(weekTopApp.minutes) : '0m'}</Text>
+              </View>
+
               {/* Week Chart */}
               <View style={styles.weekChartContainer}>
                 
@@ -633,19 +673,24 @@ export default function ScreenTimeDashboard() {
                     <View key={index} style={styles.barColumn}>
                       <View style={styles.weekBarStack}>
                         {segments.map((segment, segmentIndex) => (
-                          <View style={[
-                            styles.weekBarSegment,
-                            {
-                              height: segment.height,
-                              backgroundColor: segment.color.light,
-                              borderColor: segment.color.border,
-                              borderTopLeftRadius: segmentIndex === 0 ? 4 : 2,
-                              borderTopRightRadius: segmentIndex === 0 ? 4 : 2,
-                              borderBottomLeftRadius: segmentIndex === segments.length - 1 ? 4 : 2,
-                              borderBottomRightRadius: segmentIndex === segments.length - 1 ? 4 : 2,
-                              marginBottom: segmentIndex === segments.length - 1 ? 0 : 2
-                            }
-                          ]} key={segment.key} />
+                          <LinearGradient
+                            key={segment.key}
+                            colors={[segment.color.light, '#FFFFFF']}
+                            start={{ x: 0.5, y: 0 }}
+                            end={{ x: 0.5, y: 1 }}
+                            style={[
+                              styles.weekBarSegment,
+                              {
+                                height: segment.height,
+                                borderColor: segment.color.border,
+                                borderTopLeftRadius: segmentIndex === 0 ? 6 : 3,
+                                borderTopRightRadius: segmentIndex === 0 ? 6 : 3,
+                                borderBottomLeftRadius: segmentIndex === segments.length - 1 ? 6 : 3,
+                                borderBottomRightRadius: segmentIndex === segments.length - 1 ? 6 : 3,
+                                marginBottom: segmentIndex === segments.length - 1 ? 0 : 2
+                              }
+                            ]}
+                          />
                         ))}
                       </View>
                       
@@ -725,14 +770,18 @@ export default function ScreenTimeDashboard() {
                         {formatCompactTime(category.minutes)}
                       </Text>
                     </View>
-                    <View style={[
-                      styles.giantBar,
-                      {
-                        height: Math.max(category.minutes * dayScale, category.minutes > 0 ? 30 : 0),
-                        backgroundColor: category.color.light,
-                        borderColor: category.color.border
-                      }
-                    ]} />
+                    <LinearGradient
+                      colors={[category.color.light, '#FFFFFF']}
+                      start={{ x: 0.5, y: 0 }}
+                      end={{ x: 0.5, y: 1 }}
+                      style={[
+                        styles.giantBar,
+                        {
+                          height: Math.max(category.minutes * dayScale, category.minutes > 0 ? 30 : 0),
+                          borderColor: category.color.border
+                        }
+                      ]}
+                    />
                   </View>
                 ))}
               </View>
@@ -782,7 +831,13 @@ export default function ScreenTimeDashboard() {
                 })}
                 {todayApps.length === 0 ? (
                   <View style={styles.iosEmpty}>
+                    <Image
+                      source={require('../../assets/share-paper-plane.png')}
+                      style={styles.emptyIllustration}
+                      resizeMode="contain"
+                    />
                     <Text style={styles.sheetEmpty}>No app usage tracked yet today.</Text>
+                    <Text style={styles.emptyHint}>Stay in flow and your timeline will fill itself.</Text>
                   </View>
                 ) : null}
               </View>
@@ -843,7 +898,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 24,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 15 : 15,
-    paddingBottom: 140,
+    paddingBottom: 176,
   },
   header: {
     flexDirection: 'row',
@@ -855,7 +910,20 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
     color: COLORS.textMain,
-    letterSpacing: -0.5,
+    letterSpacing: 0,
+  },
+  titleWrap: {
+    flex: 1,
+    paddingRight: 14
+  },
+  brandMark: {
+    color: '#6E6E73',
+    fontSize: 17,
+    lineHeight: 21,
+    fontFamily: FONT_SCRIPT,
+    fontWeight: '600',
+    letterSpacing: 0,
+    marginBottom: 1
   },
   toggleContainer: {
     flexDirection: 'row',
@@ -922,7 +990,7 @@ const styles = StyleSheet.create({
     fontSize: 64,
     fontWeight: '400',
     color: COLORS.textMain,
-    letterSpacing: -2,
+    letterSpacing: 0,
     lineHeight: 70,
   },
   subTextMain: {
@@ -937,9 +1005,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   weekChartContainer: {
-    height: 250,
-    marginTop: 30,
-    marginBottom: 40,
+    height: 222,
+    marginTop: 24,
+    marginBottom: 30,
     flexDirection: 'row',
   },
   gridLineContainer: {
@@ -997,14 +1065,14 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   weekBarStack: {
-    width: 28,
+    width: 20,
     justifyContent: 'flex-end',
     marginBottom: 8, // ALIGNMENT FIX: Space between bar and text
   },
   weekBarSegment: {
     width: '100%',
-    borderWidth: 1.5,
-    borderRadius: 2,
+    borderWidth: 1,
+    borderRadius: 6,
   },
   xLabel: {
     fontSize: 12,
@@ -1015,22 +1083,57 @@ const styles = StyleSheet.create({
   legendContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 10,
-    marginBottom: 8,
+    gap: 8,
+    marginBottom: 10,
   },
   legendItem: {
     alignItems: 'flex-start',
     flex: 1,
   },
   legendLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     marginBottom: 4,
   },
   legendValue: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '400',
     color: COLORS.textMain,
+  },
+  weekInsightRow: {
+    minHeight: 58,
+    borderRadius: 8,
+    backgroundColor: '#F7F7FA',
+    borderWidth: 1,
+    borderColor: '#ECECF2',
+    marginTop: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  weekInsightBlock: {
+    flex: 1,
+    marginRight: 12
+  },
+  weekInsightLabel: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontWeight: '700',
+    marginBottom: 3,
+    textTransform: 'uppercase',
+    letterSpacing: 0
+  },
+  weekInsightValue: {
+    fontSize: 15,
+    color: COLORS.textMain,
+    fontWeight: '700'
+  },
+  weekInsightTime: {
+    fontSize: 18,
+    color: COLORS.textMain,
+    fontWeight: '500'
   },
   updatedText: {
     fontSize: 12,
@@ -1133,7 +1236,20 @@ const styles = StyleSheet.create({
     width: '100%',
     minHeight: 64,
     paddingVertical: 14,
-    justifyContent: 'center'
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  emptyIllustration: {
+    width: 82,
+    height: 82,
+    opacity: 0.2,
+    marginBottom: 6
+  },
+  emptyHint: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#A0A0A6',
+    textAlign: 'center'
   },
   modalRoot: {
     flex: 1,
@@ -1274,7 +1390,8 @@ const styles = StyleSheet.create({
   giantBar: {
     width: '100%',
     borderWidth: 1.5,
-    borderRadius: 6,
+    borderRadius: 10,
+    overflow: 'hidden'
   },
   dayFooter: {
     flexDirection: 'row',
@@ -1295,6 +1412,6 @@ const styles = StyleSheet.create({
     fontSize: 48,
     fontWeight: '400',
     color: COLORS.textMain,
-    letterSpacing: -1,
+    letterSpacing: 0,
   },
 });

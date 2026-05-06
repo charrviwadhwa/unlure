@@ -133,7 +133,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
         windowSize={5}
         refreshing={refreshing}
         onRefresh={onRefresh}
-        contentContainerStyle={[styles.listContent, { paddingBottom: footerHeight + 18 }]}
+        contentContainerStyle={[styles.listContent, { paddingBottom: footerHeight + 34 }]}
         showsVerticalScrollIndicator={false}
         renderItem={({ item }) => {
           const limit = selectedLimits[item.packageName];
@@ -293,16 +293,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF'
   },
   footerButton: {
-    backgroundColor: '#111111',
+    backgroundColor: '#1C1C1E',
     minHeight: 54,
     justifyContent: 'center',
     borderRadius: 27,
     alignItems: 'center',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    elevation: 8
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4
   },
   footerText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 }
 });

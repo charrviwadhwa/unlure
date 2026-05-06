@@ -10,6 +10,8 @@ type StreakAppRow = {
   minutes: number;
   limitMinutes: number;
   iconBase64?: string;
+  protectedToday: boolean;
+  bypassedToday: boolean;
 };
 
 type DayMood = 'happy' | 'lightSmile' | 'neutral' | 'dotted';
@@ -31,7 +33,22 @@ const moodFace: Record<DayMood, { bg: string; faceColor: string; type: 'smile' |
 
 const FONT_REGULAR = Platform.select({ ios: 'System', android: 'sans-serif', default: 'System' });
 const FONT_SEMIBOLD = Platform.select({ ios: 'System', android: 'sans-serif-medium', default: 'System' });
+const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
 const EMPTY_FOCUS_DECISIONS: FocusModeDecisions = { protectedApps: {}, bypassedApps: {} };
+
+const resolveLimitState = (app: StreakAppRow) => {
+  const ratio = app.limitMinutes > 0 ? app.minutes / app.limitMinutes : 0;
+  if (ratio >= 1 && (app.bypassedToday || !app.protectedToday)) {
+    return { label: 'Broken', color: '#B93535', bg: '#FCE8E8', border: '#F4CACA' };
+  }
+  if (ratio >= 1 && app.protectedToday) {
+    return { label: 'Protected', color: '#2F8C43', bg: '#E8F8EA', border: '#CDEFD3' };
+  }
+  if (ratio >= 0.8) {
+    return { label: 'Near limit', color: '#A66F00', bg: '#FFF5D6', border: '#F2D88E' };
+  }
+  return { label: 'Safe', color: '#4C8C43', bg: '#EEF8EA', border: '#D8EFD2' };
+};
 
 interface StreakScreenProps {
   onEditApps: () => void;
@@ -182,7 +199,9 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
         name: nameMap[pkg] || labelFromPackage(pkg),
         minutes: Math.floor((todayMap[pkg] || 0) / 60000),
         limitMinutes: activeLimits[pkg] || 0,
-        iconBase64: iconMap[pkg]
+        iconBase64: iconMap[pkg],
+        protectedToday: Boolean(focusDecisions.protectedApps[pkg]),
+        bypassedToday: Boolean(focusDecisions.bypassedApps[pkg])
       }))
       .sort((a, b) => {
         const aRatio = a.limitMinutes > 0 ? a.minutes / a.limitMinutes : 0;
@@ -257,6 +276,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
       >
         <View style={styles.headerRow}>
           <View style={styles.headerCopy}>
+            <Text style={styles.brandMark}>unlure</Text>
             <Text style={styles.pageTitle}>Streak</Text>
             <Text style={styles.pageDate}>This week</Text>
           </View>
@@ -336,6 +356,11 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
           <View style={styles.limitedList}>
             {todayApps.length === 0 ? (
               <View style={styles.emptyState}>
+                <Image
+                  source={require('../../assets/share-paper-plane.png')}
+                  style={styles.emptyIllustration}
+                  resizeMode="contain"
+                />
                 <Text style={styles.emptyTitle}>No limits yet</Text>
                 <Text style={styles.emptyText}>Pick the apps you want to control, then they will appear here.</Text>
               </View>
@@ -343,7 +368,8 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
               todayApps.map((app) => {
                 const ratio = app.limitMinutes > 0 ? app.minutes / app.limitMinutes : 0;
                 const fillWidth = app.minutes > 0 ? Math.min(Math.max(ratio * 100, 4), 100) : 0;
-                const fillColor = ratio >= 1 ? '#D65A5A' : app.minutes === 0 ? '#D7D7DC' : '#7ACB67';
+                const state = resolveLimitState(app);
+                const fillColor = state.label === 'Broken' ? '#D65A5A' : state.label === 'Near limit' ? '#E4A62A' : app.minutes === 0 ? '#D7D7DC' : '#7ACB67';
 
                 return (
                   <View key={app.id} style={styles.appRow}>
@@ -359,6 +385,9 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
                         <Text style={styles.appName} numberOfLines={1}>{app.name}</Text>
                       </View>
                       <View style={styles.appUsageRight}>
+                        <View style={[styles.statePill, { backgroundColor: state.bg, borderColor: state.border }]}>
+                          <Text style={[styles.stateText, { color: state.color }]}>{state.label}</Text>
+                        </View>
                         <Text
                           style={[styles.appMinutes, app.minutes === 0 && styles.appMinutesUnused]}
                           numberOfLines={1}
@@ -388,7 +417,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 24,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 15 : 15,
-    paddingBottom: 140
+    paddingBottom: 176
   },
   headerRow: {
     flexDirection: 'row',
@@ -405,6 +434,15 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontFamily: FONT_SEMIBOLD,
     fontWeight: '800'
+  },
+  brandMark: {
+    color: '#6E6E73',
+    fontSize: 18,
+    lineHeight: 22,
+    fontFamily: FONT_SCRIPT,
+    fontWeight: '600',
+    letterSpacing: 0,
+    marginBottom: 2
   },
   pageDate: {
     marginTop: 4,
@@ -639,7 +677,14 @@ const styles = StyleSheet.create({
     borderTopColor: '#EFEFF4'
   },
   emptyState: {
-    paddingVertical: 18
+    paddingVertical: 18,
+    alignItems: 'center'
+  },
+  emptyIllustration: {
+    width: 84,
+    height: 84,
+    opacity: 0.22,
+    marginBottom: 6
   },
   emptyTitle: {
     color: '#1C1C1E',
@@ -711,6 +756,20 @@ const styles = StyleSheet.create({
   appUsageRight: {
     width: 150,
     alignItems: 'flex-end'
+  },
+  statePill: {
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 5
+  },
+  stateText: {
+    fontSize: 11,
+    fontFamily: FONT_SEMIBOLD,
+    fontWeight: '800'
   },
   usageTrack: {
     width: 120,

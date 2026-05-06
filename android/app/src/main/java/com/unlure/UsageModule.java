@@ -55,6 +55,10 @@ public class UsageModule extends ReactContextBaseJavaModule {
         return "UsageModule";
     }
 
+    private boolean isSelfPackage(String packageName) {
+        return packageName != null && packageName.equals(getReactApplicationContext().getPackageName());
+    }
+
     private String drawableToBase64(Drawable drawable) {
         try {
             Bitmap bitmap;
@@ -129,7 +133,7 @@ public void getDailyStats(Promise promise) {
         while (usageEvents.hasNextEvent()) {
             usageEvents.getNextEvent(event);
             String pkg = event.getPackageName();
-            if (pkg == null || pm.getLaunchIntentForPackage(pkg) == null) continue;
+            if (pkg == null || isSelfPackage(pkg) || pm.getLaunchIntentForPackage(pkg) == null) continue;
 
             int type = event.getEventType();
             long eventTime = Math.min(Math.max(event.getTimeStamp(), startTime), endTime);
@@ -208,7 +212,7 @@ public void getDailyStats(Promise promise) {
         while (previousEvents.hasNextEvent()) {
             previousEvents.getNextEvent(event);
             String pkg = event.getPackageName();
-            if (pkg == null || pm.getLaunchIntentForPackage(pkg) == null) continue;
+            if (pkg == null || isSelfPackage(pkg) || pm.getLaunchIntentForPackage(pkg) == null) continue;
 
             int type = event.getEventType();
             if (
@@ -513,6 +517,7 @@ public void getInstalledApps(Promise promise) {
                 // 🚨 OPTIMIZATION: Only process apps that a user can actually launch
                 if (resolveInfo.activityInfo == null || resolveInfo.activityInfo.packageName == null) continue;
                 String packageName = resolveInfo.activityInfo.packageName;
+                if (isSelfPackage(packageName)) continue;
                 if (seenPackages.contains(packageName)) continue;
                 seenPackages.add(packageName);
 
