@@ -23,6 +23,11 @@ export interface DailyUsageMap {
   };
 }
 
+export interface FocusModeDecisions {
+  protectedApps: Record<string, boolean>;
+  bypassedApps: Record<string, boolean>;
+}
+
 export const ScreenTimeService = {
   async getDailyStats(): Promise<AppUsage[]> {
     try {
@@ -142,6 +147,15 @@ export const ScreenTimeService = {
       storedDailyStatsPromise = promise;
       return await promise;
     } catch { return {}; }
+  },
+
+  async getTodayFocusModeDecisions(): Promise<FocusModeDecisions> {
+    if (Platform.OS !== 'android') return { protectedApps: {}, bypassedApps: {} };
+    try {
+      return await UsageModule.getTodayFocusModeDecisions();
+    } catch {
+      return { protectedApps: {}, bypassedApps: {} };
+    }
   },
 
   async getInstalledApps(forceRefresh = false): Promise<AppInfo[]> {

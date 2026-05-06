@@ -1,6 +1,6 @@
 ﻿import React, { useCallback, useEffect, useState } from 'react';
 import { Image, Platform, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { ScreenTimeService, DailyUsageMap } from '../../services/ScreenTimeService';
+import { ScreenTimeService, DailyUsageMap, FocusModeDecisions } from '../../services/ScreenTimeService';
 import { DailyLimitSnapshots, DailyMoodSnapshots, UserStore } from '../../services/storage';
 import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
 
@@ -31,6 +31,7 @@ const moodFace: Record<DayMood, { bg: string; faceColor: string; type: 'smile' |
 
 const FONT_REGULAR = Platform.select({ ios: 'System', android: 'sans-serif', default: 'System' });
 const FONT_SEMIBOLD = Platform.select({ ios: 'System', android: 'sans-serif-medium', default: 'System' });
+const EMPTY_FOCUS_DECISIONS: FocusModeDecisions = { protectedApps: {}, bypassedApps: {} };
 
 interface StreakScreenProps {
   onEditApps: () => void;
@@ -65,14 +66,21 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
     return d;
   };
 
-  const resolveMood = useCallback((dayMap: Record<string, number> | undefined, limits: Record<string, number>): DayMood => {
+  const resolveMood = useCallback((
+    dayMap: Record<string, number> | undefined,
+    limits: Record<string, number>,
+    focusDecisions: FocusModeDecisions = EMPTY_FOCUS_DECISIONS
+  ): DayMood => {
     if (!dayMap) return 'neutral';
     const totalLimit = Object.keys(limits).reduce((acc, pkg) => acc + (limits[pkg] || 0), 0);
     if (totalLimit === 0) return 'neutral';
     const hasExceededApp = Object.keys(limits).some((pkg) => {
       const limit = limits[pkg];
       if (!limit) return false;
-      return Math.floor((dayMap[pkg] || 0) / 60000) >= limit;
+      const isAtLimit = Math.floor((dayMap[pkg] || 0) / 60000) >= limit;
+      if (!isAtLimit) return false;
+      if (focusDecisions.bypassedApps[pkg]) return true;
+      return !focusDecisions.protectedApps[pkg];
     });
     if (hasExceededApp) return 'dotted';
     const limitedUsage = Object.keys(dayMap).reduce((acc, pkg) => {
@@ -101,12 +109,13 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
     dayMap: Record<string, number> | undefined,
     limitSnapshots: DailyLimitSnapshots,
     currentLimits: Record<string, number>,
-    savedMoods: DailyMoodSnapshots
+    savedMoods: DailyMoodSnapshots,
+    focusDecisions: FocusModeDecisions = EMPTY_FOCUS_DECISIONS
   ): DayMood => {
     const todayKey = formatDateKey(new Date());
     if (dateKey !== todayKey && savedMoods[dateKey]) return savedMoods[dateKey];
     const limits = getLimitsForDate(dateKey, limitSnapshots, currentLimits);
-    return resolveMood(dayMap, limits);
+    return resolveMood(dayMap, limits, dateKey === todayKey ? focusDecisions : EMPTY_FOCUS_DECISIONS);
   }, [getLimitsForDate, resolveMood]);
 
   const calculateStreakFromStats = useCallback((
@@ -114,6 +123,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
     limitSnapshots: DailyLimitSnapshots,
     currentLimits: Record<string, number>,
     savedMoods: DailyMoodSnapshots,
+    focusDecisions: FocusModeDecisions,
     trackingStartDate: string
   ) => {
     let count = 0;
@@ -125,7 +135,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
       const key = formatDateKey(cursor);
       const dayMap = stats[key];
       if (!dayMap) break;
-      const mood = getMoodForDate(key, dayMap, limitSnapshots, currentLimits, savedMoods);
+      const mood = getMoodForDate(key, dayMap, limitSnapshots, currentLimits, savedMoods, focusDecisions);
       if (mood === 'dotted') break;
       count += 1;
       cursor.setDate(cursor.getDate() - 1);
@@ -143,6 +153,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
       UserStore.getDailyMoods(),
       UserStore.ensureTrackingStartDate()
     ]);
+    const focusDecisions = await ScreenTimeService.getTodayFocusModeDecisions();
     await UserStore.saveTodayLimitSnapshot(limits || {});
 
     const nameMap = installedApps.reduce<Record<string, string>>((acc, app) => {
@@ -157,11 +168,11 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
     const todayKey = formatDateKey(new Date());
     const todayMap = (storedStats as DailyUsageMap)[todayKey] || {};
     const activeLimits = limits || {};
-    const todayMood = resolveMood(todayMap, activeLimits);
+    const todayMood = resolveMood(todayMap, activeLimits, focusDecisions);
     await UserStore.saveDailyMood(todayKey, todayMood);
     const moodsWithToday = { ...(savedMoods || {}), [todayKey]: todayMood };
 
-    const derivedStreak = calculateStreakFromStats(storedStats as DailyUsageMap, limitSnapshots || {}, activeLimits, moodsWithToday, trackingStartDate);
+    const derivedStreak = calculateStreakFromStats(storedStats as DailyUsageMap, limitSnapshots || {}, activeLimits, moodsWithToday, focusDecisions, trackingStartDate);
     setStreak(derivedStreak);
 
     const rows = Object.keys(activeLimits)
@@ -180,7 +191,11 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
       })
       .slice(0, 6);
     setTodayApps(rows);
-    setIsExceededToday(rows.some((app) => app.limitMinutes > 0 && app.minutes >= app.limitMinutes));
+    setIsExceededToday(rows.some((app) => (
+      app.limitMinutes > 0 &&
+      app.minutes >= app.limitMinutes &&
+      (focusDecisions.bypassedApps[app.id] || !focusDecisions.protectedApps[app.id])
+    )));
 
     const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
     const monday = getMondayStart(new Date());
@@ -198,7 +213,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
         label: labels[i],
         dayNumber: d.getDate(),
         completed: !isBeforeTrackingStart && d <= now && Boolean(dayMap),
-        mood: isBeforeTrackingStart ? 'neutral' : getMoodForDate(key, dayMap, limitSnapshots || {}, activeLimits, moodsWithToday)
+        mood: isBeforeTrackingStart ? 'neutral' : getMoodForDate(key, dayMap, limitSnapshots || {}, activeLimits, moodsWithToday, focusDecisions)
       };
     });
     setWeekCells(cells);

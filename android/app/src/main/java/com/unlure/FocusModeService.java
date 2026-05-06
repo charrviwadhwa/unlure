@@ -37,6 +37,8 @@ public class FocusModeService extends AccessibilityService {
     public static final String PREFS_NAME = "FocusModePrefs";
     public static final String KEY_LIMITS_JSON = "limits_json";
     public static final String KEY_NAMES_JSON = "names_json";
+    public static final String KEY_PROTECTED_PREFIX = "protected_";
+    public static final String KEY_BYPASS_PREFIX = "bypass_";
 
     private static final String CHANNEL_ID = "unlure_focus_mode";
     private static final int WARNING_NOTIFICATION_BASE_ID = 4000;
@@ -294,6 +296,7 @@ public class FocusModeService extends AccessibilityService {
         close.setBackground(makeRoundedDrawable(Color.rgb(17, 17, 17), dp(18)));
         close.setPadding(0, dp(14), 0, dp(14));
         close.setOnClickListener(v -> {
+            markProtectedToday(packageName);
             hideOverlay();
             Intent home = new Intent(Intent.ACTION_MAIN);
             home.addCategory(Intent.CATEGORY_HOME);
@@ -398,13 +401,20 @@ public class FocusModeService extends AccessibilityService {
 
     private boolean isBypassedToday(String packageName) {
         return getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getBoolean("bypass_" + todayKey() + "_" + packageName, false);
+            .getBoolean(KEY_BYPASS_PREFIX + todayKey() + "_" + packageName, false);
     }
 
     private void markBypassedToday(String packageName) {
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
-            .putBoolean("bypass_" + todayKey() + "_" + packageName, true)
+            .putBoolean(KEY_BYPASS_PREFIX + todayKey() + "_" + packageName, true)
+            .apply();
+    }
+
+    private void markProtectedToday(String packageName) {
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_PROTECTED_PREFIX + todayKey() + "_" + packageName, true)
             .apply();
     }
 

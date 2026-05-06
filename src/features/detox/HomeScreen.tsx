@@ -12,7 +12,7 @@ import {
   StatusBar
 } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
-import { ScreenTimeService, DailyUsageMap } from '../../services/ScreenTimeService';
+import { ScreenTimeService, DailyUsageMap, FocusModeDecisions } from '../../services/ScreenTimeService';
 import { DailyLimitSnapshots, DailyMoodSnapshots, StoredMood, UserStore } from '../../services/storage';
 import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
 
@@ -61,6 +61,7 @@ const MOOD_LABELS: Record<MoodType, string> = {
   empty: 'No tracking'
 };
 const LEGEND_ITEMS: MoodType[] = [MOOD_TYPES.GREAT, MOOD_TYPES.GOOD, MOOD_TYPES.NEUTRAL, MOOD_TYPES.AWFUL];
+const EMPTY_FOCUS_DECISIONS: FocusModeDecisions = { protectedApps: {}, bypassedApps: {} };
 
 const ChevronIcon = ({ direction }: { direction: 'left' | 'right' }) => (
   <Svg width={18} height={18} viewBox="0 0 24 24">
@@ -87,12 +88,19 @@ const MoodFace = ({ type }: { type: MoodType }) => {
   const isFrown = type === MOOD_TYPES.AWFUL;
   const isNeutral = type === MOOD_TYPES.NEUTRAL;
 
-  if (isFrown) {
-    return (
-      <Svg width={24} height={24} viewBox="0 0 24 24">
-        <Circle cx={12} cy={12} r={10} fill={theme.bg} stroke={theme.line} strokeWidth={1.6} />
-        <Circle cx={8.5} cy={9.5} r={1.45} fill={theme.line} />
-        <Circle cx={15.5} cy={9.5} r={1.45} fill={theme.line} />
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24">
+      <Circle cx={12} cy={12} r={10} fill={theme.bg} stroke={theme.line} strokeWidth={1.6} />
+      <Circle cx={8.5} cy={9.5} r={1.45} fill={theme.line} />
+      <Circle cx={15.5} cy={9.5} r={1.45} fill={theme.line} />
+      {isNeutral ? (
+        <Path
+          d="M8.5 15.5h7"
+          stroke={theme.line}
+          strokeWidth={1.7}
+          strokeLinecap="round"
+        />
+      ) : isFrown ? (
         <Path
           d="M8 17c.8-1.8 2.1-2.7 4-2.7s3.2.9 4 2.7"
           fill="none"
@@ -100,32 +108,16 @@ const MoodFace = ({ type }: { type: MoodType }) => {
           strokeWidth={1.7}
           strokeLinecap="round"
         />
-      </Svg>
-    );
-  }
-
-  return (
-    <View style={[styles.faceContainer, styles.faceBorder, { backgroundColor: theme.bg, borderColor: theme.line }]}>
-      <View style={styles.eyesContainer}>
-        <View>
-          <View style={[styles.eye, { backgroundColor: theme.line }]} />
-        </View>
-        <View>
-          <View style={[styles.eye, { backgroundColor: theme.line }]} />
-        </View>
-      </View>
-      {isNeutral ? (
-        <View style={[styles.mouthNeutral, { backgroundColor: theme.line }]} />
       ) : (
-        <View
-          style={[
-            styles.mouthCurve,
-            { borderColor: theme.line },
-            isFrown && styles.mouthFrown
-          ]}
+        <Path
+          d="M8 14.4c.8 1.8 2.1 2.7 4 2.7s3.2-.9 4-2.7"
+          fill="none"
+          stroke={theme.line}
+          strokeWidth={1.7}
+          strokeLinecap="round"
         />
       )}
-    </View>
+    </Svg>
   );
 };
 
@@ -143,17 +135,25 @@ export const HomeScreen = () => {
   const [limitsCache, setLimitsCache] = useState<Record<string, number>>({});
   const [limitSnapshotsCache, setLimitSnapshotsCache] = useState<DailyLimitSnapshots>({});
   const [savedMoodsCache, setSavedMoodsCache] = useState<DailyMoodSnapshots>({});
+  const [focusDecisionsCache, setFocusDecisionsCache] = useState<FocusModeDecisions>(EMPTY_FOCUS_DECISIONS);
   const [trackingStartDate, setTrackingStartDate] = useState(formatDateKey(new Date()));
   const [refreshing, setRefreshing] = useState(false);
 
-  const resolveMood = useCallback((dayMap: Record<string, number> | undefined, limits: Record<string, number>): MoodType => {
+  const resolveMood = useCallback((
+    dayMap: Record<string, number> | undefined,
+    limits: Record<string, number>,
+    focusDecisions: FocusModeDecisions = EMPTY_FOCUS_DECISIONS
+  ): MoodType => {
     if (!dayMap) return MOOD_TYPES.EMPTY;
     const totalLimit = Object.keys(limits).reduce((acc, pkg) => acc + (limits[pkg] || 0), 0);
     if (totalLimit === 0) return MOOD_TYPES.NEUTRAL;
     const hasExceededApp = Object.keys(limits).some((pkg) => {
       const limit = limits[pkg];
       if (!limit) return false;
-      return Math.floor((dayMap[pkg] || 0) / 60000) >= limit;
+      const isAtLimit = Math.floor((dayMap[pkg] || 0) / 60000) >= limit;
+      if (!isAtLimit) return false;
+      if (focusDecisions.bypassedApps[pkg]) return true;
+      return !focusDecisions.protectedApps[pkg];
     });
     if (hasExceededApp) return MOOD_TYPES.AWFUL;
     const limitedUsage = Object.keys(dayMap).reduce((acc, pkg) => {
@@ -167,8 +167,12 @@ export const HomeScreen = () => {
     return MOOD_TYPES.NEUTRAL;
   }, []);
 
-  const resolveStoredMood = useCallback((dayMap: Record<string, number> | undefined, limits: Record<string, number>): StoredMood => {
-    const mood = resolveMood(dayMap, limits);
+  const resolveStoredMood = useCallback((
+    dayMap: Record<string, number> | undefined,
+    limits: Record<string, number>,
+    focusDecisions: FocusModeDecisions = EMPTY_FOCUS_DECISIONS
+  ): StoredMood => {
+    const mood = resolveMood(dayMap, limits, focusDecisions);
     if (mood === MOOD_TYPES.GREAT) return 'happy';
     if (mood === MOOD_TYPES.GOOD) return 'lightSmile';
     if (mood === MOOD_TYPES.AWFUL) return 'dotted';
@@ -210,6 +214,7 @@ export const HomeScreen = () => {
     snapshots: DailyLimitSnapshots,
     currentLimits: Record<string, number>,
     savedMoods: DailyMoodSnapshots,
+    focusDecisions: FocusModeDecisions,
     startDateKey: string
   ) => {
     const year = targetDate.getFullYear();
@@ -236,11 +241,12 @@ export const HomeScreen = () => {
       const dayMap = stats[dateKey];
       const dayLimits = getLimitsForDate(dateKey, snapshots, currentLimits);
       const isToday = isCurrentVisibleMonth && today.getDate() === day;
+      const dayFocusDecisions = isToday ? focusDecisions : EMPTY_FOCUS_DECISIONS;
       const mood = isBeforeTrackingStart
         ? MOOD_TYPES.EMPTY
         : !isToday && savedMoods[dateKey]
           ? moodFromStored(savedMoods[dateKey])
-          : resolveMood(dayMap, dayLimits);
+          : resolveMood(dayMap, dayLimits, dayFocusDecisions);
       items.push({
         date: String(day),
         dateKey,
@@ -268,9 +274,10 @@ export const HomeScreen = () => {
       UserStore.getDailyMoods(),
       UserStore.ensureTrackingStartDate()
     ]);
+    const focusDecisions = await ScreenTimeService.getTodayFocusModeDecisions();
     await UserStore.saveTodayLimitSnapshot(limits || {});
     const todayKey = formatDateKey(new Date());
-    const todayMood = resolveStoredMood((stats as DailyUsageMap)[todayKey], limits || {});
+    const todayMood = resolveStoredMood((stats as DailyUsageMap)[todayKey], limits || {}, focusDecisions);
     await UserStore.saveDailyMood(todayKey, todayMood);
     const nextStats = stats as DailyUsageMap;
     const nextLimits = limits || {};
@@ -280,8 +287,9 @@ export const HomeScreen = () => {
     setLimitsCache(nextLimits);
     setLimitSnapshotsCache(nextLimitSnapshots);
     setSavedMoodsCache(nextSavedMoods);
+    setFocusDecisionsCache(focusDecisions);
     setTrackingStartDate(loadedTrackingStartDate);
-    buildCalendar(targetDate, nextStats, nextLimitSnapshots, nextLimits, nextSavedMoods, loadedTrackingStartDate);
+    buildCalendar(targetDate, nextStats, nextLimitSnapshots, nextLimits, nextSavedMoods, focusDecisions, loadedTrackingStartDate);
   }, [buildCalendar, resolveStoredMood]);
 
   useEffect(() => {
@@ -289,8 +297,8 @@ export const HomeScreen = () => {
   }, [load]);
 
   useEffect(() => {
-    buildCalendar(monthDate, statsCache, limitSnapshotsCache, limitsCache, savedMoodsCache, trackingStartDate);
-  }, [buildCalendar, limitSnapshotsCache, limitsCache, monthDate, savedMoodsCache, statsCache, trackingStartDate]);
+    buildCalendar(monthDate, statsCache, limitSnapshotsCache, limitsCache, savedMoodsCache, focusDecisionsCache, trackingStartDate);
+  }, [buildCalendar, focusDecisionsCache, limitSnapshotsCache, limitsCache, monthDate, savedMoodsCache, statsCache, trackingStartDate]);
 
   const refreshCurrentMonth = useCallback(() => {
     const now = new Date();
@@ -534,45 +542,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center'
   },
-  faceBorder: {
-    borderWidth: 1
-  },
   transparentFace: {
     backgroundColor: 'transparent'
-  },
-  eyesContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: 12,
-    marginBottom: 3,
-    marginTop: 2
-  },
-  eye: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5
-  },
-  mouthCurve: {
-    width: 10,
-    height: 5,
-    borderBottomWidth: 1.5,
-    borderLeftWidth: 1.5,
-    borderRightWidth: 1.5,
-    borderBottomLeftRadius: 6,
-    borderBottomRightRadius: 6
-  },
-  mouthFrown: {
-    transform: [{ rotate: '180deg' }],
-    marginTop: 2,
-    borderBottomWidth: 1.5,
-    borderLeftWidth: 1.5,
-    borderRightWidth: 1.5
-  },
-  mouthNeutral: {
-    width: 8,
-    height: 1.5,
-    borderRadius: 1,
-    marginTop: 2
   },
   legendRow: {
     flexDirection: 'row',

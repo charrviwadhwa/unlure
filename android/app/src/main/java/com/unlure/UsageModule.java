@@ -344,6 +344,38 @@ public void getDailyStats(Promise promise) {
             promise.reject("ERROR", e.getMessage());
         }
     }
+
+    @ReactMethod
+    public void getTodayFocusModeDecisions(Promise promise) {
+        SimpleDateFormat sdf = new SimpleDateFormat(DATE_FORMAT, Locale.US);
+        sdf.setTimeZone(TimeZone.getDefault());
+        String todayKey = sdf.format(Calendar.getInstance().getTime());
+        String protectedPrefix = FocusModeService.KEY_PROTECTED_PREFIX + todayKey + "_";
+        String bypassPrefix = FocusModeService.KEY_BYPASS_PREFIX + todayKey + "_";
+
+        SharedPreferences prefs = getReactApplicationContext()
+            .getSharedPreferences(FocusModeService.PREFS_NAME, Context.MODE_PRIVATE);
+        WritableMap result = Arguments.createMap();
+        WritableMap protectedApps = Arguments.createMap();
+        WritableMap bypassedApps = Arguments.createMap();
+
+        for (Map.Entry<String, ?> entry : prefs.getAll().entrySet()) {
+            Object value = entry.getValue();
+            if (!(value instanceof Boolean) || !((Boolean) value)) continue;
+
+            String key = entry.getKey();
+            if (key.startsWith(protectedPrefix)) {
+                protectedApps.putBoolean(key.substring(protectedPrefix.length()), true);
+            } else if (key.startsWith(bypassPrefix)) {
+                bypassedApps.putBoolean(key.substring(bypassPrefix.length()), true);
+            }
+        }
+
+        result.putMap("protectedApps", protectedApps);
+        result.putMap("bypassedApps", bypassedApps);
+        promise.resolve(result);
+    }
+
     @ReactMethod
     public void openSettings() {
         Intent intent = new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS);
