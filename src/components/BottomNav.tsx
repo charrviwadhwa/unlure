@@ -77,10 +77,16 @@ const styles = StyleSheet.create({
   wrapper: { paddingHorizontal: 20, paddingBottom: 28, alignItems: 'center', backgroundColor: 'transparent' },
   bar: {
     flexDirection: 'row',
-    backgroundColor: '#141414',
+    backgroundColor: '#171B22',
     borderRadius: 999,
     padding: BAR_PADDING,
+    borderWidth: 1,
+    borderColor: '#2A303A',
     elevation: 10,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
     position: 'relative',
     overflow: 'hidden',
     alignItems: 'center'

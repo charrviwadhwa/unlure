@@ -9,7 +9,8 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
+  useColorScheme
 } from 'react-native';
 import { ScreenTimeService } from '../../services/ScreenTimeService';
 import { UserStore } from '../../services/storage';
@@ -32,6 +33,15 @@ export const PermissionSetupScreen = ({
   onComplete: () => void;
   actionLabel?: string;
 }) => {
+  const isDark = useColorScheme() === 'dark';
+  const theme = {
+    bg: isDark ? '#121418' : '#FFFFFF',
+    surface: isDark ? '#191D23' : '#F7F7FA',
+    border: isDark ? '#2A303A' : '#EFEFF4',
+    text: isDark ? '#F3F4F6' : '#000000',
+    textSecondary: isDark ? '#A5ACB8' : '#7C7C84',
+    subSurface: isDark ? '#20252D' : '#F7F7FA'
+  };
   const [usageEnabled, setUsageEnabled] = useState(false);
   const [detectionEnabled, setDetectionEnabled] = useState(false);
   const [overlayEnabled, setOverlayEnabled] = useState(false);
@@ -85,40 +95,45 @@ export const PermissionSetupScreen = ({
   ];
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaView style={[styles.screen, { backgroundColor: theme.bg }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.bg} />
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { backgroundColor: theme.bg }]}
         showsVerticalScrollIndicator={false}
         overScrollMode="never"
         bounces={false}
       >
         <Image source={require('../../assets/Completed 1.png')} style={styles.heroImage} resizeMode="contain" />
-        <Text style={styles.brandMark}>unlure</Text>
-        <Text style={styles.title}>Set up Focus Mode</Text>
-        <Text style={styles.subtitle}>
+        <Text style={[styles.brandMark, { color: isDark ? '#AAB0BD' : '#6E6E73' }]}>unlure</Text>
+        <Text style={[styles.title, { color: theme.text }]}>Set up Focus Mode</Text>
+        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
           Enable these permissions so Unlure can track limits, detect selected app openings, and show streak-saving warnings.
         </Text>
 
-        <View style={styles.disclosureBox}>
-          <Text style={styles.disclosureTitle}>Accessibility disclosure</Text>
-          <Text style={styles.disclosureText}>
+        <View style={[styles.disclosureBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Text style={[styles.disclosureTitle, { color: theme.text }]}>Accessibility disclosure</Text>
+          <Text style={[styles.disclosureText, { color: theme.textSecondary }]}>
             Unlure uses Accessibility only to detect when apps you selected with limits are opened. It does not read messages,
             passwords, typed text, notifications, or private content, and this data is not sold or shared.
           </Text>
         </View>
 
-        <View style={styles.permissionList}>
+        <View style={[styles.permissionList, { borderTopColor: theme.border }]}>
           {permissions.map(item => (
-            <TouchableOpacity key={item.key} style={styles.permissionRow} onPress={item.action} activeOpacity={0.76}>
+            <TouchableOpacity key={item.key} style={[styles.permissionRow, { borderBottomColor: theme.border }]} onPress={item.action} activeOpacity={0.76}>
               <View style={styles.permissionCopy}>
-                <Text style={styles.permissionTitle}>{item.title}</Text>
-                <Text style={styles.permissionDetail}>{item.detail}</Text>
+                <Text style={[styles.permissionTitle, { color: theme.text }]}>{item.title}</Text>
+                <Text style={[styles.permissionDetail, { color: theme.textSecondary }]}>{item.detail}</Text>
               </View>
               <View
-                style={[styles.permissionAction, item.enabled && styles.permissionActionEnabled]}
+                style={[
+                  styles.permissionAction,
+                  { backgroundColor: isDark ? '#FFFFFF' : theme.subSurface, borderColor: isDark ? '#FFFFFF' : theme.border },
+                  item.enabled && styles.permissionActionEnabled,
+                  item.enabled && isDark && { backgroundColor: '#1F8F4A', borderColor: '#1F8F4A' }
+                ]}
               >
-                <Text style={[styles.permissionActionText, item.enabled && styles.permissionActionTextEnabled]}>
+                <Text style={[styles.permissionActionText, isDark && { color: '#101319' }, item.enabled && styles.permissionActionTextEnabled, item.enabled && isDark && { color: '#FFFFFF' }]}>
                   {item.enabled ? 'Enabled' : 'Open'}
                 </Text>
               </View>
@@ -127,9 +142,9 @@ export const PermissionSetupScreen = ({
         </View>
       </ScrollView>
 
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.continueButton} onPress={onComplete} activeOpacity={0.88}>
-          <Text style={styles.continueText}>{actionLabel}</Text>
+      <View style={[styles.footer, { backgroundColor: theme.bg }]}>
+        <TouchableOpacity style={[styles.continueButton, isDark && { backgroundColor: '#FFFFFF' }]} onPress={onComplete} activeOpacity={0.88}>
+          <Text style={[styles.continueText, isDark && { color: '#101319' }]}>{actionLabel}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

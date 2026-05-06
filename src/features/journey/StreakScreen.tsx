@@ -1,5 +1,5 @@
 ﻿import React, { useCallback, useEffect, useState } from 'react';
-import { Image, Platform, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, Platform, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View, useColorScheme } from 'react-native';
 import { ScreenTimeService, DailyUsageMap, FocusModeDecisions } from '../../services/ScreenTimeService';
 import { DailyLimitSnapshots, DailyMoodSnapshots, UserStore } from '../../services/storage';
 import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
@@ -42,7 +42,7 @@ const resolveLimitState = (app: StreakAppRow) => {
     return { label: 'Broken', color: '#B93535', bg: '#FCE8E8', border: '#F4CACA' };
   }
   if (ratio >= 1 && app.protectedToday) {
-    return { label: 'Protected', color: '#2F8C43', bg: '#E8F8EA', border: '#CDEFD3' };
+    return { label: 'Protected', color: '#9A6A00', bg: '#FFF4CF', border: '#EBCF7A' };
   }
   if (ratio >= 0.8) {
     return { label: 'Near limit', color: '#A66F00', bg: '#FFF5D6', border: '#F2D88E' };
@@ -56,6 +56,15 @@ interface StreakScreenProps {
 }
 
 const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetup }) => {
+  const isDark = useColorScheme() === 'dark';
+  const theme = {
+    bg: isDark ? '#121418' : '#FFFFFF',
+    surface: isDark ? '#191D23' : '#FFFFFF',
+    mutedSurface: isDark ? '#20252D' : '#F2F2F7',
+    text: isDark ? '#F3F4F6' : '#000000',
+    textSecondary: isDark ? '#A5ACB8' : '#8E8E93',
+    border: isDark ? '#2A303A' : '#EFEFF4'
+  };
   const [streak, setStreak] = useState(0);
   const [todayApps, setTodayApps] = useState<StreakAppRow[]>([]);
   const [weekCells, setWeekCells] = useState<DayCell[]>([]);
@@ -265,9 +274,9 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
   const weekProgressLabel = isExceededToday ? 'Bring today back under limit' : `${weekProgressCount} of 7 days this week`;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { backgroundColor: theme.bg }]}
         showsVerticalScrollIndicator={false}
         overScrollMode="never"
         bounces={false}
@@ -276,19 +285,19 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
       >
         <View style={styles.headerRow}>
           <View style={styles.headerCopy}>
-            <Text style={styles.brandMark}>unlure</Text>
-            <Text style={styles.pageTitle}>Streak</Text>
-            <Text style={styles.pageDate}>This week</Text>
+            <Text style={[styles.brandMark, { color: isDark ? '#AAB0BD' : '#6E6E73' }]}>unlure</Text>
+            <Text style={[styles.pageTitle, { color: theme.text }]}>Streak</Text>
+            <Text style={[styles.pageDate, { color: theme.textSecondary }]}>This week</Text>
           </View>
-          <TouchableOpacity style={styles.focusSetupButton} onPress={onOpenFocusSetup} activeOpacity={0.76}>
-            <Image source={require('../../assets/image.png')} style={styles.focusSetupImage} resizeMode="contain" />
-            <Text style={styles.focusSetupText}>Focus</Text>
+          <TouchableOpacity style={[styles.focusSetupButton, { backgroundColor: isDark ? '#20252D' : '#F7F7FA', borderColor: theme.border }]} onPress={onOpenFocusSetup} activeOpacity={0.76}>
+            <Image source={require('../../assets/image.png')} style={[styles.focusSetupImage, { tintColor: theme.text }]} resizeMode="contain" />
+            <Text style={[styles.focusSetupText, { color: theme.text }]}>Focus</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.heroStack}>
-          <View style={styles.heroBackplate} />
-          <View style={styles.heroCard}>
+          <View style={[styles.heroBackplate, { backgroundColor: isDark ? '#1E232B' : '#F2F2F7' }]} />
+          <View style={[styles.heroCard, isDark && { backgroundColor: '#171C24', borderColor: '#2A303A', borderWidth: 1 }]}>
             <View style={styles.heroTopRow}>
               <Text style={styles.heroKicker}>{isExceededToday ? 'Needs recovery' : 'On track today'}</Text>
               <Text style={styles.heroMeta}>{`${streak} day streak`}</Text>
@@ -313,10 +322,10 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
 
         <View style={styles.sectionBlock}>
           <View style={styles.titleRow}>
-            <Text style={styles.sectionTitle}>Streak Journey</Text>
-            <Text style={styles.sectionMeta}>daily check</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Streak Journey</Text>
+            <Text style={[styles.sectionMeta, { color: theme.textSecondary }]}>daily check</Text>
           </View>
-          <View style={styles.weekStrip}>
+          <View style={[styles.weekStrip, { borderColor: theme.border }]}>
             {weekCells.map((cell) => (
               <View key={cell.key} style={styles.weekDay}>
                 <Text style={styles.weekLabel}>{cell.label}</Text>
@@ -339,7 +348,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
                     )}
                   </View>
                 ) : (
-                  <Text style={styles.dayNumber}>{cell.dayNumber}</Text>
+                  <Text style={[styles.dayNumber, { color: theme.text }]}>{cell.dayNumber}</Text>
                 )}
               </View>
             ))}
@@ -348,12 +357,12 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
 
         <View style={styles.sectionBlock}>
           <View style={styles.titleRow}>
-            <Text style={styles.sectionTitle}>Limited Apps</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Limited Apps</Text>
             <TouchableOpacity style={styles.editAppsButton} onPress={onEditApps} activeOpacity={0.76}>
               <Text style={styles.editAppsText}>Edit</Text>
             </TouchableOpacity>
           </View>
-          <View style={styles.limitedList}>
+          <View style={[styles.limitedList, { borderTopColor: theme.border }]}>
             {todayApps.length === 0 ? (
               <View style={styles.emptyState}>
                 <Image
@@ -361,18 +370,26 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
                   style={styles.emptyIllustration}
                   resizeMode="contain"
                 />
-                <Text style={styles.emptyTitle}>No limits yet</Text>
-                <Text style={styles.emptyText}>Pick the apps you want to control, then they will appear here.</Text>
+                <Text style={[styles.emptyTitle, { color: theme.text }]}>No limits yet</Text>
+                <Text style={[styles.emptyText, { color: theme.textSecondary }]}>Pick the apps you want to control, then they will appear here.</Text>
               </View>
             ) : (
               todayApps.map((app) => {
                 const ratio = app.limitMinutes > 0 ? app.minutes / app.limitMinutes : 0;
                 const fillWidth = app.minutes > 0 ? Math.min(Math.max(ratio * 100, 4), 100) : 0;
                 const state = resolveLimitState(app);
-                const fillColor = state.label === 'Broken' ? '#D65A5A' : state.label === 'Near limit' ? '#E4A62A' : app.minutes === 0 ? '#D7D7DC' : '#7ACB67';
+                const fillColor = state.label === 'Broken'
+                  ? '#D65A5A'
+                  : state.label === 'Protected'
+                    ? '#E4A62A'
+                    : state.label === 'Near limit'
+                      ? '#E4A62A'
+                      : app.minutes === 0
+                        ? '#D7D7DC'
+                        : '#7ACB67';
 
                 return (
-                  <View key={app.id} style={styles.appRow}>
+                  <View key={app.id} style={[styles.appRow, { borderBottomColor: theme.border }]}>
                     <View style={styles.appTopRow}>
                       <View style={styles.appNameWrap}>
                         {app.iconBase64 ? (
@@ -382,14 +399,14 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ onEditApps, onOpenFocusSetu
                             <Text style={styles.appIconFallbackText}>{app.name.charAt(0).toUpperCase()}</Text>
                           </View>
                         )}
-                        <Text style={styles.appName} numberOfLines={1}>{app.name}</Text>
+                        <Text style={[styles.appName, { color: theme.text }]} numberOfLines={1}>{app.name}</Text>
                       </View>
                       <View style={styles.appUsageRight}>
                         <View style={[styles.statePill, { backgroundColor: state.bg, borderColor: state.border }]}>
                           <Text style={[styles.stateText, { color: state.color }]}>{state.label}</Text>
                         </View>
                         <Text
-                          style={[styles.appMinutes, app.minutes === 0 && styles.appMinutesUnused]}
+                          style={[styles.appMinutes, { color: theme.text }, app.minutes === 0 && styles.appMinutesUnused]}
                           numberOfLines={1}
                           adjustsFontSizeToFit
                           minimumFontScale={0.78}

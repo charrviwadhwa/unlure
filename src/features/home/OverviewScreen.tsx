@@ -15,6 +15,7 @@ import {
   Platform,
   StatusBar,
   AppState,
+  useColorScheme,
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import LinearGradient from 'react-native-linear-gradient';
@@ -212,10 +213,19 @@ const formatAxisTime = (mins: number) => {
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 };
 
+const hexToRgba = (hex: string, alpha: number) => {
+  const clean = hex.replace('#', '');
+  const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
 const getWeekAxisScale = (maxMinutes: number) => {
-  const padded = Math.max(maxMinutes * 1.2, 20);
+  const padded = Math.max(maxMinutes * 1.2, 8);
   const roughStep = padded / 4;
-  const niceSteps = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240];
+  const niceSteps = [2, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240];
   const step = niceSteps.find((value) => value >= roughStep) || Math.ceil(roughStep / 60) * 60;
   const max = step * 4;
   const ticks = [max, max - step, max - step * 2, max - step * 3, 0];
@@ -322,6 +332,16 @@ const CategoryGlyph = ({ category, color }: { category: CategoryKey | 'otherSumm
 };
 
 export default function ScreenTimeDashboard() {
+  const isDark = useColorScheme() === 'dark';
+  const ui = {
+    bg: isDark ? '#121418' : COLORS.bg,
+    text: isDark ? '#F3F4F6' : COLORS.textMain,
+    textSecondary: isDark ? '#A5ACB8' : COLORS.textSecondary,
+    border: isDark ? '#2A303A' : '#EAEAEA',
+    track: isDark ? '#2B313B' : '#E5E5EA',
+    sheet: isDark ? '#191D23' : '#FFFFFF'
+  };
+  const chartFadeTail = isDark ? '#1E232B' : '#FFFFFF';
   const [viewMode, setViewMode] = useState('day');
   const [todayApps, setTodayApps] = useState<AppRow[]>([]);
   const [storedStats, setStoredStats] = useState<DailyUsageMap>({});
@@ -571,7 +591,7 @@ export default function ScreenTimeDashboard() {
   }, []);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: ui.bg }]}>
       <View style={styles.container}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -585,14 +605,15 @@ export default function ScreenTimeDashboard() {
           {/* --- COMMON HEADER --- */}
           <View style={styles.header}>
             <View style={styles.titleWrap}>
-              <Text style={styles.brandMark}>unlure</Text>
-              <Text style={styles.title}>Screen time</Text>
+              <Text style={[styles.brandMark, { color: isDark ? '#AAB0BD' : '#6E6E73' }]}>unlure</Text>
+              <Text style={[styles.title, { color: ui.text }]}>Screen time</Text>
             </View>
             
-            <View style={styles.toggleContainer}>
+            <View style={[styles.toggleContainer, { backgroundColor: isDark ? '#2A303A' : '#E8E8EE', borderColor: isDark ? '#323A46' : '#E0E0E8' }]}>
               <Animated.View
                 style={[
                   styles.activeSegment,
+                  { backgroundColor: isDark ? '#141922' : '#FFFFFF', borderColor: isDark ? '#3B4452' : '#D8D8DE' },
                   { transform: [{ translateX: toggleAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 69] }) }] }
                 ]}
               />
@@ -601,7 +622,7 @@ export default function ScreenTimeDashboard() {
                 onPress={() => handleToggleMode('week')}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.toggleText, isWeek && styles.toggleTextActive]}>
+                <Text style={[styles.toggleText, { color: isDark ? '#AAB0BD' : '#8E8E93' }, isWeek && styles.toggleTextActive, isWeek && { color: isDark ? '#F3F4F6' : '#111111' }]}>
                   week
                 </Text>
               </TouchableOpacity>
@@ -611,7 +632,7 @@ export default function ScreenTimeDashboard() {
                 onPress={() => handleToggleMode('day')}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.toggleText, !isWeek && styles.toggleTextActive]}>
+                <Text style={[styles.toggleText, { color: isDark ? '#AAB0BD' : '#8E8E93' }, !isWeek && styles.toggleTextActive, !isWeek && { color: isDark ? '#F3F4F6' : '#111111' }]}>
                   day
                 </Text>
               </TouchableOpacity>
@@ -619,8 +640,8 @@ export default function ScreenTimeDashboard() {
           </View>
 
           <View style={styles.dateHeader}>
-            <Text style={styles.dateText}>{todayLabel}</Text>
-            {!isWeek && <Text style={styles.updatedSmall}>{updatedLabel}</Text>}
+            <Text style={[styles.dateText, { color: ui.textSecondary }]}>{todayLabel}</Text>
+            {!isWeek && <Text style={[styles.updatedSmall, { color: ui.textSecondary }]}>{updatedLabel}</Text>}
           </View>
 
           {/* ========================================= */}
@@ -630,18 +651,18 @@ export default function ScreenTimeDashboard() {
           {isWeek ? (
             <View style={styles.weekViewContainer}>
               {/* Week Top Stats */}
-              <Text style={styles.timeBigText}>{formatTime(weekTotalMinutes)}</Text>
-              <Text style={styles.subTextMain}>Total usage this week</Text>
-              <Text style={styles.subText}>Daily Average this week {formatTime(weekAverageMinutes)}</Text>
+              <Text style={[styles.timeBigText, { color: ui.text }]}>{formatTime(weekTotalMinutes)}</Text>
+              <Text style={[styles.subTextMain, { color: ui.text }]}>Total usage this week</Text>
+              <Text style={[styles.subText, { color: ui.textSecondary }]}>Daily Average this week {formatTime(weekAverageMinutes)}</Text>
 
-              <View style={styles.weekInsightRow}>
+              <View style={[styles.weekInsightRow, { backgroundColor: isDark ? '#1D232D' : '#F7F7FA', borderColor: ui.border }, isDark && styles.darkCardLift]}>
                 <View style={styles.weekInsightBlock}>
-                  <Text style={styles.weekInsightLabel}>Most used app</Text>
-                  <Text style={styles.weekInsightValue} numberOfLines={1}>
+                  <Text style={[styles.weekInsightLabel, { color: ui.textSecondary }]}>Most used app</Text>
+                  <Text style={[styles.weekInsightValue, { color: ui.text }]} numberOfLines={1}>
                     {weekTopApp ? weekTopApp.name : 'No usage yet'}
                   </Text>
                 </View>
-                <Text style={styles.weekInsightTime}>{weekTopApp ? formatTime(weekTopApp.minutes) : '0m'}</Text>
+                <Text style={[styles.weekInsightTime, { color: ui.text }]}>{weekTopApp ? formatTime(weekTopApp.minutes) : '0m'}</Text>
               </View>
 
               {/* Week Chart */}
@@ -653,8 +674,8 @@ export default function ScreenTimeDashboard() {
                 */}
                 <View style={styles.gridLineContainer}>
                   {weekAxisTicks.map((tick) => (
-                    <View style={styles.gridLine} key={tick}>
-                      <Text style={styles.gridText}>{formatAxisTime(tick)}</Text>
+                    <View style={[styles.gridLine, { borderBottomColor: ui.border }]} key={tick}>
+                      <Text style={[styles.gridText, { color: ui.textSecondary }]}>{formatAxisTime(tick)}</Text>
                     </View>
                   ))}
                 </View>
@@ -675,7 +696,11 @@ export default function ScreenTimeDashboard() {
                         {segments.map((segment, segmentIndex) => (
                           <LinearGradient
                             key={segment.key}
-                            colors={[segment.color.light, '#FFFFFF']}
+                            colors={
+                              isDark
+                                ? [hexToRgba(segment.color.border, 0.54), hexToRgba(segment.color.border, 0.16)]
+                                : [segment.color.light, chartFadeTail]
+                            }
                             start={{ x: 0.5, y: 0 }}
                             end={{ x: 0.5, y: 1 }}
                             style={[
@@ -695,7 +720,7 @@ export default function ScreenTimeDashboard() {
                       </View>
                       
                       {/* Fixed X-Axis Label */}
-                      <Text style={styles.xLabel}>{item.day}</Text>
+                      <Text style={[styles.xLabel, { color: ui.text }]}>{item.day}</Text>
                     </View>
                     );
                   })}
@@ -703,8 +728,8 @@ export default function ScreenTimeDashboard() {
 
                 {weekAverageMinutes > 0 && (
                   <View pointerEvents="none" style={[styles.averageLineWrap, { bottom: weekAverageLineBottom }]}>
-                    <Text style={styles.averageLineLabel}>avg {formatAxisTime(weekAverageMinutes)}</Text>
-                    <View style={styles.averageLine} />
+                    <Text style={[styles.averageLineLabel, { color: ui.textSecondary }]}>avg {formatAxisTime(weekAverageMinutes)}</Text>
+                    <View style={[styles.averageLine, { borderColor: ui.textSecondary }]} />
                   </View>
                 )}
               </View>
@@ -714,13 +739,13 @@ export default function ScreenTimeDashboard() {
                 {weekChartCategories.map((category) => (
                   <View style={styles.legendItem} key={category.key}>
                     <Text style={[styles.legendLabel, { color: category.color.border }]} numberOfLines={1}>{category.label}</Text>
-                    <Text style={styles.legendValue}>{formatTime(category.minutes)}</Text>
+                    <Text style={[styles.legendValue, { color: ui.text }]}>{formatTime(category.minutes)}</Text>
                   </View>
                 ))}
               </View>
-              <Text style={styles.updatedText}>{updatedLabel}</Text>
+              <Text style={[styles.updatedText, { color: ui.textSecondary }]}>{updatedLabel}</Text>
 
-              <Text style={styles.sectionTitle}>Categories</Text>
+              <Text style={[styles.sectionTitle, { color: ui.text }]}>Categories</Text>
               <View style={styles.iosList}>
                 {weekChartCategories.map((category) => (
                   <Pressable
@@ -731,15 +756,21 @@ export default function ScreenTimeDashboard() {
                     <View style={styles.iosUsageMain}>
                       <View
                         accessibilityLabel={CATEGORY_ICONS[category.key]}
-                        style={styles.iosGlyph}
+                        style={[
+                          styles.iosGlyph,
+                          {
+                            backgroundColor: isDark ? '#20252D' : '#F7F7FA',
+                            borderColor: isDark ? '#323A46' : '#ECECF2'
+                          }
+                        ]}
                       >
                         <CategoryGlyph category={category.key} color={category.color.border} />
                       </View>
-                      <Text style={styles.iosUsageName} numberOfLines={1}>{category.label}</Text>
+                      <Text style={[styles.iosUsageName, { color: ui.text }]} numberOfLines={1}>{category.label}</Text>
                     </View>
                     <View style={styles.iosUsageRight}>
-                      <Text style={styles.iosUsageTime}>{formatTime(category.minutes)}</Text>
-                      <View style={styles.iosMiniTrack}>
+                      <Text style={[styles.iosUsageTime, { color: ui.text }]}>{formatTime(category.minutes)}</Text>
+                      <View style={[styles.iosMiniTrack, { backgroundColor: ui.track }]}>
                         <View
                           style={[
                             styles.iosMiniFill,
@@ -766,12 +797,16 @@ export default function ScreenTimeDashboard() {
                   <View style={styles.dayBarColumn} key={category.key}>
                     <View style={styles.dayBarLabelContainer}>
                       <Text style={[styles.dayBarLabelTitle, { color: category.color.border }]} numberOfLines={1}>{category.label}</Text>
-                      <Text style={styles.dayBarLabelValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
+                      <Text style={[styles.dayBarLabelValue, { color: ui.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
                         {formatCompactTime(category.minutes)}
                       </Text>
                     </View>
                     <LinearGradient
-                      colors={[category.color.light, '#FFFFFF']}
+                      colors={
+                        isDark
+                          ? [hexToRgba(category.color.border, 0.54), hexToRgba(category.color.border, 0.16)]
+                          : [category.color.light, chartFadeTail]
+                      }
                       start={{ x: 0.5, y: 0 }}
                       end={{ x: 0.5, y: 1 }}
                       style={[
@@ -787,15 +822,15 @@ export default function ScreenTimeDashboard() {
               </View>
 
               {/* Day Bottom Stats */}
-              <View style={styles.dayFooter}>
+              <View style={[styles.dayFooter, { borderTopColor: ui.border }]}>
                 <View>
-                  <Text style={styles.totalTodayText}>total today</Text>
-                  <Text style={styles.subText}>Resets at midnight</Text>
+                  <Text style={[styles.totalTodayText, { color: ui.text }]}>total today</Text>
+                  <Text style={[styles.subText, { color: ui.textSecondary }]}>Resets at midnight</Text>
                 </View>
-                <Text style={styles.timeBigTextDay}>{formatTime(dayTotalMinutes)}</Text>
+                <Text style={[styles.timeBigTextDay, { color: ui.text }]}>{formatTime(dayTotalMinutes)}</Text>
               </View>
 
-              <Text style={styles.sectionTitle}>Apps today</Text>
+              <Text style={[styles.sectionTitle, { color: ui.text }]}>Apps today</Text>
               <View style={styles.iosList}>
                 {todayApps.slice(0, 6).map((app) => {
                   const category = categorizeApp(app.name, app.id);
@@ -810,11 +845,11 @@ export default function ScreenTimeDashboard() {
                             <Text style={[styles.iosGlyphText, { color: theme.border }]}>{app.name.charAt(0).toUpperCase()}</Text>
                           </View>
                         )}
-                        <Text style={styles.iosUsageName} numberOfLines={1}>{app.name}</Text>
+                        <Text style={[styles.iosUsageName, { color: ui.text }]} numberOfLines={1}>{app.name}</Text>
                       </View>
                       <View style={styles.iosUsageRight}>
-                        <Text style={styles.iosUsageTime}>{formatTime(app.minutes)}</Text>
-                        <View style={styles.iosMiniTrack}>
+                        <Text style={[styles.iosUsageTime, { color: ui.text }]}>{formatTime(app.minutes)}</Text>
+                        <View style={[styles.iosMiniTrack, { backgroundColor: ui.track }]}>
                           <View
                             style={[
                               styles.iosMiniFill,
@@ -836,7 +871,7 @@ export default function ScreenTimeDashboard() {
                       style={styles.emptyIllustration}
                       resizeMode="contain"
                     />
-                    <Text style={styles.sheetEmpty}>No app usage tracked yet today.</Text>
+                    <Text style={[styles.sheetEmpty, { color: ui.textSecondary }]}>No app usage tracked yet today.</Text>
                     <Text style={styles.emptyHint}>Stay in flow and your timeline will fill itself.</Text>
                   </View>
                 ) : null}
@@ -851,14 +886,14 @@ export default function ScreenTimeDashboard() {
       <Modal visible={Boolean(selectedCategory)} transparent statusBarTranslucent animationType="none" onRequestClose={closeCategorySheet}>
         <View style={styles.modalRoot}>
           <View style={styles.sheetBackdrop} />
-          <Animated.View style={[styles.sheetWrap, { transform: [{ translateY: sheetTranslateY }] }]}>
+          <Animated.View style={[styles.sheetWrap, { backgroundColor: ui.sheet, transform: [{ translateY: sheetTranslateY }] }]}>
             <View style={styles.sheetHandle} />
             <View style={styles.sheetTitleRow}>
-              <Text style={styles.sheetTitle}>
+              <Text style={[styles.sheetTitle, { color: ui.text }]}>
                 {selectedCategory ? `${selectedCategory.label} Apps` : 'Apps'}
               </Text>
               <Pressable style={styles.sheetCloseButton} onPress={closeCategorySheet} hitSlop={10}>
-                <Text style={styles.sheetCloseText}>Close</Text>
+                <Text style={[styles.sheetCloseText, { color: ui.textSecondary }]}>Close</Text>
               </Pressable>
             </View>
             {selectedApps.length > 0 ? (
@@ -869,16 +904,16 @@ export default function ScreenTimeDashboard() {
                       <Image source={{ uri: `data:image/png;base64,${app.iconBase64}` }} style={styles.sheetAppIcon} resizeMode="cover" />
                     ) : (
                       <View style={styles.sheetAppFallback}>
-                        <Text style={styles.sheetAppFallbackText}>{app.name.charAt(0).toUpperCase()}</Text>
+                        <Text style={[styles.sheetAppFallbackText, { color: ui.textSecondary }]}>{app.name.charAt(0).toUpperCase()}</Text>
                       </View>
                     )}
-                    <Text style={styles.sheetAppName} numberOfLines={1}>{app.name}</Text>
+                    <Text style={[styles.sheetAppName, { color: ui.text }]} numberOfLines={1}>{app.name}</Text>
                   </View>
-                  <Text style={styles.sheetAppTime}>{formatTime(app.minutes)}</Text>
+                  <Text style={[styles.sheetAppTime, { color: ui.text }]}>{formatTime(app.minutes)}</Text>
                 </View>
               ))
             ) : (
-              <Text style={styles.sheetEmpty}>No usage in this category yet.</Text>
+              <Text style={[styles.sheetEmpty, { color: ui.textSecondary }]}>No usage in this category yet.</Text>
             )}
           </Animated.View>
         </View>
@@ -918,12 +953,12 @@ const styles = StyleSheet.create({
   },
   brandMark: {
     color: '#6E6E73',
-    fontSize: 17,
-    lineHeight: 21,
+    fontSize: 18,
+    lineHeight: 22,
     fontFamily: FONT_SCRIPT,
     fontWeight: '600',
     letterSpacing: 0,
-    marginBottom: 1
+    marginBottom: 2
   },
   toggleContainer: {
     flexDirection: 'row',
@@ -1135,6 +1170,13 @@ const styles = StyleSheet.create({
     color: COLORS.textMain,
     fontWeight: '500'
   },
+  darkCardLift: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    elevation: 4
+  },
   updatedText: {
     fontSize: 12,
     color: COLORS.textSecondary,
@@ -1295,7 +1337,7 @@ const styles = StyleSheet.create({
     paddingLeft: 14
   },
   sheetCloseText: {
-    color: '#007AFF',
+    color: '#8E8E93',
     fontSize: 13,
     fontWeight: '700'
   },

@@ -23,6 +23,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import java.text.SimpleDateFormat;
@@ -234,7 +235,7 @@ public class FocusModeService extends AccessibilityService {
         root.setElevation(dp(18));
 
         View handle = new View(this);
-        handle.setBackground(makeRoundedDrawable(Color.rgb(214, 214, 222), dp(999)));
+        handle.setBackground(makeRoundedDrawable(Color.argb(170, 222, 230, 244), dp(999)));
         LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(dp(42), dp(4));
         handleParams.gravity = Gravity.CENTER_HORIZONTAL;
         handleParams.bottomMargin = dp(18);
@@ -267,21 +268,21 @@ public class FocusModeService extends AccessibilityService {
 
         TextView title = new TextView(this);
         title.setText("Limit reached");
-        title.setTextColor(Color.rgb(17, 17, 17));
+        title.setTextColor(Color.rgb(244, 247, 255));
         title.setTextSize(22);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         titleBlock.addView(title);
 
         TextView subtitle = new TextView(this);
         subtitle.setText(appName);
-        subtitle.setTextColor(Color.rgb(142, 142, 147));
+        subtitle.setTextColor(Color.rgb(194, 202, 220));
         subtitle.setTextSize(13);
         subtitle.setTypeface(Typeface.DEFAULT_BOLD);
         titleBlock.addView(subtitle);
 
         TextView body = new TextView(this);
         body.setText("You have used today's limit. Close the app now to protect your streak, or continue knowingly.");
-        body.setTextColor(Color.rgb(96, 96, 104));
+        body.setTextColor(Color.rgb(210, 217, 232));
         body.setTextSize(15);
         body.setLineSpacing(dp(2), 1.0f);
         body.setPadding(0, 0, 0, dp(18));
@@ -293,7 +294,7 @@ public class FocusModeService extends AccessibilityService {
         close.setTextSize(16);
         close.setTypeface(Typeface.DEFAULT_BOLD);
         close.setGravity(Gravity.CENTER);
-        close.setBackground(makeRoundedDrawable(Color.rgb(17, 17, 17), dp(18)));
+        close.setBackground(makeRoundedDrawable(Color.rgb(10, 12, 18), dp(18)));
         close.setPadding(0, dp(14), 0, dp(14));
         close.setOnClickListener(v -> {
             markProtectedToday(packageName);
@@ -312,11 +313,11 @@ public class FocusModeService extends AccessibilityService {
 
         TextView bypass = new TextView(this);
         bypass.setText("Break streak and continue");
-        bypass.setTextColor(Color.rgb(96, 96, 104));
+        bypass.setTextColor(Color.rgb(230, 235, 246));
         bypass.setTextSize(15);
         bypass.setTypeface(Typeface.DEFAULT_BOLD);
         bypass.setGravity(Gravity.CENTER);
-        bypass.setBackground(makeStrokeDrawable(Color.rgb(246, 246, 248), Color.rgb(229, 229, 234), dp(18)));
+        bypass.setBackground(makeStrokeDrawable(Color.argb(68, 120, 136, 170), Color.argb(150, 110, 128, 162), dp(18)));
         bypass.setPadding(0, dp(14), 0, dp(14));
         bypass.setOnClickListener(v -> {
             markBypassedToday(packageName);
@@ -327,20 +328,29 @@ public class FocusModeService extends AccessibilityService {
             LinearLayout.LayoutParams.WRAP_CONTENT
         ));
 
+        FrameLayout overlayContainer = new FrameLayout(this);
+        overlayContainer.setBackgroundColor(Color.argb(120, 8, 12, 20));
+        FrameLayout.LayoutParams sheetParams = new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT
+        );
+        sheetParams.gravity = Gravity.BOTTOM;
+        overlayContainer.addView(root, sheetParams);
+
         int overlayType = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
             ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             : WindowManager.LayoutParams.TYPE_PHONE;
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
             overlayType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         );
-        params.gravity = Gravity.BOTTOM;
+        params.gravity = Gravity.TOP;
 
-        overlayView = root;
-        windowManager.addView(root, params);
+        overlayView = overlayContainer;
+        windowManager.addView(overlayContainer, params);
         root.post(() -> {
             root.setTranslationY(root.getHeight());
             ObjectAnimator.ofFloat(root, "translationY", root.getHeight(), 0f).setDuration(220).start();
@@ -376,7 +386,8 @@ public class FocusModeService extends AccessibilityService {
 
     private GradientDrawable makeSheetBackground() {
         GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(Color.WHITE);
+        drawable.setColor(Color.argb(238, 20, 28, 40));
+        drawable.setStroke(dp(1), Color.argb(135, 84, 102, 128));
         drawable.setCornerRadii(new float[] {
             dp(28), dp(28),
             dp(28), dp(28),

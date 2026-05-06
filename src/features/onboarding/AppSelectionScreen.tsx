@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, StatusBar, Image, Animated } from 'react-native';
+import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, StatusBar, Image, Animated, useColorScheme } from 'react-native';
 import { ScreenTimeService, AppInfo } from '../../services/ScreenTimeService';
 import { UserStore } from '../../services/storage';
 import { TimeLimitModal } from './TimeLimitModal';
+const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
 
 const IosSwitch = ({ enabled }: { enabled: boolean }) => {
+  const isDark = useColorScheme() === 'dark';
   const progress = useRef(new Animated.Value(enabled ? 1 : 0)).current;
 
   useEffect(() => {
@@ -18,11 +20,11 @@ const IosSwitch = ({ enabled }: { enabled: boolean }) => {
 
   const backgroundColor = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: ['#E9E9EA', '#34C759']
+    outputRange: [isDark ? '#2A303A' : '#E9E9EA', '#5C56B6']
   });
   const borderColor = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: ['#D9D9DE', '#34C759']
+    outputRange: [isDark ? '#3A4250' : '#D9D9DE', '#5C56B6']
   });
   const translateX = progress.interpolate({
     inputRange: [0, 1],
@@ -37,6 +39,14 @@ const IosSwitch = ({ enabled }: { enabled: boolean }) => {
 };
 
 export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) => {
+  const isDark = useColorScheme() === 'dark';
+  const theme = {
+    bg: isDark ? '#121418' : '#FFFFFF',
+    surface: isDark ? '#191D23' : '#F2F2F7',
+    border: isDark ? '#2A303A' : '#EFEFF4',
+    text: isDark ? '#F3F4F6' : '#000000',
+    textSecondary: isDark ? '#A5ACB8' : '#8E8E93'
+  };
   const [apps, setApps] = useState<AppInfo[]>([]);
   const [selectedLimits, setSelectedLimits] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
@@ -110,20 +120,21 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
     return m === 0 ? `${h}h limit` : `${h}h ${m}m limit`;
   };
 
-  if (loading) return <ActivityIndicator size="large" color="#111111" style={styles.loading} />;
+  if (loading) return <ActivityIndicator size="large" color={isDark ? '#F3F4F6' : '#111111'} style={[styles.loading, { backgroundColor: theme.bg }]} />;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={styles.headerWrap}>
-        <Text style={styles.header}>Choose Apps</Text>
-        <Text style={styles.subheader}>Only apps with enabled limits will appear in your streak view.</Text>
+        <Text style={[styles.brandMark, { color: isDark ? '#AAB0BD' : '#6E6E73' }]}>unlure</Text>
+        <Text style={[styles.header, { color: theme.text }]}>Choose Apps</Text>
+        <Text style={[styles.subheader, { color: theme.textSecondary }]}>Only apps with enabled limits will appear in your streak view.</Text>
       </View>
       <TextInput
-        style={styles.searchBar}
+        style={[styles.searchBar, { backgroundColor: theme.surface, color: theme.text }]}
         placeholder="Search apps"
         value={search}
         onChangeText={setSearch}
-        placeholderTextColor="#8E8E93"
+        placeholderTextColor={theme.textSecondary}
       />
 
       <FlatList
@@ -139,7 +150,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
           const limit = selectedLimits[item.packageName];
           return (
             <TouchableOpacity
-              style={styles.item}
+              style={[styles.item, { borderBottomColor: theme.border }]}
               activeOpacity={0.72}
               onPress={() => {
                 if (limit) {
@@ -154,13 +165,13 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
                 {item.iconBase64 ? (
                   <Image source={{ uri: `data:image/png;base64,${item.iconBase64}` }} style={styles.appIcon} resizeMode="cover" />
                 ) : (
-                  <View style={styles.appIconFallback}>
+                  <View style={[styles.appIconFallback, { backgroundColor: theme.surface }]}>
                     <Text style={styles.appIconFallbackText}>{item.appName.charAt(0).toUpperCase()}</Text>
                   </View>
                 )}
                 <View style={styles.appCopy}>
-                  <Text style={styles.appName} numberOfLines={1}>{item.appName}</Text>
-                  {limit ? <Text style={styles.limitText}>{formatLimit(limit)}</Text> : <Text style={styles.limitHint}>No limit</Text>}
+                  <Text style={[styles.appName, { color: theme.text }]} numberOfLines={1}>{item.appName}</Text>
+                  {limit ? <Text style={[styles.limitText, { color: theme.textSecondary }]}>{formatLimit(limit)}</Text> : <Text style={[styles.limitHint, { color: theme.textSecondary }]}>No limit</Text>}
                 </View>
               </View>
               <IosSwitch enabled={Boolean(limit)} />
@@ -171,18 +182,18 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
 
       <View
         pointerEvents="box-none"
-        style={styles.footerWrap}
+        style={[styles.footerWrap, { backgroundColor: theme.bg }]}
         onLayout={(event) => setFooterHeight(event.nativeEvent.layout.height)}
       >
         <TouchableOpacity
-          style={styles.footerButton}
+          style={[styles.footerButton, isDark && { backgroundColor: '#FFFFFF' }]}
           onPress={async () => {
             await syncFocusMode(selectedLimits);
             onComplete();
           }}
           activeOpacity={0.88}
         >
-          <Text style={styles.footerText}>Save App List</Text>
+          <Text style={[styles.footerText, isDark && { color: '#101319' }]}>Save App List</Text>
         </TouchableOpacity>
       </View>
 
@@ -207,6 +218,15 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'android' ? Math.max((StatusBar.currentHeight ?? 0) + 34, 58) : 18
   },
   headerWrap: { marginBottom: 16, paddingRight: 18 },
+  brandMark: {
+    color: '#6E6E73',
+    fontSize: 18,
+    lineHeight: 22,
+    fontFamily: FONT_SCRIPT,
+    fontWeight: '600',
+    letterSpacing: 0,
+    marginBottom: 2
+  },
   header: { fontSize: 32, lineHeight: 36, color: '#000000', fontWeight: '800' },
   subheader: { fontSize: 14, lineHeight: 19, color: '#8E8E93', marginTop: 6, fontWeight: '500' },
   searchBar: {

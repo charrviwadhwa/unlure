@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, StatusBar } from 'react-native';
+import { StyleSheet, View, StatusBar, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import EntryScreen from './src/features/onboarding/EntryScreen';
@@ -13,6 +13,8 @@ import { UserStore } from './src/services/storage';
 import { ScreenTimeService } from './src/services/ScreenTimeService';
 
 const App = () => {
+  const isDark = useColorScheme() === 'dark';
+  const appBg = isDark ? '#121418' : '#FFFFFF';
   const [currentStep, setCurrentStep] = useState<'entry' | 'permissions' | 'settings' | 'selection' | 'main'>('entry');
   const [activeTab, setActiveTab] = useState<'home' | 'streak' | 'analytics'>('home');
   const [mountedTabs, setMountedTabs] = useState<Record<'home' | 'streak' | 'analytics', boolean>>({
@@ -51,12 +53,12 @@ const App = () => {
     initialize();
   }, []);
 
-  if (!isReady) return <View style={{ flex: 1, backgroundColor: '#FFFFFF' }} />;
+  if (!isReady) return <View style={{ flex: 1, backgroundColor: appBg }} />;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      <View style={styles.container}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={appBg} />
+      <View style={[styles.container, { backgroundColor: appBg }]}>
         {currentStep === 'entry' && <EntryScreen onAnimationComplete={() => setCurrentStep('permissions')} />}
 
         {currentStep === 'permissions' && (

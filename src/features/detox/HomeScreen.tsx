@@ -11,12 +11,14 @@ import {
   Platform,
   StatusBar
 } from 'react-native';
+import { useColorScheme } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { ScreenTimeService, DailyUsageMap, FocusModeDecisions } from '../../services/ScreenTimeService';
 import { DailyLimitSnapshots, DailyMoodSnapshots, StoredMood, UserStore } from '../../services/storage';
 import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
 
 const { width } = Dimensions.get('window');
+const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
 
 const COLORS = {
   bg: '#FFFFFF',
@@ -63,12 +65,12 @@ const MOOD_LABELS: Record<MoodType, string> = {
 const LEGEND_ITEMS: MoodType[] = [MOOD_TYPES.GREAT, MOOD_TYPES.GOOD, MOOD_TYPES.NEUTRAL, MOOD_TYPES.AWFUL];
 const EMPTY_FOCUS_DECISIONS: FocusModeDecisions = { protectedApps: {}, bypassedApps: {} };
 
-const ChevronIcon = ({ direction }: { direction: 'left' | 'right' }) => (
+const ChevronIcon = ({ direction, color = '#000000' }: { direction: 'left' | 'right'; color?: string }) => (
   <Svg width={18} height={18} viewBox="0 0 24 24">
     <Path
       d={direction === 'left' ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6'}
       fill="none"
-      stroke="#000000"
+      stroke={color}
       strokeWidth={2.8}
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -129,6 +131,18 @@ const formatDateKey = (date: Date) => {
 };
 
 export const HomeScreen = () => {
+  const isDark = useColorScheme() === 'dark';
+  const theme = {
+    bg: isDark ? '#121418' : COLORS.bg,
+    panel: isDark ? '#191D23' : '#F8F8FA',
+    panelEmpty: isDark ? '#171B21' : '#FBFBFC',
+    text: isDark ? '#F3F4F6' : COLORS.textMain,
+    subtext: isDark ? '#A5ACB8' : COLORS.textSecondary,
+    faint: isDark ? '#8A93A6' : COLORS.textFaint,
+    pill: isDark ? '#1F2630' : COLORS.pillBg,
+    dayPill: isDark ? '#2A303A' : COLORS.pillBg,
+    border: isDark ? '#2A303A' : '#F2F2F5'
+  };
   const [monthDate, setMonthDate] = useState(new Date());
   const [calendarData, setCalendarData] = useState<CalendarItem[]>([]);
   const [statsCache, setStatsCache] = useState<DailyUsageMap>({});
@@ -338,7 +352,7 @@ export const HomeScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <ScrollView
         contentContainerStyle={styles.container}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.textMain} />}
@@ -349,25 +363,26 @@ export const HomeScreen = () => {
       >
         <View style={styles.header}>
           <View>
-            <Text style={styles.pageTitle}>Month</Text>
-            <Text style={styles.monthTitle}>{monthTitle}</Text>
-            <Text style={styles.monthSummary}>{monthSummary}</Text>
+            <Text style={[styles.brandMark, { color: isDark ? '#AAB0BD' : '#6E6E73' }]}>unlure</Text>
+            <Text style={[styles.pageTitle, { color: theme.text }]}>Month</Text>
+            <Text style={[styles.monthTitle, { color: theme.subtext }]}>{monthTitle}</Text>
+            <Text style={[styles.monthSummary, { color: isDark ? '#8E95A3' : '#A0A0A6' }]}>{monthSummary}</Text>
           </View>
-          <View style={styles.monthControls}>
+          <View style={[styles.monthControls, { backgroundColor: theme.pill, borderColor: theme.border }]}>
             <TouchableOpacity style={styles.chevronButton} onPress={() => shiftMonth(-1)} activeOpacity={0.76}>
-              <ChevronIcon direction="left" />
+              <ChevronIcon direction="left" color={theme.text} />
             </TouchableOpacity>
             <View style={styles.chevronDivider} />
             <TouchableOpacity style={styles.chevronButton} onPress={() => shiftMonth(1)} activeOpacity={0.76}>
-              <ChevronIcon direction="right" />
+              <ChevronIcon direction="right" color={theme.text} />
             </TouchableOpacity>
           </View>
         </View>
 
         <View style={styles.daysOfWeekContainer}>
           {DAYS_OF_WEEK.map((day) => (
-            <View key={day} style={styles.dayPill}>
-              <Text style={styles.dayText}>{day}</Text>
+            <View key={day} style={[styles.dayPill, { backgroundColor: theme.dayPill }]}>
+              <Text style={[styles.dayText, { color: theme.subtext }]}>{day}</Text>
             </View>
           ))}
         </View>
@@ -380,7 +395,9 @@ export const HomeScreen = () => {
                 key={`${item.date}-${index}`}
                 style={[
                   styles.cellPill,
+                  { backgroundColor: theme.panel, borderColor: theme.border },
                   item.mood === MOOD_TYPES.EMPTY && styles.cellPillEmpty,
+                  item.mood === MOOD_TYPES.EMPTY && { backgroundColor: theme.panelEmpty, borderColor: theme.border },
                   item.isToday
                     ? {
                         backgroundColor: lightenHex(COLORS.moods[item.mood].bg),
@@ -392,9 +409,13 @@ export const HomeScreen = () => {
                 <Text
                   style={[
                     styles.dateText,
+                    { color: theme.text },
                     isFaint && styles.dateTextFaint,
+                    isFaint && { color: theme.faint },
                     item.mood === MOOD_TYPES.EMPTY && item.isCurrentMonth && styles.dateTextQuiet,
-                    item.isToday && styles.dateTextSelected
+                    item.mood === MOOD_TYPES.EMPTY && item.isCurrentMonth && { color: theme.faint },
+                    item.isToday && styles.dateTextSelected,
+                    item.isToday && { color: isDark ? '#1A1A24' : '#111111' }
                   ]}
                 >
                   {item.date}
@@ -407,9 +428,9 @@ export const HomeScreen = () => {
 
         <View style={styles.legendRow}>
           {LEGEND_ITEMS.map((mood) => (
-            <View key={mood} style={styles.legendItem}>
+            <View key={mood} style={[styles.legendItem, { backgroundColor: theme.dayPill, borderColor: theme.border }]}>
               <View style={[styles.legendDot, { backgroundColor: COLORS.moods[mood].bg, borderColor: COLORS.moods[mood].line }]} />
-              <Text style={styles.legendText}>{MOOD_LABELS[mood]}</Text>
+              <Text style={[styles.legendText, { color: theme.subtext }]}>{MOOD_LABELS[mood]}</Text>
             </View>
           ))}
         </View>
@@ -441,6 +462,15 @@ const styles = StyleSheet.create({
     lineHeight: 38,
     fontWeight: '800',
     color: COLORS.textMain
+  },
+  brandMark: {
+    color: '#6E6E73',
+    fontSize: 18,
+    lineHeight: 22,
+    fontFamily: FONT_SCRIPT,
+    fontWeight: '600',
+    letterSpacing: 0,
+    marginBottom: 2
   },
   monthTitle: {
     marginTop: 4,

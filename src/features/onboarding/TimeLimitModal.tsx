@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, useColorScheme } from 'react-native';
 import { Picker } from 'react-native-wheel-pick';
 
 interface TimeLimitModalProps {
@@ -14,26 +14,35 @@ const hourData = Array.from({ length: 13 }, (_, i) => String(i));
 const minuteData = Array.from({ length: 60 }, (_, i) => String(i));
 
 export const TimeLimitModal = ({ visible, appName, iconBase64, onConfirm, onCancel }: TimeLimitModalProps) => {
+  const isDark = useColorScheme() === 'dark';
+  const theme = {
+    surface: isDark ? '#191D23' : '#FFFFFF',
+    panel: isDark ? '#20252D' : '#F2F2F2',
+    text: isDark ? '#F3F4F6' : '#111111',
+    textSecondary: isDark ? '#A5ACB8' : '#666666',
+    border: isDark ? '#2A303A' : '#ECECF2',
+    pickerText: isDark ? '#8E96A6' : '#666666'
+  };
   const [hours, setHours] = useState('0');
   const [minutes, setMinutes] = useState('30');
 
   return (
     <Modal visible={visible} transparent animationType="slide">
       <View style={styles.overlay}>
-        <View style={styles.content}>
-          <Text style={styles.label}>Set Limit</Text>
+        <View style={[styles.content, { backgroundColor: theme.surface }]}>
+          <Text style={[styles.label, { color: theme.textSecondary }]}>Set Limit</Text>
           <View style={styles.appHeader}>
             {iconBase64 ? (
               <Image source={{ uri: `data:image/png;base64,${iconBase64}` }} style={styles.appIcon} resizeMode="cover" />
             ) : (
-              <View style={styles.appIconFallback}>
+              <View style={[styles.appIconFallback, { backgroundColor: theme.panel }]}>
                 <Text style={styles.appIconFallbackText}>{appName.charAt(0).toUpperCase()}</Text>
               </View>
             )}
-            <Text style={styles.appName} numberOfLines={1}>{appName}</Text>
+            <Text style={[styles.appName, { color: theme.text }]} numberOfLines={1}>{appName}</Text>
           </View>
 
-          <View style={styles.pickerContainer}>
+          <View style={[styles.pickerContainer, { backgroundColor: theme.panel }]}>
             {/* Hours Infinite Roller */}
             <View style={styles.column}>
               <Text style={styles.columnLabel}>hrs</Text>
@@ -44,7 +53,8 @@ export const TimeLimitModal = ({ visible, appName, iconBase64, onConfirm, onCanc
                 // Change (value) to (value: string)
                 onValueChange={(value: string) => setHours(value)}
                 isCyclic={true}
-                selectTextColor="#111111"
+                selectTextColor={theme.text}
+                textColor={theme.pickerText}
                 textSize={22}
                 />
             </View>
@@ -58,7 +68,8 @@ export const TimeLimitModal = ({ visible, appName, iconBase64, onConfirm, onCanc
                 pickerData={minuteData}
                 onValueChange={(value: string) => setMinutes(value)}
                 isCyclic={true} // Infinite scrolling
-                selectTextColor="#111111"
+                selectTextColor={theme.text}
+                textColor={theme.pickerText}
                 textSize={22}
               />
             </View>
@@ -66,17 +77,17 @@ export const TimeLimitModal = ({ visible, appName, iconBase64, onConfirm, onCanc
 
           <View style={styles.buttonRow}>
             <TouchableOpacity onPress={onCancel}>
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={[styles.cancelText, { color: theme.textSecondary }]}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity 
-              style={styles.confirmButton} 
+              style={[styles.confirmButton, isDark && { backgroundColor: '#FFFFFF' }]} 
               onPress={() => {
                 // Convert strings to numbers before math
                 const totalMinutes = (parseInt(hours, 10) * 60) + parseInt(minutes, 10);
                 onConfirm(totalMinutes);
                 }}
             >
-              <Text style={styles.confirmText}>Confirm</Text>
+              <Text style={[styles.confirmText, isDark && { color: '#101319' }]}>Confirm</Text>
             </TouchableOpacity>
           </View>
         </View>
