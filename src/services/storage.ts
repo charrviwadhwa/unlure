@@ -43,14 +43,6 @@ export const UserStore = {
     await AsyncStorage.setItem('@user_name', name);
   },
 
-  async hasAcceptedAccessibilityDisclosure(): Promise<boolean> {
-    return (await AsyncStorage.getItem('@accessibility_disclosure_accepted')) === 'true';
-  },
-
-  async acceptAccessibilityDisclosure(): Promise<void> {
-    await AsyncStorage.setItem('@accessibility_disclosure_accepted', 'true');
-  },
-
   async hasCompletedOnboarding(): Promise<boolean> {
     return (await AsyncStorage.getItem('@onboarding_complete')) === 'true';
   },

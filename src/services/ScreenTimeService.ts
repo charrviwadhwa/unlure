@@ -95,24 +95,6 @@ export const ScreenTimeService = {
     }
   },
 
-  async openAccessibilitySettings(): Promise<void> {
-    if (Platform.OS !== 'android') return;
-    try {
-      await UsageModule.openAccessibilitySettings();
-    } catch {
-      // no-op
-    }
-  },
-
-  async isFocusModeAccessibilityEnabled(): Promise<boolean> {
-    if (Platform.OS !== 'android') return false;
-    try {
-      return Boolean(await UsageModule.isFocusModeAccessibilityEnabled());
-    } catch {
-      return false;
-    }
-  },
-
   async syncFocusModeConfig(
     limits: Record<string, number>,
     appNames: Record<string, string> = {}

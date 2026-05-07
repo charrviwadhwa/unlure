@@ -10,7 +10,6 @@ import android.content.BroadcastReceiver;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
-import android.text.TextUtils;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReadableMap;
@@ -455,11 +454,11 @@ public void getDailyStats(Promise promise) {
         SimpleDateFormat sdf = new SimpleDateFormat(DATE_FORMAT, Locale.US);
         sdf.setTimeZone(TimeZone.getDefault());
         String todayKey = sdf.format(Calendar.getInstance().getTime());
-        String protectedPrefix = FocusModeService.KEY_PROTECTED_PREFIX + todayKey + "_";
-        String bypassPrefix = FocusModeService.KEY_BYPASS_PREFIX + todayKey + "_";
+        String protectedPrefix = FocusModePrefs.KEY_PROTECTED_PREFIX + todayKey + "_";
+        String bypassPrefix = FocusModePrefs.KEY_BYPASS_PREFIX + todayKey + "_";
 
         SharedPreferences prefs = getReactApplicationContext()
-            .getSharedPreferences(FocusModeService.PREFS_NAME, Context.MODE_PRIVATE);
+            .getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE);
         WritableMap result = Arguments.createMap();
         WritableMap protectedApps = Arguments.createMap();
         WritableMap bypassedApps = Arguments.createMap();
@@ -534,49 +533,6 @@ public void getDailyStats(Promise promise) {
     }
 
     @ReactMethod
-    public void openAccessibilitySettings() {
-        try {
-            Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            getReactApplicationContext().startActivity(intent);
-        } catch (Exception e) {
-            Intent fallback = new Intent(Settings.ACTION_SETTINGS);
-            fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            getReactApplicationContext().startActivity(fallback);
-        }
-    }
-
-    @ReactMethod
-    public void isFocusModeAccessibilityEnabled(Promise promise) {
-        String serviceName = getReactApplicationContext().getPackageName() + "/" + FocusModeService.class.getName();
-        String enabledServices = Settings.Secure.getString(
-            getReactApplicationContext().getContentResolver(),
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        );
-        boolean accessibilityEnabled = Settings.Secure.getInt(
-            getReactApplicationContext().getContentResolver(),
-            Settings.Secure.ACCESSIBILITY_ENABLED,
-            0
-        ) == 1;
-
-        if (!accessibilityEnabled || enabledServices == null) {
-            promise.resolve(false);
-            return;
-        }
-
-        TextUtils.SimpleStringSplitter splitter = new TextUtils.SimpleStringSplitter(':');
-        splitter.setString(enabledServices);
-        while (splitter.hasNext()) {
-            String enabledService = splitter.next();
-            if (enabledService.equalsIgnoreCase(serviceName)) {
-                promise.resolve(true);
-                return;
-            }
-        }
-        promise.resolve(false);
-    }
-
-    @ReactMethod
     public void syncFocusModeConfig(ReadableMap limits, ReadableMap names, Promise promise) {
         try {
             JSONObject limitsJson = new JSONObject();
@@ -595,19 +551,19 @@ public void getDailyStats(Promise promise) {
             }
 
             SharedPreferences prefs = getReactApplicationContext()
-                .getSharedPreferences(FocusModeService.PREFS_NAME, Context.MODE_PRIVATE);
+                .getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE);
             JSONObject previousLimits = new JSONObject(
-                prefs.getString(FocusModeService.KEY_LIMITS_JSON, "{}")
+                prefs.getString(FocusModePrefs.KEY_LIMITS_JSON, "{}")
             );
             SharedPreferences.Editor editor = prefs.edit()
-                .putString(FocusModeService.KEY_LIMITS_JSON, limitsJson.toString())
-                .putString(FocusModeService.KEY_NAMES_JSON, namesJson.toString());
+                .putString(FocusModePrefs.KEY_LIMITS_JSON, limitsJson.toString())
+                .putString(FocusModePrefs.KEY_NAMES_JSON, namesJson.toString());
 
             SimpleDateFormat sdf = new SimpleDateFormat(DATE_FORMAT, Locale.US);
             sdf.setTimeZone(TimeZone.getDefault());
             String todayKey = sdf.format(Calendar.getInstance().getTime());
-            String protectedPrefix = FocusModeService.KEY_PROTECTED_PREFIX + todayKey + "_";
-            String bypassPrefix = FocusModeService.KEY_BYPASS_PREFIX + todayKey + "_";
+            String protectedPrefix = FocusModePrefs.KEY_PROTECTED_PREFIX + todayKey + "_";
+            String bypassPrefix = FocusModePrefs.KEY_BYPASS_PREFIX + todayKey + "_";
             for (String key : prefs.getAll().keySet()) {
                 String packageName = null;
                 if (key.startsWith(protectedPrefix)) {
@@ -659,9 +615,9 @@ public void getDailyStats(Promise promise) {
         try {
             int safeStreak = Math.max(streak, 0);
             getReactApplicationContext()
-                .getSharedPreferences(FocusModeService.PREFS_NAME, Context.MODE_PRIVATE)
+                .getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE)
                 .edit()
-                .putInt(FocusModeService.KEY_STREAK_SHIELD_COUNT, safeStreak)
+                .putInt(FocusModePrefs.KEY_STREAK_SHIELD_COUNT, safeStreak)
                 .apply();
             promise.resolve(true);
         } catch (Exception e) {

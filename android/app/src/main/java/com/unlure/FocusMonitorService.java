@@ -401,8 +401,8 @@ public class FocusMonitorService extends Service {
 
     private Map<String, Integer> readLimits() {
         HashMap<String, Integer> limits = new HashMap<>();
-        SharedPreferences prefs = getSharedPreferences(FocusModeService.PREFS_NAME, Context.MODE_PRIVATE);
-        String raw = prefs.getString(FocusModeService.KEY_LIMITS_JSON, "{}");
+        SharedPreferences prefs = getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE);
+        String raw = prefs.getString(FocusModePrefs.KEY_LIMITS_JSON, "{}");
         try {
             JSONObject json = new JSONObject(raw);
             Iterator<String> keys = json.keys();
@@ -435,25 +435,25 @@ public class FocusMonitorService extends Service {
     }
 
     private boolean isBypassedToday(String packageName) {
-        return getSharedPreferences(FocusModeService.PREFS_NAME, Context.MODE_PRIVATE)
-            .getBoolean(FocusModeService.KEY_BYPASS_PREFIX + todayKey() + "_" + packageName, false);
+        return getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(FocusModePrefs.KEY_BYPASS_PREFIX + todayKey() + "_" + packageName, false);
     }
 
     private void markBypassedToday(String packageName) {
-        getSharedPreferences(FocusModeService.PREFS_NAME, Context.MODE_PRIVATE).edit()
-            .putBoolean(FocusModeService.KEY_BYPASS_PREFIX + todayKey() + "_" + packageName, true)
+        getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean(FocusModePrefs.KEY_BYPASS_PREFIX + todayKey() + "_" + packageName, true)
             .apply();
     }
 
     private void markProtectedToday(String packageName) {
-        getSharedPreferences(FocusModeService.PREFS_NAME, Context.MODE_PRIVATE).edit()
-            .putBoolean(FocusModeService.KEY_PROTECTED_PREFIX + todayKey() + "_" + packageName, true)
+        getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean(FocusModePrefs.KEY_PROTECTED_PREFIX + todayKey() + "_" + packageName, true)
             .apply();
     }
 
     private int getStreakShieldCount() {
-        return Math.max(0, getSharedPreferences(FocusModeService.PREFS_NAME, Context.MODE_PRIVATE)
-            .getInt(FocusModeService.KEY_STREAK_SHIELD_COUNT, 0));
+        return Math.max(0, getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE)
+            .getInt(FocusModePrefs.KEY_STREAK_SHIELD_COUNT, 0));
     }
 
     private String formatStreakShieldLabel(int count) {
