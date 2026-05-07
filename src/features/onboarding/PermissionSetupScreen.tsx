@@ -12,9 +12,14 @@ import {
   View,
   useColorScheme
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import { ScreenTimeService } from '../../services/ScreenTimeService';
 
 type PermissionKey = 'usage' | 'overlay';
+const ENABLED_GREEN = '#2F8F6B';
+const ENABLED_GREEN_SURFACE = 'rgba(47,143,107,0.22)';
+const FONT_SANS = Platform.select({ ios: 'Geist-Regular', android: 'Geist-Regular', default: 'System' });
+const FONT_SANS_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Geist-SemiBold', default: 'System' });
 const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
 
 type PermissionRow = {
@@ -35,12 +40,15 @@ export const PermissionSetupScreen = ({
   const isDark = useColorScheme() === 'dark';
   const theme = {
     bg: isDark ? '#121418' : '#FFFFFF',
-    surface: isDark ? '#191D23' : '#F7F7FA',
-    border: isDark ? '#2A303A' : '#EFEFF4',
-    text: isDark ? '#F3F4F6' : '#000000',
-    textSecondary: isDark ? '#A5ACB8' : '#7C7C84',
-    subSurface: isDark ? '#20252D' : '#F7F7FA'
+    surface: isDark ? 'rgba(255,255,255,0.055)' : 'rgba(255,255,255,0.74)',
+    border: isDark ? 'rgba(255,255,255,0.08)' : '#EEE8DC',
+    text: isDark ? '#FFFFFF' : '#000000',
+    textSecondary: isDark ? '#A5ACB8' : '#6F737C',
+    subSurface: isDark ? 'rgba(255,255,255,0.06)' : '#FFFDF8'
   };
+  const screenGradientColors = isDark
+    ? ['#121418', '#14171A', '#171A16', '#121418']
+    : ['#FFFFFF', '#FFFCF6', '#FFFFFF'];
   const [usageEnabled, setUsageEnabled] = useState(false);
   const [overlayEnabled, setOverlayEnabled] = useState(false);
 
@@ -80,56 +88,58 @@ export const PermissionSetupScreen = ({
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.bg} />
-      <ScrollView
-        contentContainerStyle={[styles.content, { backgroundColor: theme.bg }]}
-        showsVerticalScrollIndicator={false}
-        overScrollMode="never"
-        bounces={false}
-      >
-        <Image source={require('../../assets/Completed 1.png')} style={styles.heroImage} resizeMode="contain" />
-        <Text style={[styles.brandMark, { color: isDark ? '#AAB0BD' : '#6E6E73' }]}>unlure</Text>
-        <Text style={[styles.title, { color: theme.text }]}>Privacy-first Focus</Text>
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-          Standard mode uses Usage Access and Overlay only. Unlure does not read messages, passwords, payment screens, or app content.
-        </Text>
-
-        <View style={[styles.disclosureBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Text style={[styles.disclosureTitle, { color: theme.text }]}>What Unlure can see</Text>
-          <Text style={[styles.disclosureText, { color: theme.textSecondary }]}>
-            Standard mode sees app package names and usage duration for apps you select. It cannot inspect banking screens,
-            chats, typed text, passwords, notifications, or payment details.
+      <LinearGradient colors={screenGradientColors} style={styles.screenGradient}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          overScrollMode="never"
+          bounces={false}
+        >
+          <Image source={require('../../assets/Completed 1.png')} style={styles.heroImage} resizeMode="contain" />
+          <Text style={[styles.brandMark, { color: isDark ? '#AAB0BD' : '#6E6E73' }]}>unlure</Text>
+          <Text style={[styles.title, { color: theme.text }]}>Set up Focus Mode</Text>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+            Standard mode uses Usage Access and Overlay only. Unlure does not read messages, passwords, payment screens, or app content.
           </Text>
-        </View>
 
-        <View style={[styles.permissionList, { borderTopColor: theme.border }]}>
-          {permissions.map(item => (
-            <TouchableOpacity key={item.key} style={[styles.permissionRow, { borderBottomColor: theme.border }]} onPress={item.action} activeOpacity={0.76}>
-              <View style={styles.permissionCopy}>
-                <Text style={[styles.permissionTitle, { color: theme.text }]}>{item.title}</Text>
-                <Text style={[styles.permissionDetail, { color: theme.textSecondary }]}>{item.detail}</Text>
-              </View>
-              <View
-                style={[
-                  styles.permissionAction,
-                  { backgroundColor: isDark ? '#FFFFFF' : theme.subSurface, borderColor: isDark ? '#FFFFFF' : theme.border },
-                  item.enabled && styles.permissionActionEnabled,
-                  item.enabled && isDark && { backgroundColor: '#1F8F4A', borderColor: '#1F8F4A' }
-                ]}
-              >
-                <Text style={[styles.permissionActionText, isDark && { color: '#101319' }, item.enabled && styles.permissionActionTextEnabled, item.enabled && isDark && { color: '#FFFFFF' }]}>
-                  {item.enabled ? 'Enabled' : 'Open'}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </ScrollView>
+          <View style={[styles.disclosureBox, isDark && styles.disclosureBoxDark, { backgroundColor: isDark ? 'rgba(255,255,255,0.028)' : theme.surface, borderColor: isDark ? 'transparent' : theme.border, borderWidth: isDark ? 0 : 0.5 }]}>
+            <Text style={[styles.disclosureTitle, { color: theme.text }]}>What Unlure can see</Text>
+            <Text style={[styles.disclosureText, { color: theme.textSecondary }]}>
+              Standard mode sees app package names and usage duration for apps you select. It cannot inspect banking screens,
+              chats, typed text, passwords, notifications, or payment details.
+            </Text>
+          </View>
 
-      <View style={[styles.footer, { backgroundColor: theme.bg }]}>
-        <TouchableOpacity style={[styles.continueButton, isDark && { backgroundColor: '#FFFFFF' }]} onPress={onComplete} activeOpacity={0.88}>
-          <Text style={[styles.continueText, isDark && { color: '#101319' }]}>{actionLabel}</Text>
-        </TouchableOpacity>
-      </View>
+          <View style={[styles.permissionList, { borderTopColor: theme.border }]}>
+            {permissions.map(item => (
+              <TouchableOpacity key={item.key} style={[styles.permissionRow, { borderBottomColor: theme.border }]} onPress={item.action} activeOpacity={0.76}>
+                <View style={styles.permissionCopy}>
+                  <Text style={[styles.permissionTitle, { color: theme.text }]}>{item.title}</Text>
+                  <Text style={[styles.permissionDetail, { color: theme.textSecondary }]}>{item.detail}</Text>
+                </View>
+                <View
+                  style={[
+                    styles.permissionAction,
+                    { backgroundColor: isDark ? '#FFFFFF' : theme.subSurface, borderColor: isDark ? '#FFFFFF' : theme.border },
+                    item.enabled && styles.permissionActionEnabled,
+                    item.enabled && isDark && { backgroundColor: ENABLED_GREEN_SURFACE, borderColor: ENABLED_GREEN }
+                  ]}
+                >
+                  <Text style={[styles.permissionActionText, isDark && { color: '#101319' }, item.enabled && styles.permissionActionTextEnabled, item.enabled && isDark && { color: '#B7F3D8' }]}>
+                    {item.enabled ? 'Enabled' : 'Open'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </ScrollView>
+
+        <View style={styles.footer}>
+          <TouchableOpacity style={[styles.continueButton, isDark && { backgroundColor: '#FFFFFF' }]} onPress={onComplete} activeOpacity={0.88}>
+            <Text style={[styles.continueText, isDark && { color: '#101319' }]}>{actionLabel}</Text>
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
     </SafeAreaView>
   );
 };
@@ -138,6 +148,9 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#FFFFFF'
+  },
+  screenGradient: {
+    flex: 1
   },
   content: {
     paddingHorizontal: 24,
@@ -152,9 +165,10 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#000000',
-    fontSize: 32,
-    lineHeight: 36,
-    fontWeight: '800'
+    fontSize: 28,
+    lineHeight: 32,
+    fontFamily: FONT_SANS_SEMIBOLD,
+    fontWeight: '600'
   },
   brandMark: {
     color: '#6E6E73',
@@ -169,30 +183,40 @@ const styles = StyleSheet.create({
     color: '#7C7C84',
     fontSize: 15,
     lineHeight: 21,
-    fontWeight: '500',
+    fontFamily: FONT_SANS,
+    fontWeight: '400',
     marginTop: 8,
     marginBottom: 18
   },
   disclosureBox: {
     backgroundColor: '#F7F7FA',
-    borderWidth: 1,
+    borderWidth: 0.5,
     borderColor: '#EFEFF4',
     borderRadius: 8,
     padding: 14,
     marginBottom: 12
   },
+  disclosureBoxDark: {
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0
+  },
   disclosureTitle: {
     color: '#111111',
     fontSize: 14,
     lineHeight: 18,
-    fontWeight: '800',
+    fontFamily: FONT_SANS_SEMIBOLD,
+    fontWeight: '600',
     marginBottom: 5
   },
   disclosureText: {
     color: '#6E6E73',
     fontSize: 12,
     lineHeight: 17,
-    fontWeight: '500'
+    fontFamily: FONT_SANS,
+    fontWeight: '400'
   },
   permissionList: {
     borderTopWidth: 1,
@@ -214,13 +238,15 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontSize: 16,
     lineHeight: 20,
-    fontWeight: '800'
+    fontFamily: FONT_SANS_SEMIBOLD,
+    fontWeight: '600'
   },
   permissionDetail: {
     color: '#8E8E93',
     fontSize: 12,
     lineHeight: 16,
-    fontWeight: '500',
+    fontFamily: FONT_SANS,
+    fontWeight: '400',
     marginTop: 3
   },
   permissionAction: {
@@ -241,7 +267,8 @@ const styles = StyleSheet.create({
   permissionActionText: {
     color: '#1C1C1E',
     fontSize: 13,
-    fontWeight: '800'
+    fontFamily: FONT_SANS,
+    fontWeight: '500'
   },
   permissionActionTextEnabled: {
     color: '#28A745'
@@ -254,7 +281,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 12,
     paddingBottom: Platform.OS === 'android' ? 22 : 18,
-    backgroundColor: '#FFFFFF'
+    backgroundColor: 'transparent'
   },
   continueButton: {
     minHeight: 54,
@@ -271,6 +298,7 @@ const styles = StyleSheet.create({
   continueText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '800'
+    fontFamily: FONT_SANS,
+    fontWeight: '500'
   }
 });

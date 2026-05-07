@@ -13,20 +13,24 @@ import {
   InteractionManager
 } from 'react-native';
 import { useColorScheme } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { ScreenTimeService, DailyUsageMap, FocusModeDecisions } from '../../services/ScreenTimeService';
 import { DailyLimitSnapshots, DailyMoodSnapshots, StoredMood, UserStore } from '../../services/storage';
 import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
 
 const { width } = Dimensions.get('window');
+const FONT_SANS = Platform.select({ ios: 'Geist-Regular', android: 'Geist-Regular', default: 'System' });
+const FONT_SANS_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Geist-SemiBold', default: 'System' });
+const FONT_MONO = Platform.select({ ios: 'GeistMono-Regular', android: 'GeistMono-Regular', default: 'monospace' });
 const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
 
 const COLORS = {
   bg: '#FFFFFF',
   cardBg: '#FFFFFF',
   textMain: '#000000',
-  textSecondary: '#8E8E93',
-  textFaint: '#D1D1D6',
+  textSecondary: '#6F737C',
+  textFaint: '#B8BBC3',
   pillBg: '#F2F2F7',
   moods: {
     great: { bg: '#D3D0FF', line: '#5C56B6' },
@@ -135,15 +139,19 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
   const isDark = useColorScheme() === 'dark';
   const theme = {
     bg: isDark ? '#121418' : COLORS.bg,
-    panel: isDark ? '#191D23' : '#F8F8FA',
-    panelEmpty: isDark ? '#171B21' : '#FBFBFC',
-    text: isDark ? '#F3F4F6' : COLORS.textMain,
+    panel: isDark ? 'rgba(255,255,255,0.055)' : 'rgba(255,255,255,0.74)',
+    panelEmpty: isDark ? 'rgba(255,255,255,0.035)' : 'rgba(255,255,255,0.52)',
+    text: isDark ? '#FFFFFF' : COLORS.textMain,
     subtext: isDark ? '#A5ACB8' : COLORS.textSecondary,
-    faint: isDark ? '#8A93A6' : COLORS.textFaint,
-    pill: isDark ? '#1F2630' : COLORS.pillBg,
-    dayPill: isDark ? '#2A303A' : COLORS.pillBg,
-    border: isDark ? '#2A303A' : '#F2F2F5'
+    faint: isDark ? '#8A93A6' : '#B8BBC3',
+    quietDate: isDark ? '#8A93A6' : '#989BA5',
+    pill: isDark ? 'rgba(255,255,255,0.06)' : '#F4F1EA',
+    dayPill: isDark ? 'rgba(255,255,255,0.06)' : '#F4F1EA',
+    border: isDark ? 'rgba(255,255,255,0.08)' : '#EEE8DC'
   };
+  const screenGradientColors = isDark
+    ? ['#121418', '#14151A', '#161A22', '#121418']
+    : ['#FFFFFF', '#FBFDFF', '#FFFFFF'];
   const [monthDate, setMonthDate] = useState(new Date());
   const [calendarData, setCalendarData] = useState<CalendarItem[]>([]);
   const [statsCache, setStatsCache] = useState<DailyUsageMap>({});
@@ -361,20 +369,21 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.textMain} />}
-        showsVerticalScrollIndicator={false}
-        overScrollMode="never"
-        bounces={false}
-        alwaysBounceVertical={false}
-      >
+      <LinearGradient colors={screenGradientColors} style={styles.screenGradient}>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.textMain} />}
+          showsVerticalScrollIndicator={false}
+          overScrollMode="never"
+          bounces={false}
+          alwaysBounceVertical={false}
+        >
         <View style={styles.header}>
           <View>
             <Text style={[styles.brandMark, { color: isDark ? '#AAB0BD' : '#6E6E73' }]}>unlure</Text>
             <Text style={[styles.pageTitle, { color: theme.text }]}>Month</Text>
             <Text style={[styles.monthTitle, { color: theme.subtext }]}>{monthTitle}</Text>
-            <Text style={[styles.monthSummary, { color: isDark ? '#8E95A3' : '#A0A0A6' }]}>{monthSummary}</Text>
+            <Text style={[styles.monthSummary, { color: isDark ? '#8E95A3' : '#777B84' }]}>{monthSummary}</Text>
           </View>
           <View style={[styles.monthControls, { backgroundColor: theme.pill, borderColor: theme.border }]}>
             <TouchableOpacity style={styles.chevronButton} onPress={() => shiftMonth(-1)} activeOpacity={0.76}>
@@ -421,7 +430,7 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
                     isFaint && styles.dateTextFaint,
                     isFaint && { color: theme.faint },
                     item.mood === MOOD_TYPES.EMPTY && item.isCurrentMonth && styles.dateTextQuiet,
-                    item.mood === MOOD_TYPES.EMPTY && item.isCurrentMonth && { color: theme.faint },
+                    item.mood === MOOD_TYPES.EMPTY && item.isCurrentMonth && { color: theme.quietDate },
                     item.isToday && styles.dateTextSelected,
                     item.isToday && { color: isDark ? '#1A1A24' : '#111111' }
                   ]}
@@ -442,7 +451,8 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
             </View>
           ))}
         </View>
-      </ScrollView>
+        </ScrollView>
+      </LinearGradient>
     </SafeAreaView>
   );
 };
@@ -453,6 +463,9 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: COLORS.bg
+  },
+  screenGradient: {
+    flex: 1
   },
   container: {
     paddingHorizontal: 24,
@@ -466,9 +479,10 @@ const styles = StyleSheet.create({
     marginBottom: 22
   },
   pageTitle: {
-    fontSize: 34,
-    lineHeight: 38,
-    fontWeight: '800',
+    fontFamily: FONT_SANS_SEMIBOLD,
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: '600',
     color: COLORS.textMain
   },
   brandMark: {
@@ -483,6 +497,7 @@ const styles = StyleSheet.create({
   monthTitle: {
     marginTop: 4,
     fontSize: 14,
+    fontFamily: FONT_SANS,
     fontWeight: '600',
     color: COLORS.textSecondary
   },
@@ -490,6 +505,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 12,
     lineHeight: 16,
+    fontFamily: FONT_SANS,
     fontWeight: '600',
     color: '#A0A0A6'
   },
@@ -533,7 +549,8 @@ const styles = StyleSheet.create({
   dayText: {
     fontSize: 11,
     color: COLORS.textSecondary,
-    fontWeight: '700'
+    fontFamily: FONT_SANS,
+    fontWeight: '500'
   },
   gridContainer: {
     flexDirection: 'row',
@@ -560,7 +577,8 @@ const styles = StyleSheet.create({
   dateText: {
     fontSize: 14,
     lineHeight: 17,
-    fontWeight: '700',
+    fontFamily: FONT_MONO,
+    fontWeight: '400',
     color: COLORS.textMain,
     marginBottom: 6
   },
@@ -571,7 +589,7 @@ const styles = StyleSheet.create({
     color: '#C5C6CC'
   },
   dateTextSelected: {
-    fontWeight: '700'
+    fontWeight: '500'
   },
   faceContainer: {
     width: 24,
@@ -608,7 +626,8 @@ const styles = StyleSheet.create({
   legendText: {
     fontSize: 11,
     color: COLORS.textSecondary,
-    fontWeight: '700'
+    fontFamily: FONT_SANS,
+    fontWeight: '500'
   },
 });
 

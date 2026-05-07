@@ -1,9 +1,14 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, StatusBar, Image, Animated, useColorScheme, DeviceEventEmitter } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import { ScreenTimeService, AppInfo } from '../../services/ScreenTimeService';
 import { UserStore } from '../../services/storage';
 import { TimeLimitModal } from './TimeLimitModal';
+const FONT_SANS = Platform.select({ ios: 'Geist-Regular', android: 'Geist-Regular', default: 'System' });
+const FONT_SANS_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Geist-SemiBold', default: 'System' });
+const FONT_MONO = Platform.select({ ios: 'GeistMono-Regular', android: 'GeistMono-Regular', default: 'monospace' });
 const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
+const DATA_MINT = '#39D98A';
 
 const IosSwitch = ({ enabled }: { enabled: boolean }) => {
   const isDark = useColorScheme() === 'dark';
@@ -20,11 +25,11 @@ const IosSwitch = ({ enabled }: { enabled: boolean }) => {
 
   const backgroundColor = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [isDark ? '#2A303A' : '#E9E9EA', '#5C56B6']
+    outputRange: [isDark ? '#2A303A' : '#E9E9EA', DATA_MINT]
   });
   const borderColor = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [isDark ? '#3A4250' : '#D9D9DE', '#5C56B6']
+    outputRange: [isDark ? '#3A4250' : '#D9D9DE', DATA_MINT]
   });
   const translateX = progress.interpolate({
     inputRange: [0, 1],
@@ -42,11 +47,14 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
   const isDark = useColorScheme() === 'dark';
   const theme = {
     bg: isDark ? '#121418' : '#FFFFFF',
-    surface: isDark ? '#191D23' : '#F2F2F7',
-    border: isDark ? '#2A303A' : '#EFEFF4',
-    text: isDark ? '#F3F4F6' : '#000000',
-    textSecondary: isDark ? '#A5ACB8' : '#8E8E93'
+    surface: isDark ? 'rgba(255,255,255,0.055)' : '#F2F2F7',
+    border: isDark ? 'rgba(255,255,255,0.08)' : '#EFEFF4',
+    text: isDark ? '#FFFFFF' : '#000000',
+    textSecondary: isDark ? '#A5ACB8' : '#6F737C'
   };
+  const screenGradientColors = isDark
+    ? ['#121418', '#14171A', '#171A16', '#121418']
+    : ['#FFFFFF', '#FFFCF6', '#FFFFFF'];
   const [apps, setApps] = useState<AppInfo[]>([]);
   const [selectedLimits, setSelectedLimits] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
@@ -146,7 +154,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
   if (loading) return <ActivityIndicator size="large" color={isDark ? '#F3F4F6' : '#111111'} style={[styles.loading, { backgroundColor: theme.bg }]} />;
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+    <LinearGradient colors={screenGradientColors} style={styles.container}>
       <View style={styles.headerWrap}>
         <Text style={[styles.brandMark, { color: isDark ? '#AAB0BD' : '#6E6E73' }]}>unlure</Text>
         <Text style={[styles.header, { color: theme.text }]}>Choose Apps</Text>
@@ -213,7 +221,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
 
       <View
         pointerEvents="box-none"
-        style={[styles.footerWrap, { backgroundColor: theme.bg }]}
+        style={styles.footerWrap}
         onLayout={(event) => setFooterHeight(event.nativeEvent.layout.height)}
       >
         <TouchableOpacity
@@ -237,7 +245,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
         onCancel={() => setModalVisible(false)}
       />
 
-    </View>
+    </LinearGradient>
   );
 };
 
@@ -259,8 +267,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     marginBottom: 2
   },
-  header: { fontSize: 32, lineHeight: 36, color: '#000000', fontWeight: '800' },
-  subheader: { fontSize: 14, lineHeight: 19, color: '#8E8E93', marginTop: 6, fontWeight: '500' },
+  header: { fontSize: 28, lineHeight: 32, color: '#000000', fontFamily: FONT_SANS_SEMIBOLD, fontWeight: '600' },
+  subheader: { fontSize: 14, lineHeight: 19, color: '#8E8E93', marginTop: 6, fontFamily: FONT_SANS, fontWeight: '400' },
   searchBar: {
     height: 42,
     backgroundColor: '#F2F2F7',
@@ -269,7 +277,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     color: '#000000',
     fontSize: 15,
-    fontWeight: '500'
+    fontFamily: FONT_SANS,
+    fontWeight: '400'
   },
   listContent: {
     paddingBottom: 18
@@ -307,14 +316,15 @@ const styles = StyleSheet.create({
   appIconFallbackText: {
     fontSize: 13,
     color: '#6E6E73',
+    fontFamily: FONT_SANS_SEMIBOLD,
     fontWeight: '800'
   },
   appCopy: {
     flex: 1
   },
-  appName: { fontSize: 16, fontWeight: '500', color: '#000000' },
-  limitText: { fontSize: 12, color: '#6E6E73', fontWeight: '600', marginTop: 3 },
-  limitHint: { fontSize: 12, color: '#AEAEB2', fontWeight: '500', marginTop: 3 },
+  appName: { fontSize: 16, fontFamily: FONT_SANS, fontWeight: '400', color: '#000000' },
+  limitText: { fontSize: 12, color: '#6E6E73', fontFamily: FONT_MONO, fontWeight: '500', marginTop: 3 },
+  limitHint: { fontSize: 12, color: '#AEAEB2', fontFamily: FONT_MONO, fontWeight: '500', marginTop: 3 },
   iosSwitch: {
     width: 52,
     height: 31,
@@ -342,7 +352,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 12,
     paddingBottom: Platform.OS === 'android' ? 22 : 18,
-    backgroundColor: '#FFFFFF'
+    backgroundColor: 'transparent'
   },
   footerButton: {
     backgroundColor: '#1C1C1E',
@@ -356,5 +366,5 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 4
   },
-  footerText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 }
+  footerText: { color: '#FFFFFF', fontFamily: FONT_SANS, fontWeight: '500', fontSize: 16 }
 });

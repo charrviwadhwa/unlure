@@ -8,8 +8,8 @@ interface EntryScreenProps {
 }
 
 const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
-const FONT_BODY = Platform.select({ ios: 'Montserrat-Light', android: 'Montserrat-Light', default: 'System' });
-const FONT_BUTTON = Platform.select({ ios: 'Inter_24pt-Light', android: 'Inter_24pt-Light', default: 'System' });
+const FONT_SANS = Platform.select({ ios: 'Geist-Regular', android: 'Geist-Regular', default: 'System' });
+const FONT_SANS_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Geist-SemiBold', default: 'System' });
 const { width } = Dimensions.get('window');
 const SWIPE_WIDTH = Math.min(width - 44, 344);
 const KNOB_SIZE = 52;
@@ -83,6 +83,7 @@ const ChevronsRightIcon = ({ size, color }: { size: number; color: string }) => 
     <Path d="M13 6l6 6-6 6" stroke={color} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
 );
+
 
 const EntryScreen: React.FC<EntryScreenProps> = ({ onAnimationComplete }) => {
   const swipeX = useRef(new Animated.Value(0)).current;
@@ -289,8 +290,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 23,
     lineHeight: 30,
-    fontFamily: FONT_BODY,
-    fontWeight: '800',
+    fontFamily: FONT_SANS_SEMIBOLD,
+    fontWeight: '600',
     marginBottom: 8
   },
   subtitle: {
@@ -298,8 +299,8 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.68)',
     fontSize: 15,
     lineHeight: 22,
-    fontFamily: FONT_BODY,
-    fontWeight: '600'
+    fontFamily: FONT_SANS,
+    fontWeight: '500'
   },
   promiseRow: {
     flexDirection: 'row',
@@ -320,8 +321,8 @@ const styles = StyleSheet.create({
   promiseText: {
     color: 'rgba(255,255,255,0.78)',
     fontSize: 12,
-    fontFamily: FONT_BODY,
-    fontWeight: '700',
+    fontFamily: FONT_SANS,
+    fontWeight: '500',
     includeFontPadding: false
   },
   illustrationWrap: {
@@ -347,7 +348,7 @@ const styles = StyleSheet.create({
   swipeText: {
     color: '#111111',
     fontSize: 17,
-    fontFamily: FONT_BUTTON,
+    fontFamily: FONT_SANS_SEMIBOLD,
     fontWeight: '600',
     textAlign: 'center',
     includeFontPadding: false

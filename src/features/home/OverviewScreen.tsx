@@ -26,20 +26,20 @@ import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
 const { width } = Dimensions.get('window');
 
 const COLORS = {
-  social: { solid: '#528DF5', light: '#E5EEFF', border: '#5F8FF2' },
-  games: { solid: '#9B6EF3', light: '#F0E9FF', border: '#9A74EF' },
-  entertainment: { solid: '#F2B84B', light: '#FFF3D8', border: '#E6B451' },
-  creativity: { solid: '#F06F9A', light: '#FDE7EF', border: '#EA6F99' },
-  productivityFinance: { solid: '#26B6B0', light: '#DDF7F4', border: '#35AAA6' },
-  education: { solid: '#52B66A', light: '#E3F8E9', border: '#5EAE71' },
-  informationReading: { solid: '#7A8CFF', light: '#EAEDFF', border: '#7585F2' },
-  healthFitness: { solid: '#FF7A59', light: '#FFE9E1', border: '#F27656' },
-  utilities: { solid: '#3DA9FC', light: '#E4F3FF', border: '#4D9FE8' },
-  shoppingFood: { solid: '#FF6B8A', light: '#FFE8EE', border: '#F06A87' },
-  travel: { solid: '#19B8D8', light: '#DDF8FC', border: '#2BAFC8' },
-  others: { solid: '#8C7CFF', light: '#EFECFF', border: '#8878F0' },
+  social: { solid: '#2F8F6B', light: '#DDF4EA', border: '#2F8F6B' },
+  games: { solid: '#E05A47', light: '#FFE5DF', border: '#D85A48' },
+  entertainment: { solid: '#C18A16', light: '#FFF0C9', border: '#B98513' },
+  creativity: { solid: '#C85C8E', light: '#FBE3EF', border: '#BE5A89' },
+  productivityFinance: { solid: '#287DCC', light: '#E1F0FF', border: '#287DCC' },
+  education: { solid: '#6F9D2F', light: '#EAF4D6', border: '#6B9730' },
+  informationReading: { solid: '#8B5CF6', light: '#EFE7FF', border: '#8456E8' },
+  healthFitness: { solid: '#D96F2C', light: '#FFE8D8', border: '#CB6A2C' },
+  utilities: { solid: '#00A7B5', light: '#DDF7FA', border: '#0098A6' },
+  shoppingFood: { solid: '#F05D7E', light: '#FFE4EB', border: '#E15878' },
+  travel: { solid: '#1F9AA5', light: '#DDF5F7', border: '#22929C' },
+  others: { solid: '#A855F7', light: '#F3E8FF', border: '#9E4FEA' },
   textMain: '#000000',
-  textSecondary: '#8E8E93',
+  textSecondary: '#6F737C',
   bg: '#FFFFFF',
   cardBg: '#F2F2F7',
 };
@@ -65,6 +65,23 @@ type CategoryKey =
   | 'shoppingFood'
   | 'travel'
   | 'others';
+
+type CategoryPalette = Record<CategoryKey, { light: string; border: string }>;
+
+const DARK_CATEGORY_COLORS: Record<CategoryKey, { solid: string; light: string; border: string }> = {
+  social: { solid: '#5FE6AF', light: '#173B31', border: '#5FE6AF' },
+  games: { solid: '#FF7A66', light: '#43211E', border: '#FF7A66' },
+  entertainment: { solid: '#FFD166', light: '#3C311A', border: '#FFD166' },
+  creativity: { solid: '#FF75B8', light: '#411F33', border: '#FF75B8' },
+  productivityFinance: { solid: '#61B7FF', light: '#19334C', border: '#61B7FF' },
+  education: { solid: '#B8F25C', light: '#2F3D18', border: '#B8F25C' },
+  informationReading: { solid: '#C084FC', light: '#33214B', border: '#C084FC' },
+  healthFitness: { solid: '#FF9F43', light: '#3F2A18', border: '#FF9F43' },
+  utilities: { solid: '#38E8F2', light: '#123B40', border: '#38E8F2' },
+  shoppingFood: { solid: '#FF5FA2', light: '#431D31', border: '#FF5FA2' },
+  travel: { solid: '#4DE1C1', light: '#123D35', border: '#4DE1C1' },
+  others: { solid: '#E879F9', light: '#3C1D43', border: '#E879F9' },
+};
 
 type ChartCategory = {
   key: CategoryKey | 'otherSummary';
@@ -144,8 +161,11 @@ const CATEGORY_ICONS: Record<CategoryKey | 'otherSummary', string> = {
   otherSummary: '…'
 };
 
-const GLYPH_SIZE = 16;
+const GLYPH_SIZE = 18;
 const WEEK_BAR_MAX_HEIGHT = 118;
+const FONT_SANS = Platform.select({ ios: 'Geist-Regular', android: 'Geist-Regular', default: 'System' });
+const FONT_SANS_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Geist-SemiBold', default: 'System' });
+const FONT_MONO = Platform.select({ ios: 'GeistMono-Regular', android: 'GeistMono-Regular', default: 'monospace' });
 const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
 
 const createEmptyCategoryTotals = () =>
@@ -170,7 +190,7 @@ const categorizeApp = (name: string, packageName: string): CategoryKey => {
   return 'others';
 };
 
-const buildChartCategories = (totals: Record<CategoryKey, number>, topCount = 3): ChartCategory[] => {
+const buildChartCategories = (totals: Record<CategoryKey, number>, palette: CategoryPalette, topCount = 3): ChartCategory[] => {
   const specificKeys = CATEGORY_KEYS.filter((key) => key !== 'others');
   const sorted = specificKeys
     .map((key) => ({ key, minutes: totals[key] || 0 }))
@@ -183,7 +203,7 @@ const buildChartCategories = (totals: Record<CategoryKey, number>, topCount = 3)
     key,
     label: CATEGORY_LABELS[key],
     minutes,
-    color: COLORS[key],
+    color: palette[key],
     includedKeys: [key]
   }));
   const restMinutes = rest.reduce((acc, item) => acc + item.minutes, 0);
@@ -192,7 +212,7 @@ const buildChartCategories = (totals: Record<CategoryKey, number>, topCount = 3)
       key: 'otherSummary',
       label: 'Other',
       minutes: restMinutes,
-      color: COLORS.others,
+      color: palette.others,
       includedKeys: rest.map((item) => item.key)
     });
   }
@@ -235,89 +255,99 @@ const getWeekAxisScale = (maxMinutes: number) => {
 };
 
 const CategoryGlyph = ({ category, color }: { category: CategoryKey | 'otherSummary'; color: string }) => {
-  const common = { stroke: color, strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+  const soft = hexToRgba(color, 0.14);
+  const medium = hexToRgba(color, 0.24);
+  const common = { stroke: color, strokeWidth: 1.85, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
   switch (category) {
     case 'social':
       return (
         <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
-          <Circle cx={8} cy={9} r={3} fill="none" {...common} />
-          <Circle cx={17} cy={8} r={2.5} fill="none" {...common} />
-          <Path d="M3.8 18c.7-2.8 2.4-4.2 4.2-4.2s3.5 1.4 4.2 4.2" fill="none" {...common} />
-          <Path d="M13.8 15.8c.7-1.3 1.8-2 3.1-2 1.5 0 2.8 1 3.3 3" fill="none" {...common} />
+          <Path d="M5 6.5h9.2a3.2 3.2 0 0 1 3.3 3.2v1.9a3.2 3.2 0 0 1-3.3 3.2H9.4L5.3 18v-3.2H5a3.2 3.2 0 0 1-3.2-3.2V9.7A3.2 3.2 0 0 1 5 6.5z" fill={soft} {...common} />
+          <Path d="M12 15.6h2.9l3.8 2.9v-3h.2a3 3 0 0 0 3-3v-1.4a3 3 0 0 0-3-3h-.7" fill="none" {...common} opacity={0.58} />
+          <Path d="M6.3 10.5h6.4M6.3 13h4.1" fill="none" {...common} />
         </Svg>
       );
     case 'games':
       return (
         <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
-          <Path d="M7 9v6M4 12h6" fill="none" {...common} />
-          <Circle cx={16.5} cy={10.5} r={1.2} fill={color} />
-          <Circle cx={19} cy={14} r={1.2} fill={color} />
-          <Path d="M6.5 6.5h11c2.3 0 3.9 1.8 4.1 4.1l.4 5.2c.2 2.2-1.3 3.7-3.1 2.7l-2.5-1.5H7.6l-2.5 1.5C3.3 19.5 1.8 18 2 15.8l.4-5.2c.2-2.3 1.8-4.1 4.1-4.1z" fill="none" {...common} />
+          <Path d="M6.5 7.2h11c2.3 0 3.8 1.6 4.2 3.8l.5 3.9c.3 2.6-1.3 4.5-3.4 3.2l-2.5-1.5H7.7l-2.5 1.5c-2.1 1.3-3.7-.6-3.4-3.2l.5-3.9c.4-2.2 1.9-3.8 4.2-3.8z" fill={soft} {...common} />
+          <Path d="M7.2 10v5M4.7 12.5h5" fill="none" {...common} />
+          <Circle cx={16.4} cy={11.1} r={1.25} fill={color} />
+          <Circle cx={19} cy={14.2} r={1.25} fill={color} opacity={0.78} />
         </Svg>
       );
     case 'entertainment':
       return (
         <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
-          <Rect x={3} y={5} width={18} height={14} rx={3} fill="none" {...common} />
+          <Rect x={3} y={5} width={18} height={14} rx={3.2} fill={soft} {...common} />
           <Path d="M10 9l5 3-5 3V9z" fill={color} stroke="none" />
+          <Path d="M6.2 7.8h2.1M16 7.8h1.8" fill="none" {...common} opacity={0.6} />
         </Svg>
       );
     case 'creativity':
       return (
         <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
-          <Path d="M6 17.5 17.5 6" fill="none" {...common} />
-          <Circle cx={7} cy={17} r={2} fill="none" {...common} />
-          <Circle cx={17} cy={7} r={2} fill="none" {...common} />
+          <Path d="M6.2 16.8 16.8 6.2l2.8 2.8L9 19.6l-4.2.9 1.4-3.7z" fill={soft} {...common} />
+          <Path d="M14.8 8.2l2.9 2.9" fill="none" {...common} />
+          <Path d="M6.2 5.6l.7-1.7.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7-1.7-.7 1.7-.7z" fill={medium} stroke="none" />
         </Svg>
       );
     case 'productivityFinance':
       return (
         <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
-          <Rect x={4} y={5} width={16} height={15} rx={3} fill="none" {...common} />
-          <Path d="M8 3v4M16 3v4M4 10h16M8 15h3M14 15h2" fill="none" {...common} />
+          <Rect x={4} y={5} width={16} height={15} rx={3} fill={soft} {...common} />
+          <Path d="M8 3.6v3.3M16 3.6v3.3M4 10h16" fill="none" {...common} />
+          <Path d="m8 15 2 2 5-5" fill="none" {...common} />
+          <Path d="M17.3 15.5h1.1" fill="none" {...common} opacity={0.6} />
         </Svg>
       );
     case 'education':
       return (
         <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
-          <Path d="M4 6.5h7c1.1 0 2 .9 2 2V19c0-1.1-.9-2-2-2H4V6.5z" fill="none" {...common} />
-          <Path d="M20 6.5h-7c-1.1 0-2 .9-2 2V19c0-1.1.9-2 2-2h7V6.5z" fill="none" {...common} />
+          <Path d="M3 8.2 12 4l9 4.2-9 4.2-9-4.2z" fill={soft} {...common} />
+          <Path d="M6.5 10.2v4.5c1.8 1.7 9.2 1.7 11 0v-4.5" fill="none" {...common} />
+          <Path d="M20.8 8.7v5.1" fill="none" {...common} />
+          <Circle cx={20.8} cy={16} r={1.1} fill={color} />
         </Svg>
       );
     case 'informationReading':
       return (
         <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
-          <Path d="M6 6h12M6 11h12M6 16h8" fill="none" {...common} />
-          <Circle cx={18} cy={16} r={1.5} fill={color} />
+          <Rect x={4} y={5} width={16} height={14} rx={2.5} fill={soft} {...common} />
+          <Path d="M8 8.5h8M8 12h8M8 15.5h5.5" fill="none" {...common} />
+          <Path d="M17 15.2l1.5 1.5 2.3-3" fill="none" {...common} />
         </Svg>
       );
     case 'healthFitness':
       return (
         <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
-          <Path d="M12 20s-7-4.2-8.7-8.8C2.2 8 4.1 5 7.2 5c1.8 0 3.1 1 4.8 3 1.7-2 3-3 4.8-3 3.1 0 5 3 3.9 6.2C19 15.8 12 20 12 20z" fill="none" {...common} />
+          <Path d="M12 20s-7-4.2-8.7-8.8C2.2 8 4.1 5 7.2 5c1.8 0 3.1 1 4.8 3 1.7-2 3-3 4.8-3 3.1 0 5 3 3.9 6.2C19 15.8 12 20 12 20z" fill={soft} {...common} />
+          <Path d="M5.9 12.7h3l1.2-2.4 2.1 4.9 1.7-3.2h4.1" fill="none" {...common} />
         </Svg>
       );
     case 'utilities':
       return (
         <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
-          <Path d="M5 7h14M5 12h14M5 17h14" fill="none" {...common} />
-          <Circle cx={9} cy={7} r={1.8} fill={color} />
-          <Circle cx={15} cy={12} r={1.8} fill={color} />
-          <Circle cx={11} cy={17} r={1.8} fill={color} />
+          <Path d="M4 7h16M4 12h16M4 17h16" fill="none" {...common} />
+          <Circle cx={8.2} cy={7} r={2.1} fill={soft} {...common} />
+          <Circle cx={15.8} cy={12} r={2.1} fill={soft} {...common} />
+          <Circle cx={10.8} cy={17} r={2.1} fill={soft} {...common} />
         </Svg>
       );
     case 'shoppingFood':
       return (
         <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
-          <Path d="M7 9h10l-1 10H8L7 9z" fill="none" {...common} />
-          <Path d="M9 9c0-2 1.2-4 3-4s3 2 3 4" fill="none" {...common} />
+          <Path d="M6.8 8.8h10.4l1 10.2H5.8l1-10.2z" fill={soft} {...common} />
+          <Path d="M9 8.8c0-2.2 1.2-4.1 3-4.1s3 1.9 3 4.1" fill="none" {...common} />
+          <Path d="M9.2 13.5h5.6M10.4 16h3.2" fill="none" {...common} opacity={0.72} />
         </Svg>
       );
     case 'travel':
       return (
         <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
-          <Path d="M3 12l18-7-7 18-3-8-8-3z" fill="none" {...common} />
-          <Path d="M11 15l4-4" fill="none" {...common} />
+          <Circle cx={12} cy={12} r={8.5} fill={soft} {...common} />
+          <Path d="m15.8 8.2-2.1 5.5-5.5 2.1 2.1-5.5 5.5-2.1z" fill={medium} {...common} />
+          <Circle cx={12} cy={12} r={1} fill={color} />
         </Svg>
       );
     case 'others':
@@ -325,9 +355,10 @@ const CategoryGlyph = ({ category, color }: { category: CategoryKey | 'otherSumm
     default:
       return (
         <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} viewBox="0 0 24 24">
-          <Circle cx={6} cy={12} r={1.8} fill={color} />
-          <Circle cx={12} cy={12} r={1.8} fill={color} />
-          <Circle cx={18} cy={12} r={1.8} fill={color} />
+          <Circle cx={7} cy={7} r={2.7} fill={soft} {...common} />
+          <Circle cx={17} cy={7} r={2.7} fill={soft} {...common} />
+          <Circle cx={7} cy={17} r={2.7} fill={soft} {...common} />
+          <Circle cx={17} cy={17} r={2.7} fill={soft} {...common} />
         </Svg>
       );
   }
@@ -337,12 +368,16 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
   const isDark = useColorScheme() === 'dark';
   const ui = {
     bg: isDark ? '#121418' : COLORS.bg,
-    text: isDark ? '#F3F4F6' : COLORS.textMain,
+    text: isDark ? '#FFFFFF' : COLORS.textMain,
     textSecondary: isDark ? '#A5ACB8' : COLORS.textSecondary,
-    border: isDark ? '#2A303A' : '#EAEAEA',
+    border: isDark ? 'rgba(255,255,255,0.08)' : '#EEE8DC',
     track: isDark ? '#2B313B' : '#E5E5EA',
-    sheet: isDark ? '#191D23' : '#FFFFFF'
+    sheet: isDark ? '#171C24' : '#FFFFFF'
   };
+  const categoryPalette: CategoryPalette = isDark ? DARK_CATEGORY_COLORS : COLORS;
+  const screenGradientColors = isDark
+    ? ['#121418', '#14171A', '#171A16', '#121418']
+    : ['#FFFFFF', '#FFFCF6', '#FFFFFF'];
   const chartFadeTail = isDark ? '#1E232B' : '#FFFFFF';
   const [viewMode, setViewMode] = useState('day');
   const [storedStats, setStoredStats] = useState<DailyUsageMap>({});
@@ -553,8 +588,8 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
     }, createEmptyCategoryTotals()),
     [weekData]
   );
-  const weekChartCategories = useMemo(() => buildChartCategories(weekCategoryMinutes, 3), [weekCategoryMinutes]);
-  const dayChartCategories = useMemo(() => buildChartCategories(categoryMinutes, 2), [categoryMinutes]);
+  const weekChartCategories = useMemo(() => buildChartCategories(weekCategoryMinutes, categoryPalette, 3), [categoryPalette, weekCategoryMinutes]);
+  const dayChartCategories = useMemo(() => buildChartCategories(categoryMinutes, categoryPalette, 2), [categoryMinutes, categoryPalette]);
   const weekAverageMinutes = Math.floor(weekTotalMinutes / 7);
   const dayTotalMinutes = Math.floor(todayApps.reduce((acc, app) => acc + app.totalMs, 0) / 60000);
   const weekMaxMinutes = Math.max(...weekData.map((d) => CATEGORY_KEYS.reduce((acc, key) => acc + d.totals[key], 0)), 1);
@@ -605,7 +640,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: ui.bg }]}>
-      <View style={styles.container}>
+      <LinearGradient colors={screenGradientColors} style={styles.container}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
@@ -622,11 +657,11 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
               <Text style={[styles.title, { color: ui.text }]}>Screen time</Text>
             </View>
             
-            <View style={[styles.toggleContainer, { backgroundColor: isDark ? '#2A303A' : '#E8E8EE', borderColor: isDark ? '#323A46' : '#E0E0E8' }]}>
+            <View style={[styles.toggleContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F4F1EA', borderColor: isDark ? 'rgba(255,255,255,0.09)' : '#EEE8DC' }]}>
               <Animated.View
                 style={[
                   styles.activeSegment,
-                  { backgroundColor: isDark ? '#141922' : '#FFFFFF', borderColor: isDark ? '#3B4452' : '#D8D8DE' },
+                  { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#FFFFFF', borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#D8D8DE' },
                   { transform: [{ translateX: toggleAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 69] }) }] }
                 ]}
               />
@@ -635,7 +670,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                 onPress={() => handleToggleMode('week')}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.toggleText, { color: isDark ? '#AAB0BD' : '#8E8E93' }, isWeek && styles.toggleTextActive, isWeek && { color: isDark ? '#F3F4F6' : '#111111' }]}>
+                <Text style={[styles.toggleText, { color: isDark ? '#AAB0BD' : '#6F737C' }, isWeek && styles.toggleTextActive, isWeek && { color: isDark ? '#F3F4F6' : '#111111' }]}>
                   week
                 </Text>
               </TouchableOpacity>
@@ -645,7 +680,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                 onPress={() => handleToggleMode('day')}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.toggleText, { color: isDark ? '#AAB0BD' : '#8E8E93' }, !isWeek && styles.toggleTextActive, !isWeek && { color: isDark ? '#F3F4F6' : '#111111' }]}>
+                <Text style={[styles.toggleText, { color: isDark ? '#AAB0BD' : '#6F737C' }, !isWeek && styles.toggleTextActive, !isWeek && { color: isDark ? '#F3F4F6' : '#111111' }]}>
                   day
                 </Text>
               </TouchableOpacity>
@@ -668,7 +703,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
               <Text style={[styles.subTextMain, { color: ui.text }]}>Total usage this week</Text>
               <Text style={[styles.subText, { color: ui.textSecondary }]}>Daily Average this week {formatTime(weekAverageMinutes)}</Text>
 
-              <View style={[styles.weekInsightRow, { backgroundColor: isDark ? '#1D232D' : '#F7F7FA', borderColor: ui.border }, isDark && styles.darkCardLift]}>
+              <View style={[styles.weekInsightRow, { backgroundColor: isDark ? 'rgba(255,255,255,0.028)' : 'rgba(255,255,255,0.74)', borderColor: isDark ? 'transparent' : ui.border }, isDark && styles.darkSoftBand]}>
                 <View style={styles.weekInsightBlock}>
                   <Text style={[styles.weekInsightLabel, { color: ui.textSecondary }]}>Most used app</Text>
                   {weekTopApp ? (
@@ -676,7 +711,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                       {weekTopApp.iconBase64 ? (
                         <Image source={{ uri: `data:image/png;base64,${weekTopApp.iconBase64}` }} style={styles.weekInsightIcon} resizeMode="cover" />
                       ) : (
-                        <View style={[styles.weekInsightIconFallback, { backgroundColor: isDark ? '#20252D' : '#FFFFFF' }]}>
+                        <View style={[styles.weekInsightIconFallback, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#FFFFFF' }]}>
                           <Text style={[styles.weekInsightIconFallbackText, { color: ui.textSecondary }]}>{weekTopApp.name.charAt(0).toUpperCase()}</Text>
                         </View>
                       )}
@@ -782,8 +817,8 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                         style={[
                           styles.iosGlyph,
                           {
-                            backgroundColor: isDark ? '#20252D' : '#F7F7FA',
-                            borderColor: isDark ? '#323A46' : '#ECECF2'
+                            backgroundColor: isDark ? 'rgba(255,255,255,0.055)' : 'rgba(255,255,255,0.72)',
+                            borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#EEE8DC'
                           }
                         ]}
                       >
@@ -866,7 +901,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
               <View style={styles.iosList}>
                 {visibleTodayApps.map((app) => {
                   const category = categorizeApp(app.name, app.id);
-                  const theme = COLORS[category];
+                  const theme = categoryPalette[category];
                   return (
                     <View style={[styles.iosUsageRow, { borderBottomColor: ui.border }]} key={app.id}>
                       <View style={styles.iosUsageMain}>
@@ -909,7 +944,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
           </Animated.View>
 
         </ScrollView>
-      </View>
+      </LinearGradient>
       <Modal visible={Boolean(selectedCategory)} transparent statusBarTranslucent animationType="none" onRequestClose={closeCategorySheet}>
         <View style={styles.modalRoot}>
           <View style={styles.sheetBackdrop} />
@@ -970,7 +1005,9 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontWeight: '700',
+    lineHeight: 32,
+    fontFamily: FONT_SANS_SEMIBOLD,
+    fontWeight: '600',
     color: COLORS.textMain,
     letterSpacing: 0,
   },
@@ -1019,14 +1056,16 @@ const styles = StyleSheet.create({
     elevation: 2
   },
   toggleText: {
-    fontSize: 14,
+    fontFamily: FONT_SANS,
+    fontSize: 13,
     color: COLORS.textSecondary,
-    fontWeight: '600',
+    fontWeight: '500',
     textAlign: 'center'
   },
   toggleTextActive: {
     color: COLORS.textMain,
-    fontWeight: '700',
+    fontFamily: FONT_SANS_SEMIBOLD,
+    fontWeight: '600',
   },
   dateHeader: {
     flexDirection: 'row',
@@ -1037,10 +1076,12 @@ const styles = StyleSheet.create({
   dateText: {
     fontSize: 14,
     color: COLORS.textSecondary,
+    fontFamily: FONT_SANS,
     fontWeight: '500',
   },
   updatedSmall: {
-    fontSize: 10,
+    fontFamily: FONT_MONO,
+    fontSize: 12,
     color: COLORS.textSecondary,
   },
   
@@ -1050,20 +1091,24 @@ const styles = StyleSheet.create({
   },
   timeBigText: {
     fontSize: 64,
-    fontWeight: '400',
+    fontFamily: FONT_MONO,
+    fontWeight: '500',
     color: COLORS.textMain,
     letterSpacing: 0,
     lineHeight: 70,
   },
   subTextMain: {
-    fontSize: 15,
+    fontSize: 14,
     color: COLORS.textMain,
+    fontFamily: FONT_SANS,
     fontWeight: '600',
     marginTop: 4,
   },
   subText: {
     fontSize: 13,
     color: COLORS.textSecondary,
+    fontFamily: FONT_SANS,
+    fontWeight: '500',
     marginTop: 4,
   },
   weekChartContainer: {
@@ -1090,7 +1135,8 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   gridText: {
-    fontSize: 11,
+    fontFamily: FONT_MONO,
+    fontSize: 12,
     color: COLORS.textSecondary,
   },
   averageLineWrap: {
@@ -1103,8 +1149,9 @@ const styles = StyleSheet.create({
   },
   averageLineLabel: {
     color: '#6E6E73',
-    fontSize: 10,
-    fontWeight: '700',
+    fontFamily: FONT_MONO,
+    fontSize: 12,
+    fontWeight: '400',
     marginRight: 6
   },
   averageLine: {
@@ -1137,9 +1184,10 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   xLabel: {
+    fontFamily: FONT_SANS,
     fontSize: 12,
     color: COLORS.textMain,
-    fontWeight: '600',
+    fontWeight: '500',
     height: 16, // ALIGNMENT FIX: Consistent height so flexbox keeps bottom aligned
   },
   legendContainer: {
@@ -1153,15 +1201,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   legendLabel: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontFamily: FONT_SANS,
+    fontSize: 14,
+    fontWeight: '500',
     marginBottom: 4,
-    lineHeight: 14,
+    lineHeight: 17,
     flexShrink: 1,
   },
   legendValue: {
-    fontSize: 18,
-    fontWeight: '400',
+    fontFamily: FONT_MONO,
+    fontSize: 16,
+    fontWeight: '500',
     color: COLORS.textMain,
   },
   weekInsightRow: {
@@ -1182,17 +1232,18 @@ const styles = StyleSheet.create({
     marginRight: 12
   },
   weekInsightLabel: {
-    fontSize: 11,
+    fontFamily: FONT_SANS,
+    fontSize: 14,
     color: COLORS.textSecondary,
-    fontWeight: '700',
+    fontWeight: '500',
     marginBottom: 3,
-    textTransform: 'uppercase',
     letterSpacing: 0
   },
   weekInsightValue: {
+    fontFamily: FONT_SANS_SEMIBOLD,
     fontSize: 15,
     color: COLORS.textMain,
-    fontWeight: '700'
+    fontWeight: '600'
   },
   weekInsightIconWrap: {
     marginTop: 2,
@@ -1215,12 +1266,14 @@ const styles = StyleSheet.create({
   },
   weekInsightIconFallbackText: {
     fontSize: 15,
+    fontFamily: FONT_SANS_SEMIBOLD,
     fontWeight: '800'
   },
   weekInsightTime: {
+    fontFamily: FONT_MONO,
     fontSize: 22,
     color: COLORS.textMain,
-    fontWeight: '600'
+    fontWeight: '500'
   },
   darkCardLift: {
     shadowColor: '#000000',
@@ -1229,17 +1282,25 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 4
   },
+  darkSoftBand: {
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0
+  },
   updatedText: {
+    fontFamily: FONT_MONO,
     fontSize: 12,
     color: COLORS.textSecondary,
     marginBottom: 30,
   },
   sectionTitle: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontFamily: FONT_SANS,
+    fontSize: 14,
+    fontWeight: '500',
     color: COLORS.textMain,
     marginBottom: 6,
-    textTransform: 'uppercase',
     letterSpacing: 0,
   },
   iosList: {
@@ -1282,6 +1343,7 @@ const styles = StyleSheet.create({
   },
   iosGlyphText: {
     fontSize: 11,
+    fontFamily: FONT_SANS_SEMIBOLD,
     fontWeight: '700'
   },
   appIconImage: {
@@ -1303,6 +1365,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: COLORS.textMain,
     fontSize: 14,
+    fontFamily: FONT_SANS,
     fontWeight: '500',
     lineHeight: 18,
     flexShrink: 1
@@ -1313,7 +1376,8 @@ const styles = StyleSheet.create({
   },
   iosUsageTime: {
     color: COLORS.textMain,
-    fontSize: 14,
+    fontFamily: FONT_MONO,
+    fontSize: 16,
     fontWeight: '500',
     marginBottom: 5
   },
@@ -1341,30 +1405,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24
   },
   quietDayTitle: {
-    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' }),
-    fontSize: 31,
-    lineHeight: 38,
-    fontWeight: '400',
+    fontFamily: FONT_SANS_SEMIBOLD,
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '600',
     textAlign: 'center',
     letterSpacing: 0
   },
   quietDayCaption: {
     marginTop: 9,
     fontSize: 13,
+    fontFamily: FONT_SANS,
     fontWeight: '500',
     textAlign: 'center'
   },
   emptySerif: {
-    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' }),
+    fontFamily: FONT_SANS_SEMIBOLD,
     fontSize: 20,
     lineHeight: 26,
-    fontWeight: '400',
+    fontWeight: '600',
     letterSpacing: 0
   },
   emptyHint: {
     marginTop: 6,
     fontSize: 12,
     color: '#A0A0A6',
+    fontFamily: FONT_SANS,
     lineHeight: 16
   },
   modalRoot: {
@@ -1396,7 +1462,8 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontFamily: FONT_SANS_SEMIBOLD,
+    fontWeight: '600',
     color: '#111111',
     flex: 1
   },
@@ -1413,7 +1480,8 @@ const styles = StyleSheet.create({
   sheetCloseText: {
     color: '#8E8E93',
     fontSize: 13,
-    fontWeight: '700'
+    fontFamily: FONT_SANS,
+    fontWeight: '500'
   },
   sheetRow: {
     flexDirection: 'row',
@@ -1447,21 +1515,25 @@ const styles = StyleSheet.create({
   sheetAppFallbackText: {
     fontSize: 11,
     color: '#6E6E73',
+    fontFamily: FONT_SANS_SEMIBOLD,
     fontWeight: '800'
   },
   sheetAppName: {
     flex: 1,
     color: '#1C1C1E',
     fontSize: 15,
+    fontFamily: FONT_SANS,
     fontWeight: '500'
   },
   sheetAppTime: {
     color: '#1C1C1E',
-    fontSize: 14,
-    fontWeight: '600'
+    fontFamily: FONT_MONO,
+    fontSize: 16,
+    fontWeight: '500'
   },
   sheetEmpty: {
     color: '#75757A',
+    fontFamily: FONT_SANS,
     fontSize: 14
   },
 
@@ -1498,15 +1570,17 @@ const styles = StyleSheet.create({
     width: '100%'
   },
   dayBarLabelTitle: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontFamily: FONT_SANS,
+    fontSize: 14,
+    fontWeight: '500',
     marginBottom: 2,
-    lineHeight: 14,
+    lineHeight: 17,
     flexShrink: 1
   },
   dayBarLabelValue: {
     fontSize: 24,
-    fontWeight: '400',
+    fontFamily: FONT_MONO,
+    fontWeight: '500',
     color: COLORS.textMain,
     includeFontPadding: false
   },
@@ -1526,14 +1600,16 @@ const styles = StyleSheet.create({
     marginBottom: 26
   },
   totalTodayText: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontFamily: FONT_SANS,
+    fontSize: 14,
+    fontWeight: '500',
     color: COLORS.textMain,
     marginBottom: 4,
   },
   timeBigTextDay: {
     fontSize: 48,
-    fontWeight: '400',
+    fontFamily: FONT_MONO,
+    fontWeight: '500',
     color: COLORS.textMain,
     letterSpacing: 0,
   },

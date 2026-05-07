@@ -1,5 +1,6 @@
 ﻿import React, { useCallback, useEffect, useState } from 'react';
 import { Image, InteractionManager, Platform, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View, useColorScheme } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import { ScreenTimeService, DailyUsageMap, FocusModeDecisions } from '../../services/ScreenTimeService';
 import { DailyLimitSnapshots, DailyMoodSnapshots, UserStore } from '../../services/storage';
 import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
@@ -31,8 +32,9 @@ const moodFace: Record<Exclude<DayMood, 'empty'>, { bg: string; faceColor: strin
   dotted: { bg: '#FCE1B9', faceColor: '#D0933C', type: 'frown' }
 };
 
-const FONT_REGULAR = Platform.select({ ios: 'System', android: 'sans-serif', default: 'System' });
-const FONT_SEMIBOLD = Platform.select({ ios: 'System', android: 'sans-serif-medium', default: 'System' });
+const FONT_REGULAR = Platform.select({ ios: 'Geist-Regular', android: 'Geist-Regular', default: 'System' });
+const FONT_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Geist-SemiBold', default: 'System' });
+const FONT_MONO = Platform.select({ ios: 'GeistMono-Regular', android: 'GeistMono-Regular', default: 'monospace' });
 const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
 const EMPTY_FOCUS_DECISIONS: FocusModeDecisions = { protectedApps: {}, bypassedApps: {} };
 
@@ -46,11 +48,11 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
   const isDark = useColorScheme() === 'dark';
   const theme = {
     bg: isDark ? '#121418' : '#FFFFFF',
-    surface: isDark ? '#191D23' : '#FFFFFF',
-    mutedSurface: isDark ? '#20252D' : '#F2F2F7',
-    text: isDark ? '#F3F4F6' : '#000000',
-    textSecondary: isDark ? '#A5ACB8' : '#8E8E93',
-    border: isDark ? '#2A303A' : '#EFEFF4'
+    surface: isDark ? 'rgba(255,255,255,0.055)' : '#FFFFFF',
+    mutedSurface: isDark ? 'rgba(255,255,255,0.06)' : '#F7F4ED',
+    text: isDark ? '#FFFFFF' : '#000000',
+    textSecondary: isDark ? '#A5ACB8' : '#6F737C',
+    border: isDark ? 'rgba(255,255,255,0.08)' : '#EEE8DC'
   };
   const [streak, setStreak] = useState(0);
   const [todayApps, setTodayApps] = useState<StreakAppRow[]>([]);
@@ -276,32 +278,43 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
   const heroStreakLabel = !hasActiveLimits ? 'Set a limit to start' : streak === 1 ? 'Day on fire' : 'Days on fire';
   const weekProgressCount = weekCells.filter((cell) => cell.completed && cell.mood !== 'dotted').length;
   const weekProgressLabel = !hasActiveLimits ? 'No streak is counted until a limit is active' : isExceededToday ? 'Bring today back under limit' : `${weekProgressCount} of 7 days this week`;
+  const screenGradientColors = isDark
+    ? ['#121418', '#14171A', '#171A16', '#121418']
+    : ['#FFFFFF', '#FFFCF6', '#FFFFFF'];
+  const heroCardColors = ['#171C24', '#191E24', '#242116'];
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-      <ScrollView
-        contentContainerStyle={[styles.content, { backgroundColor: theme.bg }]}
-        showsVerticalScrollIndicator={false}
-        overScrollMode="never"
-        bounces={false}
-        alwaysBounceVertical={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#111111" />}
-      >
+      <LinearGradient colors={screenGradientColors} style={styles.screenGradient}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          overScrollMode="never"
+          bounces={false}
+          alwaysBounceVertical={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#111111" />}
+        >
         <View style={styles.headerRow}>
           <View style={styles.headerCopy}>
             <Text style={[styles.brandMark, { color: isDark ? '#AAB0BD' : '#6E6E73' }]}>unlure</Text>
             <Text style={[styles.pageTitle, { color: theme.text }]}>Streak</Text>
             <Text style={[styles.pageDate, { color: theme.textSecondary }]}>This week</Text>
           </View>
-          <TouchableOpacity style={[styles.focusSetupButton, { backgroundColor: isDark ? '#20252D' : '#F7F7FA', borderColor: theme.border }]} onPress={onOpenFocusSetup} activeOpacity={0.76}>
+          <TouchableOpacity style={[styles.focusSetupButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.74)', borderColor: theme.border }]} onPress={onOpenFocusSetup} activeOpacity={0.76}>
             <Image source={require('../../assets/image.png')} style={[styles.focusSetupImage, { tintColor: theme.text }]} resizeMode="contain" />
             <Text style={[styles.focusSetupText, { color: theme.text }]}>Focus</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.heroStack}>
-          <View style={[styles.heroBackplate, { backgroundColor: isDark ? '#1E232B' : '#F2F2F7' }]} />
-          <View style={[styles.heroCard, isDark && { backgroundColor: '#171C24', borderColor: '#2A303A', borderWidth: 1 }]}>
+          <View style={[styles.heroBackplate, { backgroundColor: isDark ? 'rgba(255,255,255,0.045)' : '#F7F1E4' }]} />
+          <LinearGradient
+            colors={heroCardColors}
+            start={{ x: 0, y: 0.15 }}
+            end={{ x: 1, y: 0.9 }}
+            style={[styles.heroCard, isDark && { borderColor: 'rgba(255,255,255,0.08)', borderWidth: 1 }]}
+          >
             <View style={styles.heroTopRow}>
               <Text style={styles.heroKicker}>{!hasActiveLimits ? 'No active limits' : isExceededToday ? 'Needs recovery' : 'On track today'}</Text>
               <Text style={styles.heroMeta}>{`${streak} day streak`}</Text>
@@ -321,7 +334,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
                 resizeMode="contain"
               />
             </View>
-          </View>
+          </LinearGradient>
         </View>
 
         <View style={styles.sectionBlock}>
@@ -427,13 +440,20 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
             )}
           </View>
         </View>
-      </ScrollView>
+        </ScrollView>
+      </LinearGradient>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
+  screenGradient: {
+    flex: 1
+  },
+  scrollView: {
+    flex: 1
+  },
   content: {
     paddingHorizontal: 24,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 15 : 15,
@@ -449,11 +469,11 @@ const styles = StyleSheet.create({
     flex: 1
   },
   pageTitle: {
-    fontSize: 34,
-    lineHeight: 38,
+    fontSize: 28,
+    lineHeight: 32,
     color: '#000000',
     fontFamily: FONT_SEMIBOLD,
-    fontWeight: '800'
+    fontWeight: '600'
   },
   brandMark: {
     color: '#6E6E73',
@@ -497,8 +517,8 @@ const styles = StyleSheet.create({
   focusSetupText: {
     color: '#1C1C1E',
     fontSize: 12,
-    fontFamily: FONT_SEMIBOLD,
-    fontWeight: '700'
+    fontFamily: FONT_REGULAR,
+    fontWeight: '500'
   },
   editAppsButton: {
     height: 30,
@@ -513,7 +533,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#007AFF',
     fontFamily: FONT_SEMIBOLD,
-    fontWeight: '700'
+    fontWeight: '600'
   },
   heroStack: {
     minHeight: 174,
@@ -548,13 +568,13 @@ const styles = StyleSheet.create({
   heroKicker: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.72)',
-    fontFamily: FONT_SEMIBOLD,
-    fontWeight: '700'
+    fontFamily: FONT_REGULAR,
+    fontWeight: '500'
   },
   heroMeta: {
-    fontSize: 13,
+    fontSize: 14,
     color: 'rgba(255,255,255,0.58)',
-    fontFamily: FONT_REGULAR,
+    fontFamily: FONT_MONO,
     fontWeight: '600'
   },
   heroBody: {
@@ -569,7 +589,8 @@ const styles = StyleSheet.create({
   },
   heroGif: {
     width: 118,
-    height: 118
+    height: 118,
+    zIndex: 1
   },
   streakNumberWrap: {
     alignSelf: 'flex-start',
@@ -582,15 +603,15 @@ const styles = StyleSheet.create({
     fontSize: 68,
     lineHeight: 72,
     color: 'rgba(255,255,255,0.22)',
-    fontFamily: FONT_SEMIBOLD,
-    fontWeight: '700'
+    fontFamily: FONT_MONO,
+    fontWeight: '500'
   },
   streakNumber: {
     fontSize: 68,
     lineHeight: 72,
     color: '#FFFFFF',
-    fontFamily: FONT_SEMIBOLD,
-    fontWeight: '700'
+    fontFamily: FONT_MONO,
+    fontWeight: '500'
   },
   streakLabel: {
     marginTop: 2,
@@ -616,16 +637,16 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   sectionTitle: {
-    fontSize: 17,
+    fontSize: 14,
     color: '#000000',
-    fontFamily: FONT_SEMIBOLD,
-    fontWeight: '700'
+    fontFamily: FONT_REGULAR,
+    fontWeight: '500'
   },
   sectionMeta: {
     fontSize: 12,
     color: '#8E8E93',
     fontFamily: FONT_REGULAR,
-    fontWeight: '600',
+    fontWeight: '500',
     textTransform: 'lowercase'
   },
   weekStrip: {
@@ -646,8 +667,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#8E8E93',
     marginBottom: 10,
-    fontFamily: FONT_SEMIBOLD,
-    fontWeight: '700'
+    fontFamily: FONT_REGULAR,
+    fontWeight: '500'
   },
   dayBadge: {
     width: 34,
@@ -689,7 +710,7 @@ const styles = StyleSheet.create({
   dayNumber: {
     fontSize: 17,
     color: '#1C1C1E',
-    fontFamily: FONT_REGULAR,
+    fontFamily: FONT_MONO,
     fontWeight: '500'
   },
   limitedList: {
@@ -710,7 +731,7 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
     fontSize: 15,
     fontFamily: FONT_SEMIBOLD,
-    fontWeight: '700',
+    fontWeight: '600',
     marginBottom: 4
   },
   emptyText: {
@@ -754,7 +775,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6E6E73',
     fontFamily: FONT_SEMIBOLD,
-    fontWeight: '800'
+    fontWeight: '600'
   },
   appName: {
     flex: 1,
@@ -765,9 +786,9 @@ const styles = StyleSheet.create({
   },
   appMinutes: {
     color: '#000000',
-    fontSize: 14,
-    fontFamily: FONT_SEMIBOLD,
-    fontWeight: '700'
+    fontSize: 16,
+    fontFamily: FONT_MONO,
+    fontWeight: '500'
   },
   appMinutesUnused: {
     color: '#8E8E93',
