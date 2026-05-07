@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, StatusBar, Image, Animated, useColorScheme } from 'react-native';
+import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, StatusBar, Image, Animated, useColorScheme, DeviceEventEmitter } from 'react-native';
 import { ScreenTimeService, AppInfo } from '../../services/ScreenTimeService';
 import { UserStore } from '../../services/storage';
 import { TimeLimitModal } from './TimeLimitModal';
@@ -61,12 +61,33 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
       ScreenTimeService.getInstalledApps(forceRefresh),
       UserStore.getAllLimits()
     ]);
+    const installedPackages = new Set(allApps.map(app => app.packageName));
+    const visibleLimits = Object.entries(storedLimits || {}).reduce<Record<string, number>>((acc, [packageName, minutes]) => {
+      if (installedPackages.has(packageName)) acc[packageName] = minutes;
+      return acc;
+    }, {});
+    if (Object.keys(visibleLimits).length !== Object.keys(storedLimits || {}).length) {
+      const appNames = allApps.reduce<Record<string, string>>((acc, app) => {
+        acc[app.packageName] = app.appName;
+        return acc;
+      }, {});
+      await UserStore.saveAllLimits(visibleLimits);
+      await ScreenTimeService.syncFocusModeConfig(visibleLimits, appNames);
+    }
     setApps(allApps);
-    setSelectedLimits(storedLimits || {});
+    setSelectedLimits(visibleLimits);
   }, []);
 
   useEffect(() => {
     loadData().finally(() => setLoading(false));
+  }, [loadData]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+    const subscription = DeviceEventEmitter.addListener('UnlureInstalledAppsChanged', () => {
+      loadData(true);
+    });
+    return () => subscription.remove();
   }, [loadData]);
 
   const onRefresh = useCallback(async () => {
@@ -88,6 +109,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
       return acc;
     }, {});
     await ScreenTimeService.syncFocusModeConfig(limits, appNames);
+    await ScreenTimeService.syncStreakShield(await UserStore.getStreak());
   }, [apps]);
 
   const handleConfirmLimit = async (minutes: number) => {

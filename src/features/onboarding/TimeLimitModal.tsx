@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, useColorScheme } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, Platform, Vibration, useColorScheme } from 'react-native';
 import { Picker } from 'react-native-wheel-pick';
 
 interface TimeLimitModalProps {
@@ -17,7 +17,7 @@ export const TimeLimitModal = ({ visible, appName, iconBase64, onConfirm, onCanc
   const isDark = useColorScheme() === 'dark';
   const theme = {
     surface: isDark ? '#191D23' : '#FFFFFF',
-    panel: isDark ? '#20252D' : '#F2F2F2',
+    panel: isDark ? '#191D23' : '#FFFFFF',
     text: isDark ? '#F3F4F6' : '#111111',
     textSecondary: isDark ? '#A5ACB8' : '#666666',
     border: isDark ? '#2A303A' : '#ECECF2',
@@ -25,6 +25,12 @@ export const TimeLimitModal = ({ visible, appName, iconBase64, onConfirm, onCanc
   };
   const [hours, setHours] = useState('0');
   const [minutes, setMinutes] = useState('30');
+  const tick = useCallback(() => {
+    if (Platform.OS === 'android') Vibration.vibrate(8);
+  }, []);
+  const settle = useCallback(() => {
+    if (Platform.OS === 'android') Vibration.vibrate(16);
+  }, []);
 
   return (
     <Modal visible={visible} transparent animationType="slide">
@@ -42,7 +48,7 @@ export const TimeLimitModal = ({ visible, appName, iconBase64, onConfirm, onCanc
             <Text style={[styles.appName, { color: theme.text }]} numberOfLines={1}>{appName}</Text>
           </View>
 
-          <View style={[styles.pickerContainer, { backgroundColor: theme.panel }]}>
+          <View style={[styles.pickerContainer, { backgroundColor: theme.panel, borderColor: theme.border }]}>
             {/* Hours Infinite Roller */}
             <View style={styles.column}>
               <Text style={styles.columnLabel}>hrs</Text>
@@ -50,8 +56,10 @@ export const TimeLimitModal = ({ visible, appName, iconBase64, onConfirm, onCanc
                 style={styles.picker}
                 selectedValue={hours}
                 pickerData={hourData}
-                // Change (value) to (value: string)
-                onValueChange={(value: string) => setHours(value)}
+                onValueChange={(value: string) => {
+                  tick();
+                  setHours(value);
+                }}
                 isCyclic={true}
                 selectTextColor={theme.text}
                 textColor={theme.pickerText}
@@ -66,8 +74,11 @@ export const TimeLimitModal = ({ visible, appName, iconBase64, onConfirm, onCanc
                 style={styles.picker}
                 selectedValue={minutes}
                 pickerData={minuteData}
-                onValueChange={(value: string) => setMinutes(value)}
-                isCyclic={true} // Infinite scrolling
+                onValueChange={(value: string) => {
+                  tick();
+                  setMinutes(value);
+                }}
+                isCyclic={true}
                 selectTextColor={theme.text}
                 textColor={theme.pickerText}
                 textSize={22}
@@ -76,13 +87,16 @@ export const TimeLimitModal = ({ visible, appName, iconBase64, onConfirm, onCanc
           </View>
 
           <View style={styles.buttonRow}>
-            <TouchableOpacity onPress={onCancel}>
+            <TouchableOpacity onPress={() => {
+              settle();
+              onCancel();
+            }}>
               <Text style={[styles.cancelText, { color: theme.textSecondary }]}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.confirmButton, isDark && { backgroundColor: '#FFFFFF' }]} 
               onPress={() => {
-                // Convert strings to numbers before math
+                settle();
                 const totalMinutes = (parseInt(hours, 10) * 60) + parseInt(minutes, 10);
                 onConfirm(totalMinutes);
                 }}
@@ -115,10 +129,13 @@ const styles = StyleSheet.create({
   appName: { flex: 1, fontSize: 26, fontWeight: '800', color: '#111111' },
   pickerContainer: { 
     flexDirection: 'row', 
-    backgroundColor: '#F2F2F2',
-    borderRadius: 25, 
+    backgroundColor: '#FFFFFF',
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: '#ECECF2',
     overflow: 'hidden',
-    paddingVertical: 10
+    paddingVertical: 10,
+    position: 'relative'
   },
   column: { flex: 1, alignItems: 'center' },
   columnLabel: { fontSize: 13, color: '#777', fontWeight: 'bold', marginTop: 10, marginBottom: -10 },

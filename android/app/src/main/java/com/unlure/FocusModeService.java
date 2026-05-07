@@ -23,6 +23,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
@@ -44,6 +45,7 @@ public class FocusModeService extends AccessibilityService {
     public static final String PREFS_NAME = "FocusModePrefs";
     public static final String KEY_LIMITS_JSON = "limits_json";
     public static final String KEY_NAMES_JSON = "names_json";
+    public static final String KEY_STREAK_SHIELD_COUNT = "streak_shield_count";
     public static final String KEY_PROTECTED_PREFIX = "protected_";
     public static final String KEY_BYPASS_PREFIX = "bypass_";
 
@@ -289,11 +291,16 @@ public class FocusModeService extends AccessibilityService {
         hideOverlay();
 
         overlayPackage = packageName;
+        int streakShieldCount = getStreakShieldCount();
+        String shieldLabel = formatStreakShieldLabel(streakShieldCount);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(22), dp(10), dp(22), dp(24));
         root.setBackground(makeSheetBackground());
-        root.setElevation(dp(18));
+        root.setElevation(dp(24));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            root.setTranslationZ(dp(8));
+        }
 
         View handle = new View(this);
         handle.setBackground(makeRoundedDrawable(Color.argb(210, 212, 220, 232), dp(999)));
@@ -351,7 +358,7 @@ public class FocusModeService extends AccessibilityService {
         titleBlock.addView(subtitle);
 
         TextView body = new TextView(this);
-        body.setText("Close the app now to protect your streak, or continue knowing today will count as over limit.");
+        body.setText("Close the app now to protect " + shieldLabel + ". Continuing spends that shield and marks today over limit.");
         body.setTextColor(Color.rgb(208, 216, 232));
         body.setTextSize(15);
         body.setLineSpacing(dp(3), 1.0f);
@@ -371,6 +378,7 @@ public class FocusModeService extends AccessibilityService {
         close.setPadding(0, dp(15), 0, dp(15));
         close.setBackground(makeRoundedDrawable(Color.rgb(255, 255, 255), dp(18)));
         close.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
             markProtectedToday(packageName);
             rememberRecentlyClosedPackage(packageName);
             hideOverlay();
@@ -388,7 +396,7 @@ public class FocusModeService extends AccessibilityService {
         root.addView(close, closeParams);
 
         TextView bypass = new TextView(this);
-        bypass.setText("Break streak and continue");
+        bypass.setText(streakShieldCount > 0 ? "Spend shield and continue" : "Break streak and continue");
         bypass.setTextColor(Color.rgb(224, 231, 246));
         bypass.setTextSize(15);
         bypass.setTypeface(Typeface.DEFAULT_BOLD);
@@ -400,6 +408,7 @@ public class FocusModeService extends AccessibilityService {
             dp(18)
         ));
         bypass.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
             markBypassedToday(packageName);
             hideOverlay();
             stopSession(); // Fix for Error 1
@@ -410,7 +419,9 @@ public class FocusModeService extends AccessibilityService {
         ));
 
         FrameLayout overlayContainer = new FrameLayout(this);
-        overlayContainer.setBackgroundColor(Color.argb(154, 5, 9, 16));
+        overlayContainer.setClickable(true);
+        overlayContainer.setFocusable(true);
+        overlayContainer.setBackgroundColor(Color.argb(232, 5, 9, 16));
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
         params.leftMargin = dp(10);
@@ -418,18 +429,28 @@ public class FocusModeService extends AccessibilityService {
         params.bottomMargin = dp(10);
         overlayContainer.addView(root, params);
 
+        int overlayFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            overlayFlags |= WindowManager.LayoutParams.FLAG_BLUR_BEHIND;
+        }
+
         WindowManager.LayoutParams wmParams = new WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ? 
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY : WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            overlayFlags,
             PixelFormat.TRANSLUCENT
         );
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            wmParams.setBlurBehindRadius(dp(18));
+        }
 
         overlayView = overlayContainer;
         windowManager.addView(overlayContainer, wmParams);
         root.post(() -> {
+            root.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
             root.setTranslationY(root.getHeight());
             ObjectAnimator.ofFloat(root, "translationY", root.getHeight(), 0f).setDuration(220).start();
         });
@@ -558,6 +579,17 @@ public class FocusModeService extends AccessibilityService {
     private boolean isProtectedToday(String packageName) {
         return getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getBoolean(KEY_PROTECTED_PREFIX + todayKey() + "_" + packageName, false);
+    }
+
+    private int getStreakShieldCount() {
+        return Math.max(0, getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getInt(KEY_STREAK_SHIELD_COUNT, 0));
+    }
+
+    private String formatStreakShieldLabel(int count) {
+        if (count <= 0) return "your streak";
+        if (count == 1) return "your 1-day streak shield";
+        return "your " + count + "-day streak shield";
     }
 
     private void markBypassedToday(String packageName) {

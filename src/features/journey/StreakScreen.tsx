@@ -167,7 +167,6 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
       UserStore.ensureTrackingStartDate()
     ]);
     const focusDecisions = await ScreenTimeService.getTodayFocusModeDecisions();
-    await UserStore.saveTodayLimitSnapshot(limits || {});
 
     const nameMap = installedApps.reduce<Record<string, string>>((acc, app) => {
       acc[app.packageName] = app.appName;
@@ -177,16 +176,27 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
       acc[app.packageName] = app.iconBase64;
       return acc;
     }, {});
+    const installedPackages = new Set(installedApps.map((app) => app.packageName));
+    const activeLimits = Object.entries(limits || {}).reduce<Record<string, number>>((acc, [pkg, minutes]) => {
+      if (installedPackages.has(pkg)) acc[pkg] = minutes;
+      return acc;
+    }, {});
+    if (Object.keys(activeLimits).length !== Object.keys(limits || {}).length) {
+      await UserStore.saveAllLimits(activeLimits);
+      await ScreenTimeService.syncFocusModeConfig(activeLimits, nameMap);
+    } else {
+      await UserStore.saveTodayLimitSnapshot(activeLimits);
+    }
 
     const todayKey = formatDateKey(new Date());
     const todayMap = (storedStats as DailyUsageMap)[todayKey] || {};
-    const activeLimits = limits || {};
     const todayMood = resolveMood(todayMap, activeLimits, focusDecisions);
     await UserStore.saveDailyMood(todayKey, todayMood);
     const moodsWithToday = { ...(savedMoods || {}), [todayKey]: todayMood };
 
     const derivedStreak = calculateStreakFromStats(storedStats as DailyUsageMap, limitSnapshots || {}, activeLimits, moodsWithToday, focusDecisions, trackingStartDate);
     setStreak(derivedStreak);
+    await ScreenTimeService.syncStreakShield(derivedStreak);
 
     const rows = Object.keys(activeLimits)
       .filter((pkg) => (activeLimits[pkg] || 0) > 0)

@@ -15,7 +15,7 @@ import {
 import { ScreenTimeService } from '../../services/ScreenTimeService';
 import { UserStore } from '../../services/storage';
 
-type PermissionKey = 'usage' | 'detection' | 'overlay';
+type PermissionKey = 'usage' | 'overlay' | 'strict';
 const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
 
 type PermissionRow = {
@@ -43,17 +43,17 @@ export const PermissionSetupScreen = ({
     subSurface: isDark ? '#20252D' : '#F7F7FA'
   };
   const [usageEnabled, setUsageEnabled] = useState(false);
-  const [detectionEnabled, setDetectionEnabled] = useState(false);
+  const [strictDetectionEnabled, setStrictDetectionEnabled] = useState(false);
   const [overlayEnabled, setOverlayEnabled] = useState(false);
 
   const refreshStatuses = useCallback(async () => {
-    const [usage, detection, overlay] = await Promise.all([
+    const [usage, strictDetection, overlay] = await Promise.all([
       ScreenTimeService.hasUsageAccess(),
       ScreenTimeService.isFocusModeAccessibilityEnabled(),
       ScreenTimeService.canDrawOverlays()
     ]);
     setUsageEnabled(usage);
-    setDetectionEnabled(detection);
+    setStrictDetectionEnabled(strictDetection);
     setOverlayEnabled(overlay);
   }, []);
 
@@ -74,25 +74,25 @@ export const PermissionSetupScreen = ({
     {
       key: 'usage',
       title: 'Usage Access',
-      detail: 'Tracks daily time totals for selected apps.',
+      detail: 'Tracks time totals for selected apps without reading screen content.',
       enabled: usageEnabled,
       action: ScreenTimeService.openUsageAccessSettings
     },
     {
-      key: 'detection',
-      title: 'Focus Detection',
-      detail: 'Detects when a selected limited app is opened.',
-      enabled: detectionEnabled,
-      action: openFocusDetectionSettings
-    },
-    {
       key: 'overlay',
       title: 'Focus Overlay',
-      detail: 'Shows limit warnings over distracting apps.',
+      detail: 'Shows limit warnings over selected apps when a cap is reached.',
       enabled: overlayEnabled,
       action: ScreenTimeService.openOverlaySettings
     }
   ];
+  const strictPermission: PermissionRow = {
+    key: 'strict',
+    title: 'Strict Detection',
+    detail: 'Optional. Uses Accessibility for faster detection, but standard mode works without it.',
+    enabled: strictDetectionEnabled,
+    action: openFocusDetectionSettings
+  };
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: theme.bg }]}>
@@ -105,16 +105,16 @@ export const PermissionSetupScreen = ({
       >
         <Image source={require('../../assets/Completed 1.png')} style={styles.heroImage} resizeMode="contain" />
         <Text style={[styles.brandMark, { color: isDark ? '#AAB0BD' : '#6E6E73' }]}>unlure</Text>
-        <Text style={[styles.title, { color: theme.text }]}>Set up Focus Mode</Text>
+        <Text style={[styles.title, { color: theme.text }]}>Privacy-first Focus</Text>
         <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-          Enable these permissions so Unlure can track limits, detect selected app openings, and show streak-saving warnings.
+          Standard mode uses Usage Access and Overlay only. Unlure does not read messages, passwords, payment screens, or app content.
         </Text>
 
         <View style={[styles.disclosureBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Text style={[styles.disclosureTitle, { color: theme.text }]}>Accessibility disclosure</Text>
+          <Text style={[styles.disclosureTitle, { color: theme.text }]}>What Unlure can see</Text>
           <Text style={[styles.disclosureText, { color: theme.textSecondary }]}>
-            Unlure uses Accessibility only to detect when apps you selected with limits are opened. It does not read messages,
-            passwords, typed text, notifications, or private content, and this data is not sold or shared.
+            Standard mode sees app package names and usage duration for apps you select. It cannot inspect banking screens,
+            chats, typed text, passwords, notifications, or payment details.
           </Text>
         </View>
 
@@ -139,6 +139,31 @@ export const PermissionSetupScreen = ({
               </View>
             </TouchableOpacity>
           ))}
+        </View>
+
+        <View style={[styles.optionalBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View style={styles.optionalHeader}>
+            <View style={styles.optionalCopy}>
+              <Text style={[styles.optionalTitle, { color: theme.text }]}>Optional Strict Mode</Text>
+              <Text style={[styles.optionalText, { color: theme.textSecondary }]}>
+                Faster app-open detection, but it asks for Accessibility. Keep this off if you prefer the safer default.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.permissionAction,
+                { backgroundColor: isDark ? '#FFFFFF' : theme.subSurface, borderColor: isDark ? '#FFFFFF' : theme.border },
+                strictPermission.enabled && styles.permissionActionEnabled,
+                strictPermission.enabled && isDark && { backgroundColor: '#1F8F4A', borderColor: '#1F8F4A' }
+              ]}
+              onPress={strictPermission.action}
+              activeOpacity={0.76}
+            >
+              <Text style={[styles.permissionActionText, isDark && { color: '#101319' }, strictPermission.enabled && styles.permissionActionTextEnabled, strictPermission.enabled && isDark && { color: '#FFFFFF' }]}>
+                {strictPermission.enabled ? 'Enabled' : 'Open'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
 
@@ -262,6 +287,35 @@ const styles = StyleSheet.create({
   },
   permissionActionTextEnabled: {
     color: '#28A745'
+  },
+  optionalBox: {
+    backgroundColor: '#F7F7FA',
+    borderWidth: 1,
+    borderColor: '#EFEFF4',
+    borderRadius: 8,
+    padding: 14,
+    marginTop: 18
+  },
+  optionalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  optionalCopy: {
+    flex: 1,
+    paddingRight: 14
+  },
+  optionalTitle: {
+    color: '#111111',
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '800',
+    marginBottom: 4
+  },
+  optionalText: {
+    color: '#6E6E73',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '500'
   },
   footer: {
     position: 'absolute',

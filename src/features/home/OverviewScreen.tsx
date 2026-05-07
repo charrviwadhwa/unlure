@@ -671,9 +671,19 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
               <View style={[styles.weekInsightRow, { backgroundColor: isDark ? '#1D232D' : '#F7F7FA', borderColor: ui.border }, isDark && styles.darkCardLift]}>
                 <View style={styles.weekInsightBlock}>
                   <Text style={[styles.weekInsightLabel, { color: ui.textSecondary }]}>Most used app</Text>
-                  <Text style={[styles.weekInsightValue, { color: ui.text }]} numberOfLines={1}>
-                    {weekTopApp ? weekTopApp.name : 'No usage yet'}
-                  </Text>
+                  {weekTopApp ? (
+                    <View style={styles.weekInsightIconWrap}>
+                      {weekTopApp.iconBase64 ? (
+                        <Image source={{ uri: `data:image/png;base64,${weekTopApp.iconBase64}` }} style={styles.weekInsightIcon} resizeMode="cover" />
+                      ) : (
+                        <View style={[styles.weekInsightIconFallback, { backgroundColor: isDark ? '#20252D' : '#FFFFFF' }]}>
+                          <Text style={[styles.weekInsightIconFallbackText, { color: ui.textSecondary }]}>{weekTopApp.name.charAt(0).toUpperCase()}</Text>
+                        </View>
+                      )}
+                    </View>
+                  ) : (
+                    <Text style={[styles.weekInsightValue, { color: ui.text }]} numberOfLines={1}>No usage yet</Text>
+                  )}
                 </View>
                 <Text style={[styles.weekInsightTime, { color: ui.text }]}>{weekTopApp ? formatTime(weekTopApp.minutes) : '0m'}</Text>
               </View>
@@ -751,7 +761,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
               <View style={styles.legendContainer}>
                 {weekChartCategories.map((category) => (
                   <View style={styles.legendItem} key={category.key}>
-                    <Text style={[styles.legendLabel, { color: category.color.border }]} numberOfLines={1}>{category.label}</Text>
+                    <Text style={[styles.legendLabel, { color: category.color.border }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.82}>{category.label}</Text>
                     <Text style={[styles.legendValue, { color: ui.text }]}>{formatTime(category.minutes)}</Text>
                   </View>
                 ))}
@@ -779,7 +789,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                       >
                         <CategoryGlyph category={category.key} color={category.color.border} />
                       </View>
-                      <Text style={[styles.iosUsageName, { color: ui.text }]} numberOfLines={1}>{category.label}</Text>
+                      <Text style={[styles.iosUsageName, { color: ui.text }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.86}>{category.label}</Text>
                     </View>
                     <View style={styles.iosUsageRight}>
                       <Text style={[styles.iosUsageTime, { color: ui.text }]}>{formatTime(category.minutes)}</Text>
@@ -804,12 +814,21 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
               
               <View style={[
                 styles.dayChartContainer,
-                dayChartCategories.length >= 3 ? styles.dayChartContainerSpread : styles.dayChartContainerCompact
+                dayChartCategories.length === 0
+                  ? styles.dayChartContainerQuiet
+                  : dayChartCategories.length >= 3
+                    ? styles.dayChartContainerSpread
+                    : styles.dayChartContainerCompact
               ]}>
-                {dayChartCategories.map((category) => (
+                {dayChartCategories.length === 0 ? (
+                  <View style={styles.quietDayState}>
+                    <Text style={[styles.quietDayTitle, { color: ui.text }]}>The day is quiet.</Text>
+                    <Text style={[styles.quietDayCaption, { color: ui.textSecondary }]}>No tracked app time yet.</Text>
+                  </View>
+                ) : dayChartCategories.map((category) => (
                   <View style={styles.dayBarColumn} key={category.key}>
                     <View style={styles.dayBarLabelContainer}>
-                      <Text style={[styles.dayBarLabelTitle, { color: category.color.border }]} numberOfLines={1}>{category.label}</Text>
+                      <Text style={[styles.dayBarLabelTitle, { color: category.color.border }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.76}>{category.label}</Text>
                       <Text style={[styles.dayBarLabelValue, { color: ui.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
                         {formatCompactTime(category.minutes)}
                       </Text>
@@ -879,13 +898,8 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                 })}
                 {visibleTodayApps.length === 0 ? (
                   <View style={styles.iosEmpty}>
-                    <Image
-                      source={require('../../assets/share-paper-plane.png')}
-                      style={styles.emptyIllustration}
-                      resizeMode="contain"
-                    />
-                    <Text style={[styles.sheetEmpty, { color: ui.textSecondary }]}>No app usage tracked yet today.</Text>
-                    <Text style={styles.emptyHint}>Stay in flow and your timeline will fill itself.</Text>
+                    <Text style={[styles.emptySerif, { color: ui.text }]}>Quiet choices compound.</Text>
+                    <Text style={[styles.emptyHint, { color: ui.textSecondary }]}>Your timeline will appear when there is something to count.</Text>
                   </View>
                 ) : null}
               </View>
@@ -1142,6 +1156,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     marginBottom: 4,
+    lineHeight: 14,
+    flexShrink: 1,
   },
   legendValue: {
     fontSize: 18,
@@ -1178,10 +1194,33 @@ const styles = StyleSheet.create({
     color: COLORS.textMain,
     fontWeight: '700'
   },
+  weekInsightIconWrap: {
+    marginTop: 2,
+    width: 38,
+    height: 38
+  },
+  weekInsightIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10
+  },
+  weekInsightIconFallback: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#ECECF2'
+  },
+  weekInsightIconFallbackText: {
+    fontSize: 15,
+    fontWeight: '800'
+  },
   weekInsightTime: {
-    fontSize: 18,
+    fontSize: 22,
     color: COLORS.textMain,
-    fontWeight: '500'
+    fontWeight: '600'
   },
   darkCardLift: {
     shadowColor: '#000000',
@@ -1264,7 +1303,9 @@ const styles = StyleSheet.create({
     flex: 1,
     color: COLORS.textMain,
     fontSize: 14,
-    fontWeight: '500'
+    fontWeight: '500',
+    lineHeight: 18,
+    flexShrink: 1
   },
   iosUsageRight: {
     width: 78,
@@ -1289,22 +1330,42 @@ const styles = StyleSheet.create({
   },
   iosEmpty: {
     width: '100%',
-    minHeight: 64,
-    paddingVertical: 14,
+    minHeight: 88,
+    paddingVertical: 18,
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'flex-start'
   },
-  emptyIllustration: {
-    width: 82,
-    height: 82,
-    opacity: 0.2,
-    marginBottom: 6
+  quietDayState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24
+  },
+  quietDayTitle: {
+    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' }),
+    fontSize: 31,
+    lineHeight: 38,
+    fontWeight: '400',
+    textAlign: 'center',
+    letterSpacing: 0
+  },
+  quietDayCaption: {
+    marginTop: 9,
+    fontSize: 13,
+    fontWeight: '500',
+    textAlign: 'center'
+  },
+  emptySerif: {
+    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' }),
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '400',
+    letterSpacing: 0
   },
   emptyHint: {
-    marginTop: 4,
+    marginTop: 6,
     fontSize: 12,
     color: '#A0A0A6',
-    textAlign: 'center'
+    lineHeight: 16
   },
   modalRoot: {
     flex: 1,
@@ -1415,6 +1476,11 @@ const styles = StyleSheet.create({
     height: 370,
     marginBottom: 28,
   },
+  dayChartContainerQuiet: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 0
+  },
   dayChartContainerCompact: {
     justifyContent: 'center',
     gap: 18
@@ -1435,6 +1501,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     marginBottom: 2,
+    lineHeight: 14,
+    flexShrink: 1
   },
   dayBarLabelValue: {
     fontSize: 24,

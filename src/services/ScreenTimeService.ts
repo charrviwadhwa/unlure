@@ -1,4 +1,4 @@
-import { NativeModules, Platform } from 'react-native';
+import { DeviceEventEmitter, NativeModules, Platform } from 'react-native';
 
 const { UsageModule } = NativeModules;
 
@@ -7,6 +7,12 @@ let storedDailyStatsPromise: Promise<DailyUsageMap> | null = null;
 let installedAppsPromise: Promise<AppInfo[]> | null = null;
 let lastStoreTodayStatsAt = 0;
 const STORE_TODAY_STATS_TTL_MS = 15000;
+
+if (Platform.OS === 'android') {
+  DeviceEventEmitter.addListener('UnlureInstalledAppsChanged', () => {
+    installedAppsPromise = null;
+  });
+}
 
 export interface AppUsage {
   id: string;
@@ -114,6 +120,15 @@ export const ScreenTimeService = {
     if (Platform.OS !== 'android') return false;
     try {
       return Boolean(await UsageModule.syncFocusModeConfig(limits, appNames));
+    } catch {
+      return false;
+    }
+  },
+
+  async syncStreakShield(streak: number): Promise<boolean> {
+    if (Platform.OS !== 'android') return false;
+    try {
+      return Boolean(await UsageModule.syncStreakShield(Math.max(0, Math.floor(streak || 0))));
     } catch {
       return false;
     }

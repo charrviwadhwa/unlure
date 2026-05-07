@@ -5,10 +5,13 @@ import android.app.usage.UsageEvents;
 import android.app.AppOpsManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.BroadcastReceiver;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
 import android.text.TextUtils;
+import com.facebook.react.modules.core.DeviceEventManagerModule;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.ReadableMapKeySetIterator;
@@ -46,6 +49,7 @@ public class UsageModule extends ReactContextBaseJavaModule {
     private static final String PREFS_LAST_DATE_KEY = "last_stored_date";
     private static final String DATE_FORMAT = "yyyy-MM-dd";
     private static final int DAILY_USAGE_RETENTION_DAYS = 180;
+    private BroadcastReceiver packageChangeReceiver;
 
     UsageModule(ReactApplicationContext context) {
         super(context);
@@ -54,6 +58,64 @@ public class UsageModule extends ReactContextBaseJavaModule {
     @Override
     public String getName() {
         return "UsageModule";
+    }
+
+    @Override
+    public void initialize() {
+        super.initialize();
+        registerPackageChangeReceiver();
+    }
+
+    @Override
+    public void invalidate() {
+        unregisterPackageChangeReceiver();
+        super.invalidate();
+    }
+
+    private void registerPackageChangeReceiver() {
+        if (packageChangeReceiver != null) return;
+        packageChangeReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (intent == null || intent.getAction() == null) return;
+                String action = intent.getAction();
+                if (
+                    Intent.ACTION_PACKAGE_REMOVED.equals(action) ||
+                    Intent.ACTION_PACKAGE_ADDED.equals(action) ||
+                    Intent.ACTION_PACKAGE_CHANGED.equals(action)
+                ) {
+                    emitInstalledAppsChanged();
+                }
+            }
+        };
+
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_PACKAGE_REMOVED);
+        filter.addAction(Intent.ACTION_PACKAGE_ADDED);
+        filter.addAction(Intent.ACTION_PACKAGE_CHANGED);
+        filter.addDataScheme("package");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            getReactApplicationContext().registerReceiver(packageChangeReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            getReactApplicationContext().registerReceiver(packageChangeReceiver, filter);
+        }
+    }
+
+    private void unregisterPackageChangeReceiver() {
+        if (packageChangeReceiver == null) return;
+        try {
+            getReactApplicationContext().unregisterReceiver(packageChangeReceiver);
+        } catch (Exception ignored) {}
+        packageChangeReceiver = null;
+    }
+
+    private void emitInstalledAppsChanged() {
+        try {
+            if (!getReactApplicationContext().hasActiveReactInstance()) return;
+            getReactApplicationContext()
+                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                .emit("UnlureInstalledAppsChanged", null);
+        } catch (Exception ignored) {}
     }
 
     private boolean isSelfPackage(String packageName) {
@@ -83,6 +145,17 @@ public class UsageModule extends ReactContextBaseJavaModule {
             packageName.contains("launcher") ||
             packageName.contains("permissioncontroller") ||
             packageName.contains("packageinstaller");
+    }
+
+    private boolean isInstalledLaunchablePackage(PackageManager pm, String packageName) {
+        if (packageName == null || isSelfPackage(packageName) || isSystemShellPackage(packageName)) return false;
+        try {
+            pm.getPackageInfo(packageName, 0);
+            Intent launchIntent = pm.getLaunchIntentForPackage(packageName);
+            return launchIntent != null;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
     }
 
     private String drawableToBase64(Drawable drawable) {
@@ -553,6 +626,43 @@ public void getDailyStats(Promise promise) {
             }
 
             editor.apply();
+            updatePrivacyFocusMonitor(limitsJson.length() > 0);
+            promise.resolve(true);
+        } catch (Exception e) {
+            promise.reject("ERROR", e.getMessage());
+        }
+    }
+
+    private void updatePrivacyFocusMonitor(boolean hasLimits) {
+        Context context = getReactApplicationContext();
+        Intent intent = new Intent(context, FocusMonitorService.class);
+        if (!hasLimits) {
+            try {
+                context.stopService(intent);
+            } catch (Exception ignored) {}
+            return;
+        }
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent);
+            } else {
+                context.startService(intent);
+            }
+        } catch (Exception e) {
+            android.util.Log.w("FocusMode", "Unable to start privacy focus monitor", e);
+        }
+    }
+
+    @ReactMethod
+    public void syncStreakShield(int streak, Promise promise) {
+        try {
+            int safeStreak = Math.max(streak, 0);
+            getReactApplicationContext()
+                .getSharedPreferences(FocusModeService.PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putInt(FocusModeService.KEY_STREAK_SHIELD_COUNT, safeStreak)
+                .apply();
             promise.resolve(true);
         } catch (Exception e) {
             promise.reject("ERROR", e.getMessage());
@@ -576,7 +686,7 @@ public void getInstalledApps(Promise promise) {
                 // 🚨 OPTIMIZATION: Only process apps that a user can actually launch
                 if (resolveInfo.activityInfo == null || resolveInfo.activityInfo.packageName == null) continue;
                 String packageName = resolveInfo.activityInfo.packageName;
-                if (isSelfPackage(packageName)) continue;
+                if (!isInstalledLaunchablePackage(pm, packageName)) continue;
                 if (seenPackages.contains(packageName)) continue;
                 seenPackages.add(packageName);
 
