@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, Platform, Vibration, useColorScheme } from 'react-native';
 import { Picker } from 'react-native-wheel-pick';
 
@@ -6,6 +6,7 @@ interface TimeLimitModalProps {
   visible: boolean;
   appName: string;
   iconBase64?: string;
+  initialMinutes?: number;
   onConfirm: (totalMinutes: number) => void;
   onCancel: () => void;
 }
@@ -13,7 +14,7 @@ interface TimeLimitModalProps {
 const hourData = Array.from({ length: 13 }, (_, i) => String(i));
 const minuteData = Array.from({ length: 60 }, (_, i) => String(i));
 
-export const TimeLimitModal = ({ visible, appName, iconBase64, onConfirm, onCancel }: TimeLimitModalProps) => {
+export const TimeLimitModal = ({ visible, appName, iconBase64, initialMinutes = 30, onConfirm, onCancel }: TimeLimitModalProps) => {
   const isDark = useColorScheme() === 'dark';
   const theme = {
     surface: isDark ? '#191D23' : '#FFFFFF',
@@ -25,6 +26,14 @@ export const TimeLimitModal = ({ visible, appName, iconBase64, onConfirm, onCanc
   };
   const [hours, setHours] = useState('0');
   const [minutes, setMinutes] = useState('30');
+
+  useEffect(() => {
+    if (!visible) return;
+    const safeInitialMinutes = Math.max(0, Math.floor(initialMinutes || 0));
+    setHours(String(Math.floor(safeInitialMinutes / 60)));
+    setMinutes(String(safeInitialMinutes % 60));
+  }, [initialMinutes, visible]);
+
   const tick = useCallback(() => {
     if (Platform.OS === 'android') Vibration.vibrate(8);
   }, []);
@@ -140,7 +149,7 @@ const styles = StyleSheet.create({
   column: { flex: 1, alignItems: 'center' },
   columnLabel: { fontSize: 13, color: '#777', fontWeight: 'bold', marginTop: 10, marginBottom: -10 },
   picker: { width: '100%', height: 200, backgroundColor: 'transparent' },
-  buttonRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 35 },
+  buttonRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 35, gap: 12 },
   cancelText: { color: '#666', fontSize: 16, fontWeight: '600' },
   confirmButton: { backgroundColor: '#1C1C1E', paddingHorizontal: 50, paddingVertical: 18, borderRadius: 18, elevation: 3 },
   confirmText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 }

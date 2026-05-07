@@ -133,6 +133,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
     setSelectedLimits(updated);
     await UserStore.saveAllLimits(updated);
     await syncFocusMode(updated);
+    setModalVisible(false);
   };
 
   const formatLimit = (mins: number) => {
@@ -175,12 +176,8 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
               style={[styles.item, { borderBottomColor: theme.border }]}
               activeOpacity={0.72}
               onPress={() => {
-                if (limit) {
-                  removeLimit(item.packageName);
-                } else {
-                  setActiveApp(item);
-                  setModalVisible(true);
-                }
+                setActiveApp(item);
+                setModalVisible(true);
               }}
             >
               <View style={styles.appLeft}>
@@ -196,7 +193,19 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
                   {limit ? <Text style={[styles.limitText, { color: theme.textSecondary }]}>{formatLimit(limit)}</Text> : <Text style={[styles.limitHint, { color: theme.textSecondary }]}>No limit</Text>}
                 </View>
               </View>
-              <IosSwitch enabled={Boolean(limit)} />
+              <TouchableOpacity
+                activeOpacity={0.72}
+                onPress={() => {
+                  if (limit) {
+                    removeLimit(item.packageName);
+                  } else {
+                    setActiveApp(item);
+                    setModalVisible(true);
+                  }
+                }}
+              >
+                <IosSwitch enabled={Boolean(limit)} />
+              </TouchableOpacity>
             </TouchableOpacity>
           );
         }}
@@ -223,6 +232,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
         visible={modalVisible}
         appName={activeApp?.appName || ''}
         iconBase64={activeApp?.iconBase64}
+        initialMinutes={activeApp ? selectedLimits[activeApp.packageName] || 30 : 30}
         onConfirm={handleConfirmLimit}
         onCancel={() => setModalVisible(false)}
       />

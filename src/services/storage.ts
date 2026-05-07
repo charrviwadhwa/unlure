@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const DAILY_MOOD_RETENTION_DAYS = 180;
 type LimitMap = Record<string, number>;
 export type DailyLimitSnapshots = Record<string, LimitMap>;
-export type StoredMood = 'happy' | 'lightSmile' | 'neutral' | 'dotted';
+export type StoredMood = 'happy' | 'lightSmile' | 'neutral' | 'dotted' | 'empty';
 export type DailyMoodSnapshots = Record<string, StoredMood>;
 
 const pruneOldDateKeys = (
@@ -49,6 +49,15 @@ export const UserStore = {
 
   async acceptAccessibilityDisclosure(): Promise<void> {
     await AsyncStorage.setItem('@accessibility_disclosure_accepted', 'true');
+  },
+
+  async hasCompletedOnboarding(): Promise<boolean> {
+    return (await AsyncStorage.getItem('@onboarding_complete')) === 'true';
+  },
+
+  async completeOnboarding(): Promise<void> {
+    await this.ensureTrackingStartDate();
+    await AsyncStorage.setItem('@onboarding_complete', 'true');
   },
 
   // --- NEW: App Selection & Limits ---

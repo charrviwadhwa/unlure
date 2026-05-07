@@ -13,9 +13,8 @@ import {
   useColorScheme
 } from 'react-native';
 import { ScreenTimeService } from '../../services/ScreenTimeService';
-import { UserStore } from '../../services/storage';
 
-type PermissionKey = 'usage' | 'overlay' | 'strict';
+type PermissionKey = 'usage' | 'overlay';
 const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
 
 type PermissionRow = {
@@ -43,17 +42,14 @@ export const PermissionSetupScreen = ({
     subSurface: isDark ? '#20252D' : '#F7F7FA'
   };
   const [usageEnabled, setUsageEnabled] = useState(false);
-  const [strictDetectionEnabled, setStrictDetectionEnabled] = useState(false);
   const [overlayEnabled, setOverlayEnabled] = useState(false);
 
   const refreshStatuses = useCallback(async () => {
-    const [usage, strictDetection, overlay] = await Promise.all([
+    const [usage, overlay] = await Promise.all([
       ScreenTimeService.hasUsageAccess(),
-      ScreenTimeService.isFocusModeAccessibilityEnabled(),
       ScreenTimeService.canDrawOverlays()
     ]);
     setUsageEnabled(usage);
-    setStrictDetectionEnabled(strictDetection);
     setOverlayEnabled(overlay);
   }, []);
 
@@ -64,11 +60,6 @@ export const PermissionSetupScreen = ({
     });
     return () => sub.remove();
   }, [refreshStatuses]);
-
-  const openFocusDetectionSettings = async () => {
-    await UserStore.acceptAccessibilityDisclosure();
-    await ScreenTimeService.openAccessibilitySettings();
-  };
 
   const permissions: PermissionRow[] = [
     {
@@ -86,14 +77,6 @@ export const PermissionSetupScreen = ({
       action: ScreenTimeService.openOverlaySettings
     }
   ];
-  const strictPermission: PermissionRow = {
-    key: 'strict',
-    title: 'Strict Detection',
-    detail: 'Optional. Uses Accessibility for faster detection, but standard mode works without it.',
-    enabled: strictDetectionEnabled,
-    action: openFocusDetectionSettings
-  };
-
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.bg} />
@@ -139,31 +122,6 @@ export const PermissionSetupScreen = ({
               </View>
             </TouchableOpacity>
           ))}
-        </View>
-
-        <View style={[styles.optionalBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <View style={styles.optionalHeader}>
-            <View style={styles.optionalCopy}>
-              <Text style={[styles.optionalTitle, { color: theme.text }]}>Optional Strict Mode</Text>
-              <Text style={[styles.optionalText, { color: theme.textSecondary }]}>
-                Faster app-open detection, but it asks for Accessibility. Keep this off if you prefer the safer default.
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={[
-                styles.permissionAction,
-                { backgroundColor: isDark ? '#FFFFFF' : theme.subSurface, borderColor: isDark ? '#FFFFFF' : theme.border },
-                strictPermission.enabled && styles.permissionActionEnabled,
-                strictPermission.enabled && isDark && { backgroundColor: '#1F8F4A', borderColor: '#1F8F4A' }
-              ]}
-              onPress={strictPermission.action}
-              activeOpacity={0.76}
-            >
-              <Text style={[styles.permissionActionText, isDark && { color: '#101319' }, strictPermission.enabled && styles.permissionActionTextEnabled, strictPermission.enabled && isDark && { color: '#FFFFFF' }]}>
-                {strictPermission.enabled ? 'Enabled' : 'Open'}
-              </Text>
-            </TouchableOpacity>
-          </View>
         </View>
       </ScrollView>
 
@@ -287,35 +245,6 @@ const styles = StyleSheet.create({
   },
   permissionActionTextEnabled: {
     color: '#28A745'
-  },
-  optionalBox: {
-    backgroundColor: '#F7F7FA',
-    borderWidth: 1,
-    borderColor: '#EFEFF4',
-    borderRadius: 8,
-    padding: 14,
-    marginTop: 18
-  },
-  optionalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center'
-  },
-  optionalCopy: {
-    flex: 1,
-    paddingRight: 14
-  },
-  optionalTitle: {
-    color: '#111111',
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '800',
-    marginBottom: 4
-  },
-  optionalText: {
-    color: '#6E6E73',
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '500'
   },
   footer: {
     position: 'absolute',

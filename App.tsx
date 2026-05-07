@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, StatusBar, useColorScheme } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { BackHandler, StyleSheet, View, StatusBar, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import EntryScreen from './src/features/onboarding/EntryScreen';
@@ -12,46 +12,86 @@ import { BottomNav } from './src/components/BottomNav';
 import { UserStore } from './src/services/storage';
 import { ScreenTimeService } from './src/services/ScreenTimeService';
 
+type AppStep = 'entry' | 'permissions' | 'settings' | 'selection' | 'main';
+type MainTab = 'home' | 'streak' | 'analytics';
+type Route = {
+  step: AppStep;
+  tab: MainTab;
+};
+
 const App = () => {
   const isDark = useColorScheme() === 'dark';
   const appBg = isDark ? '#121418' : '#FFFFFF';
-  const [currentStep, setCurrentStep] = useState<'entry' | 'permissions' | 'settings' | 'selection' | 'main'>('entry');
-  const [activeTab, setActiveTab] = useState<'home' | 'streak' | 'analytics'>('home');
-  const [mountedTabs, setMountedTabs] = useState<Record<'home' | 'streak' | 'analytics', boolean>>({
+  const [currentStep, setCurrentStep] = useState<AppStep>('entry');
+  const [activeTab, setActiveTab] = useState<MainTab>('home');
+  const [mountedTabs, setMountedTabs] = useState<Record<MainTab, boolean>>({
     home: true,
     streak: false,
     analytics: false
   });
   const [isReady, setIsReady] = useState(false);
+  const routeRef = useRef<Route>({ step: 'entry', tab: 'home' });
+  const historyRef = useRef<Route[]>([]);
   const isMain = currentStep === 'main';
 
-  const handleTabChange = useCallback((tab: 'home' | 'streak' | 'analytics') => {
-    setMountedTabs(prev => (prev[tab] ? prev : { ...prev, [tab]: true }));
-    setActiveTab(prev => (prev === tab ? prev : tab));
+  const applyRoute = useCallback((route: Route) => {
+    routeRef.current = route;
+    setCurrentStep(route.step);
+    setActiveTab(route.tab);
+    setMountedTabs(prev => (prev[route.tab] ? prev : { ...prev, [route.tab]: true }));
   }, []);
+
+  const navigate = useCallback((next: Partial<Route>, options: { replace?: boolean } = {}) => {
+    const current = routeRef.current;
+    const route = { ...current, ...next };
+    if (route.step === current.step && route.tab === current.tab) return;
+    if (!options.replace) historyRef.current = [...historyRef.current, current];
+    applyRoute(route);
+  }, [applyRoute]);
+
+  const handleTabChange = useCallback((tab: MainTab) => {
+    setMountedTabs(prev => (prev[tab] ? prev : { ...prev, [tab]: true }));
+    navigate({ step: 'main', tab });
+  }, [navigate]);
 
   useEffect(() => {
     const initialize = async () => {
       try {
-        const [savedLimits, installedApps] = await Promise.all([
+        const [savedLimits, hasCompletedOnboarding] = await Promise.all([
           UserStore.getAllLimits(),
-          ScreenTimeService.getInstalledApps()
+          UserStore.hasCompletedOnboarding()
         ]);
-        const appNames = installedApps.reduce<Record<string, string>>((acc, app) => {
-          acc[app.packageName] = app.appName;
-          return acc;
-        }, {});
-        await ScreenTimeService.syncFocusModeConfig(savedLimits, appNames);
-        if (Object.keys(savedLimits).length > 0) {
-          setCurrentStep('main');
+        if (hasCompletedOnboarding || Object.keys(savedLimits).length > 0) {
+          if (!hasCompletedOnboarding) await UserStore.completeOnboarding();
+          historyRef.current = [];
+          applyRoute({ step: 'main', tab: 'home' });
         } else {
-          setCurrentStep('entry');
+          historyRef.current = [];
+          applyRoute({ step: 'entry', tab: 'home' });
         }
+        try {
+          const installedApps = await ScreenTimeService.getInstalledApps();
+          const appNames = installedApps.reduce<Record<string, string>>((acc, app) => {
+            acc[app.packageName] = app.appName;
+            return acc;
+          }, {});
+          await ScreenTimeService.syncFocusModeConfig(savedLimits, appNames);
+        } catch { console.warn('Focus config sync failed.'); }
       } catch { console.warn('Storage check failed.'); }
       finally { setIsReady(true); }
     };
     initialize();
-  }, []);
+  }, [applyRoute]);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      const previous = historyRef.current.pop();
+      if (!previous) return false;
+      applyRoute(previous);
+      return true;
+    });
+    return () => subscription.remove();
+  }, [applyRoute]);
 
   useEffect(() => {
     if (!isMain) return;
@@ -67,18 +107,23 @@ const App = () => {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={appBg} />
       <View style={[styles.container, { backgroundColor: appBg }]}>
-        {currentStep === 'entry' && <EntryScreen onAnimationComplete={() => setCurrentStep('permissions')} />}
+        {currentStep === 'entry' && <EntryScreen onAnimationComplete={() => navigate({ step: 'permissions', tab: 'home' })} />}
 
         {currentStep === 'permissions' && (
-          <PermissionSetupScreen onComplete={() => setCurrentStep('selection')} />
+          <PermissionSetupScreen onComplete={() => navigate({ step: 'selection', tab: 'home' })} />
         )}
 
         {currentStep === 'settings' && (
-          <PermissionSetupScreen actionLabel="Done" onComplete={() => setCurrentStep('main')} />
+          <PermissionSetupScreen actionLabel="Done" onComplete={() => navigate({ step: 'main' })} />
         )}
 
         {currentStep === 'selection' && (
-          <AppSelectionScreen onComplete={() => setCurrentStep('main')} />
+          <AppSelectionScreen
+            onComplete={async () => {
+              await UserStore.completeOnboarding();
+              navigate({ step: 'main' });
+            }}
+          />
         )}
 
         {currentStep === 'main' && (
@@ -92,8 +137,8 @@ const App = () => {
               <View pointerEvents={isMain && activeTab === 'streak' ? 'auto' : 'none'} style={[styles.tabScreen, activeTab === 'streak' ? styles.tabVisible : styles.tabHidden]}>
                 <StreakScreen
                   active={activeTab === 'streak'}
-                  onEditApps={() => setCurrentStep('selection')}
-                  onOpenFocusSetup={() => setCurrentStep('settings')}
+                  onEditApps={() => navigate({ step: 'selection' })}
+                  onOpenFocusSetup={() => navigate({ step: 'settings' })}
                 />
               </View>
             )}

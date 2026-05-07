@@ -14,7 +14,7 @@ type StreakAppRow = {
   bypassedToday: boolean;
 };
 
-type DayMood = 'happy' | 'lightSmile' | 'neutral' | 'dotted';
+type DayMood = 'happy' | 'lightSmile' | 'neutral' | 'dotted' | 'empty';
 
 type DayCell = {
   key: string;
@@ -24,7 +24,7 @@ type DayCell = {
   mood: DayMood;
 };
 
-const moodFace: Record<DayMood, { bg: string; faceColor: string; type: 'smile' | 'neutral' | 'frown' }> = {
+const moodFace: Record<Exclude<DayMood, 'empty'>, { bg: string; faceColor: string; type: 'smile' | 'neutral' | 'frown' }> = {
   happy: { bg: '#D3D0FF', faceColor: '#5C56B6', type: 'smile' },
   lightSmile: { bg: '#C6E3FF', faceColor: '#528DF5', type: 'smile' },
   neutral: { bg: '#FCEFB4', faceColor: '#C2A320', type: 'neutral' },
@@ -56,6 +56,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
   const [todayApps, setTodayApps] = useState<StreakAppRow[]>([]);
   const [weekCells, setWeekCells] = useState<DayCell[]>([]);
   const [isExceededToday, setIsExceededToday] = useState(false);
+  const [hasActiveLimits, setHasActiveLimits] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const formatDateKey = (date: Date) => {
@@ -84,9 +85,9 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
     limits: Record<string, number>,
     focusDecisions: FocusModeDecisions = EMPTY_FOCUS_DECISIONS
   ): DayMood => {
-    if (!dayMap) return 'neutral';
+    if (!dayMap) return 'empty';
     const totalLimit = Object.keys(limits).reduce((acc, pkg) => acc + (limits[pkg] || 0), 0);
-    if (totalLimit === 0) return 'neutral';
+    if (totalLimit === 0) return 'empty';
     const hasExceededApp = Object.keys(limits).some((pkg) => {
       const limit = limits[pkg];
       if (!limit) return false;
@@ -126,8 +127,10 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
     focusDecisions: FocusModeDecisions = EMPTY_FOCUS_DECISIONS
   ): DayMood => {
     const todayKey = formatDateKey(new Date());
-    if (dateKey !== todayKey && savedMoods[dateKey]) return savedMoods[dateKey];
     const limits = getLimitsForDate(dateKey, limitSnapshots, currentLimits);
+    const hasLimits = Object.values(limits).some((limit) => limit > 0);
+    if (!hasLimits) return 'empty';
+    if (dateKey !== todayKey && savedMoods[dateKey]) return savedMoods[dateKey];
     return resolveMood(dayMap, limits, dateKey === todayKey ? focusDecisions : EMPTY_FOCUS_DECISIONS);
   }, [getLimitsForDate, resolveMood]);
 
@@ -149,7 +152,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
       const dayMap = stats[key];
       if (!dayMap) break;
       const mood = getMoodForDate(key, dayMap, limitSnapshots, currentLimits, savedMoods, focusDecisions);
-      if (mood === 'dotted') break;
+      if (mood === 'dotted' || mood === 'empty') break;
       count += 1;
       cursor.setDate(cursor.getDate() - 1);
     }
@@ -187,6 +190,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
     } else {
       await UserStore.saveTodayLimitSnapshot(activeLimits);
     }
+    setHasActiveLimits(Object.values(activeLimits).some((limit) => limit > 0));
 
     const todayKey = formatDateKey(new Date());
     const todayMap = (storedStats as DailyUsageMap)[todayKey] || {};
@@ -233,12 +237,13 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
       const key = formatDateKey(d);
       const dayMap = (storedStats as DailyUsageMap)[key];
       const isBeforeTrackingStart = d.getTime() < trackingStartMs;
+      const mood = isBeforeTrackingStart ? 'empty' : getMoodForDate(key, dayMap, limitSnapshots || {}, activeLimits, moodsWithToday, focusDecisions);
       return {
         key,
         label: labels[i],
         dayNumber: d.getDate(),
-        completed: !isBeforeTrackingStart && d <= now && Boolean(dayMap),
-        mood: isBeforeTrackingStart ? 'neutral' : getMoodForDate(key, dayMap, limitSnapshots || {}, activeLimits, moodsWithToday, focusDecisions)
+        completed: !isBeforeTrackingStart && d <= now && mood !== 'empty',
+        mood
       };
     });
     setWeekCells(cells);
@@ -268,9 +273,9 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
     }
   }, [load]);
 
-  const heroStreakLabel = streak === 1 ? 'Day on fire' : 'Days on fire';
+  const heroStreakLabel = !hasActiveLimits ? 'Set a limit to start' : streak === 1 ? 'Day on fire' : 'Days on fire';
   const weekProgressCount = weekCells.filter((cell) => cell.completed && cell.mood !== 'dotted').length;
-  const weekProgressLabel = isExceededToday ? 'Bring today back under limit' : `${weekProgressCount} of 7 days this week`;
+  const weekProgressLabel = !hasActiveLimits ? 'No streak is counted until a limit is active' : isExceededToday ? 'Bring today back under limit' : `${weekProgressCount} of 7 days this week`;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
@@ -298,7 +303,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
           <View style={[styles.heroBackplate, { backgroundColor: isDark ? '#1E232B' : '#F2F2F7' }]} />
           <View style={[styles.heroCard, isDark && { backgroundColor: '#171C24', borderColor: '#2A303A', borderWidth: 1 }]}>
             <View style={styles.heroTopRow}>
-              <Text style={styles.heroKicker}>{isExceededToday ? 'Needs recovery' : 'On track today'}</Text>
+              <Text style={styles.heroKicker}>{!hasActiveLimits ? 'No active limits' : isExceededToday ? 'Needs recovery' : 'On track today'}</Text>
               <Text style={styles.heroMeta}>{`${streak} day streak`}</Text>
             </View>
             <View style={styles.heroBody}>
@@ -328,7 +333,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
             {weekCells.map((cell) => (
               <View key={cell.key} style={styles.weekDay}>
                 <Text style={styles.weekLabel}>{cell.label}</Text>
-                {cell.completed ? (
+                {cell.completed && cell.mood !== 'empty' ? (
                   <View style={[styles.dayBadge, { backgroundColor: moodFace[cell.mood].bg }]}>
                     <View style={styles.eyesRow}>
                       <View style={[styles.eye, { backgroundColor: moodFace[cell.mood].faceColor }]} />

@@ -161,7 +161,7 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
   ): MoodType => {
     if (!dayMap) return MOOD_TYPES.EMPTY;
     const totalLimit = Object.keys(limits).reduce((acc, pkg) => acc + (limits[pkg] || 0), 0);
-    if (totalLimit === 0) return MOOD_TYPES.NEUTRAL;
+    if (totalLimit === 0) return MOOD_TYPES.EMPTY;
     const hasExceededApp = Object.keys(limits).some((pkg) => {
       const limit = limits[pkg];
       if (!limit) return false;
@@ -191,6 +191,7 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
     if (mood === MOOD_TYPES.GREAT) return 'happy';
     if (mood === MOOD_TYPES.GOOD) return 'lightSmile';
     if (mood === MOOD_TYPES.AWFUL) return 'dotted';
+    if (mood === MOOD_TYPES.EMPTY) return 'empty';
     return 'neutral';
   }, [resolveMood]);
 
@@ -198,6 +199,7 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
     if (mood === 'happy') return MOOD_TYPES.GREAT;
     if (mood === 'lightSmile') return MOOD_TYPES.GOOD;
     if (mood === 'dotted') return MOOD_TYPES.AWFUL;
+    if (mood === 'empty') return MOOD_TYPES.EMPTY;
     return MOOD_TYPES.NEUTRAL;
   }, []);
 
@@ -255,10 +257,13 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
       const isBeforeTrackingStart = dateObj.getTime() < trackingStartMs;
       const dayMap = stats[dateKey];
       const dayLimits = getLimitsForDate(dateKey, snapshots, currentLimits);
+      const hasLimits = Object.values(dayLimits).some((limit) => limit > 0);
       const isToday = isCurrentVisibleMonth && today.getDate() === day;
       const dayFocusDecisions = isToday ? focusDecisions : EMPTY_FOCUS_DECISIONS;
       const mood = isBeforeTrackingStart
         ? MOOD_TYPES.EMPTY
+        : !hasLimits
+          ? MOOD_TYPES.EMPTY
         : !isToday && savedMoods[dateKey]
           ? moodFromStored(savedMoods[dateKey])
           : resolveMood(dayMap, dayLimits, dayFocusDecisions);
