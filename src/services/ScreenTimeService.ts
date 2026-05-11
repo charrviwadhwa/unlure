@@ -110,7 +110,8 @@ export const ScreenTimeService = {
   async syncStreakShield(streak: number): Promise<boolean> {
     if (Platform.OS !== 'android') return false;
     try {
-      return Boolean(await UsageModule.syncStreakShield(Math.max(0, Math.floor(streak || 0))));
+      const earnedShields = Math.floor(Math.max(0, Math.floor(streak || 0)) / 5);
+      return Boolean(await UsageModule.syncStreakShield(earnedShields));
     } catch {
       return false;
     }

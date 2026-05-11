@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,7 +10,8 @@ import {
   Dimensions,
   Platform,
   StatusBar,
-  InteractionManager
+  InteractionManager,
+  Animated
 } from 'react-native';
 import { useColorScheme } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
@@ -58,6 +59,7 @@ type CalendarItem = {
   mood: MoodType;
   isToday?: boolean;
 };
+type PeriodMode = 'month' | 'week';
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MOOD_LABELS: Record<MoodType, string> = {
@@ -135,6 +137,21 @@ const formatDateKey = (date: Date) => {
   return `${y}-${m}-${d}`;
 };
 
+const getDayTotalMinutes = (dayMap: Record<string, number> | undefined) =>
+  Math.floor(Object.values(dayMap || {}).reduce((sum, ms) => sum + ms, 0) / 60000);
+
+const formatTime = (mins: number) => {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h === 0) return `${m}m`;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+};
+
+const labelFromPackage = (pkg: string) => {
+  const raw = pkg.split('.').pop() || pkg;
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+};
+
 export const HomeScreen = ({ active = true }: { active?: boolean }) => {
   const isDark = useColorScheme() === 'dark';
   const theme = {
@@ -153,6 +170,7 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
     ? ['#121418', '#14151A', '#161A22', '#121418']
     : ['#FFFFFF', '#FBFDFF', '#FFFFFF'];
   const [monthDate, setMonthDate] = useState(new Date());
+  const [periodMode, setPeriodMode] = useState<PeriodMode>('month');
   const [calendarData, setCalendarData] = useState<CalendarItem[]>([]);
   const [statsCache, setStatsCache] = useState<DailyUsageMap>({});
   const [limitsCache, setLimitsCache] = useState<Record<string, number>>({});
@@ -161,6 +179,7 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
   const [focusDecisionsCache, setFocusDecisionsCache] = useState<FocusModeDecisions>(EMPTY_FOCUS_DECISIONS);
   const [trackingStartDate, setTrackingStartDate] = useState(formatDateKey(new Date()));
   const [refreshing, setRefreshing] = useState(false);
+  const periodToggleAnim = useRef(new Animated.Value(0)).current;
 
   const resolveMood = useCallback((
     dayMap: Record<string, number> | undefined,
@@ -240,10 +259,51 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
     currentLimits: Record<string, number>,
     savedMoods: DailyMoodSnapshots,
     focusDecisions: FocusModeDecisions,
-    startDateKey: string
+    startDateKey: string,
+    mode: PeriodMode
   ) => {
     const year = targetDate.getFullYear();
     const month = targetDate.getMonth();
+    const today = new Date();
+    const todayKey = formatDateKey(today);
+    const trackingStartMs = new Date(`${startDateKey}T00:00:00`).getTime();
+    const createCurrentItem = (dateObj: Date): CalendarItem => {
+      const dateKey = formatDateKey(dateObj);
+      const isBeforeTrackingStart = dateObj.getTime() < trackingStartMs;
+      const dayMap = stats[dateKey];
+      const dayLimits = getLimitsForDate(dateKey, snapshots, currentLimits);
+      const hasLimits = Object.values(dayLimits).some((limit) => limit > 0);
+      const isToday = dateKey === todayKey;
+      const dayFocusDecisions = isToday ? focusDecisions : EMPTY_FOCUS_DECISIONS;
+      const mood = isBeforeTrackingStart
+        ? MOOD_TYPES.EMPTY
+        : !hasLimits
+          ? MOOD_TYPES.EMPTY
+          : !isToday && savedMoods[dateKey]
+            ? moodFromStored(savedMoods[dateKey])
+            : resolveMood(dayMap, dayLimits, dayFocusDecisions);
+      return {
+        date: String(dateObj.getDate()),
+        dateKey,
+        isCurrentMonth: true,
+        mood,
+        isToday
+      };
+    };
+
+    if (mode === 'week') {
+      const start = new Date(targetDate);
+      start.setDate(targetDate.getDate() - targetDate.getDay());
+      start.setHours(0, 0, 0, 0);
+      const items = Array.from({ length: 7 }, (_, i) => {
+        const dateObj = new Date(start);
+        dateObj.setDate(start.getDate() + i);
+        return createCurrentItem(dateObj);
+      });
+      setCalendarData(items);
+      return;
+    }
+
     const first = new Date(year, month, 1);
     const totalDays = new Date(year, month + 1, 0).getDate();
     const prevMonthDays = new Date(year, month, 0).getDate();
@@ -255,33 +315,9 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
       items.push({ date: String(day), isCurrentMonth: false, mood: MOOD_TYPES.EMPTY });
     }
 
-    const today = new Date();
-    const isCurrentVisibleMonth = today.getFullYear() === year && today.getMonth() === month;
-    const trackingStartMs = new Date(`${startDateKey}T00:00:00`).getTime();
-
     for (let day = 1; day <= totalDays; day += 1) {
       const dateObj = new Date(year, month, day);
-      const dateKey = formatDateKey(dateObj);
-      const isBeforeTrackingStart = dateObj.getTime() < trackingStartMs;
-      const dayMap = stats[dateKey];
-      const dayLimits = getLimitsForDate(dateKey, snapshots, currentLimits);
-      const hasLimits = Object.values(dayLimits).some((limit) => limit > 0);
-      const isToday = isCurrentVisibleMonth && today.getDate() === day;
-      const dayFocusDecisions = isToday ? focusDecisions : EMPTY_FOCUS_DECISIONS;
-      const mood = isBeforeTrackingStart
-        ? MOOD_TYPES.EMPTY
-        : !hasLimits
-          ? MOOD_TYPES.EMPTY
-        : !isToday && savedMoods[dateKey]
-          ? moodFromStored(savedMoods[dateKey])
-          : resolveMood(dayMap, dayLimits, dayFocusDecisions);
-      items.push({
-        date: String(day),
-        dateKey,
-        isCurrentMonth: true,
-        mood,
-        isToday
-      });
+      items.push(createCurrentItem(dateObj));
     }
 
     let tail = 1;
@@ -293,7 +329,7 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
     setCalendarData(items);
   }, [getLimitsForDate, moodFromStored, resolveMood]);
 
-  const load = useCallback(async (targetDate: Date) => {
+  const load = useCallback(async (targetDate: Date, mode: PeriodMode = periodMode) => {
     await ScreenTimeService.storeTodayStats();
     const [stats, limits, limitSnapshots, savedMoods, loadedTrackingStartDate] = await Promise.all([
       ScreenTimeService.getStoredDailyStats(),
@@ -317,8 +353,8 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
     setSavedMoodsCache(nextSavedMoods);
     setFocusDecisionsCache(focusDecisions);
     setTrackingStartDate(loadedTrackingStartDate);
-    buildCalendar(targetDate, nextStats, nextLimitSnapshots, nextLimits, nextSavedMoods, focusDecisions, loadedTrackingStartDate);
-  }, [buildCalendar, resolveStoredMood]);
+    buildCalendar(targetDate, nextStats, nextLimitSnapshots, nextLimits, nextSavedMoods, focusDecisions, loadedTrackingStartDate, mode);
+  }, [buildCalendar, periodMode, resolveStoredMood]);
 
   useEffect(() => {
     if (!active) return;
@@ -327,32 +363,39 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
   }, [active, load]);
 
   useEffect(() => {
-    buildCalendar(monthDate, statsCache, limitSnapshotsCache, limitsCache, savedMoodsCache, focusDecisionsCache, trackingStartDate);
-  }, [buildCalendar, focusDecisionsCache, limitSnapshotsCache, limitsCache, monthDate, savedMoodsCache, statsCache, trackingStartDate]);
+    buildCalendar(monthDate, statsCache, limitSnapshotsCache, limitsCache, savedMoodsCache, focusDecisionsCache, trackingStartDate, periodMode);
+  }, [buildCalendar, focusDecisionsCache, limitSnapshotsCache, limitsCache, monthDate, periodMode, savedMoodsCache, statsCache, trackingStartDate]);
 
   const refreshCurrentMonth = useCallback(() => {
     const now = new Date();
     setMonthDate(now);
-    load(now);
-  }, [load]);
+    load(now, periodMode);
+  }, [load, periodMode]);
 
   useMidnightRefresh(refreshCurrentMonth);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await load(monthDate);
+      await load(monthDate, periodMode);
     } finally {
       setRefreshing(false);
     }
-  }, [load, monthDate]);
+  }, [load, monthDate, periodMode]);
 
-  const monthTitle = useMemo(
-    () => monthDate.toLocaleString('en-US', { month: 'long', year: 'numeric' }),
-    [monthDate]
-  );
+  const periodTitle = useMemo(() => {
+    if (periodMode === 'month') return monthDate.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    const start = new Date(monthDate);
+    start.setDate(monthDate.getDate() - monthDate.getDay());
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    const sameMonth = start.getMonth() === end.getMonth();
+    const startLabel = start.toLocaleString('en-US', { month: 'short', day: 'numeric' });
+    const endLabel = end.toLocaleString('en-US', sameMonth ? { day: 'numeric' } : { month: 'short', day: 'numeric' });
+    return `${startLabel} - ${endLabel}`;
+  }, [monthDate, periodMode]);
 
-  const monthSummary = useMemo(() => {
+  useMemo(() => {
     const currentMonthItems = calendarData.filter((item) => item.isCurrentMonth);
     const cleanDays = currentMonthItems.filter((item) => item.mood !== MOOD_TYPES.EMPTY && item.mood !== MOOD_TYPES.AWFUL).length;
     const overDays = currentMonthItems.filter((item) => item.mood === MOOD_TYPES.AWFUL).length;
@@ -362,9 +405,131 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
   const shiftMonth = (delta: number) => {
     setMonthDate((prev) => {
       const next = new Date(prev);
-      next.setMonth(next.getMonth() + delta);
+      if (periodMode === 'week') {
+        next.setDate(next.getDate() + (delta * 7));
+      } else {
+        next.setMonth(next.getMonth() + delta);
+      }
       return next;
     });
+  };
+
+  const periodStats = useMemo(() => {
+    const items = calendarData.filter((item) => item.isCurrentMonth && item.dateKey);
+    const cleanDays = items.filter((item) => item.mood !== MOOD_TYPES.EMPTY && item.mood !== MOOD_TYPES.AWFUL).length;
+    const trackedDays = items.filter((item) => item.mood !== MOOD_TYPES.EMPTY).length;
+    const overDays = items.filter((item) => item.mood === MOOD_TYPES.AWFUL).length;
+    const totalMinutes = items.reduce((sum, item) => sum + getDayTotalMinutes(item.dateKey ? statsCache[item.dateKey] : undefined), 0);
+    let best = 0;
+    let running = 0;
+    items.forEach((item) => {
+      const isClean = item.mood !== MOOD_TYPES.EMPTY && item.mood !== MOOD_TYPES.AWFUL;
+      if (isClean) {
+        running += 1;
+        best = Math.max(best, running);
+      } else {
+        running = 0;
+      }
+    });
+    return {
+      cleanDays,
+      overDays,
+      averageMinutes: trackedDays > 0 ? Math.floor(totalMinutes / trackedDays) : 0,
+      bestStreak: best
+    };
+  }, [calendarData, statsCache]);
+
+  const insightLine = useMemo(() => {
+    const items = calendarData.filter((item) => item.isCurrentMonth && item.dateKey);
+    const weekendItems = items.filter((item) => {
+      const day = new Date(`${item.dateKey}T00:00:00`).getDay();
+      return day === 0 || day === 6;
+    });
+    const weekendOver = weekendItems.filter((item) => item.mood === MOOD_TYPES.AWFUL).length;
+    if (weekendItems.length > 0 && weekendOver > 0) {
+      return `Weekends are harder for you. ${weekendOver} of ${weekendItems.length} were over limit.`;
+    }
+    if (periodStats.overDays > 0) {
+      return `${periodStats.overDays} day${periodStats.overDays === 1 ? '' : 's'} crossed a limit in this ${periodMode}.`;
+    }
+    if (periodStats.cleanDays > 0) {
+      return `Your clean days are holding steady this ${periodMode}.`;
+    }
+    return 'Patterns will appear here once a few tracked days build up.';
+  }, [calendarData, periodMode, periodStats.cleanDays, periodStats.overDays]);
+
+  const weeklyMoodItems = useMemo(
+    () => calendarData
+      .filter((item) => item.isCurrentMonth && item.dateKey)
+      .slice(0, 7)
+      .map((item) => ({
+        ...item,
+        label: item.dateKey ? new Date(`${item.dateKey}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short' }).charAt(0) : ''
+      })),
+    [calendarData]
+  );
+
+  const bestDecision = useMemo(() => {
+    const wins = calendarData
+      .filter((item) => item.isCurrentMonth && item.dateKey)
+      .flatMap((item) => {
+        const dayLimits = getLimitsForDate(item.dateKey || '', limitSnapshotsCache, limitsCache);
+        return Object.entries(dayLimits)
+          .filter(([, limit]) => limit > 0)
+          .map(([pkg, limit]) => {
+            const minutes = Math.floor(((item.dateKey && statsCache[item.dateKey]?.[pkg]) || 0) / 60000);
+            return {
+              dateKey: item.dateKey || '',
+              appName: pkg,
+              minutes,
+              limit,
+              score: limit - minutes
+            };
+          })
+          .filter((win) => win.minutes > 0 && win.minutes < win.limit && win.score >= 5);
+      })
+      .sort((a, b) => b.score - a.score);
+    const win = wins[0];
+    if (!win) return 'Best decisions will appear when you stop before a limit.';
+    const day = new Date(`${win.dateKey}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' });
+    return `${day} - you stopped ${labelFromPackage(win.appName)} at ${formatTime(win.minutes)}`;
+  }, [calendarData, getLimitsForDate, limitSnapshotsCache, limitsCache, statsCache]);
+
+  const biggestSlip = useMemo(() => {
+    const slips = calendarData
+      .filter((item) => item.isCurrentMonth && item.dateKey)
+      .flatMap((item) => {
+        const dayLimits = getLimitsForDate(item.dateKey || '', limitSnapshotsCache, limitsCache);
+        return Object.entries(dayLimits)
+          .filter(([, limit]) => limit > 0)
+          .map(([pkg, limit]) => {
+            const minutes = Math.floor(((item.dateKey && statsCache[item.dateKey]?.[pkg]) || 0) / 60000);
+            return {
+              dateKey: item.dateKey || '',
+              appName: pkg,
+              minutes,
+              overBy: minutes - limit
+            };
+          })
+          .filter((slip) => slip.overBy > 0);
+      })
+      .sort((a, b) => b.overBy - a.overBy);
+    const slip = slips[0];
+    if (!slip) return 'No clear slip-up this week.';
+    const day = new Date(`${slip.dateKey}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' });
+    return `${day}: ${labelFromPackage(slip.appName)} went ${formatTime(slip.overBy)} over.`;
+  }, [calendarData, getLimitsForDate, limitSnapshotsCache, limitsCache, statsCache]);
+
+  const handlePeriodModeChange = (mode: PeriodMode) => {
+    if (mode === periodMode) return;
+    setPeriodMode(mode);
+    Animated.spring(periodToggleAnim, {
+      toValue: mode === 'month' ? 0 : 1,
+      useNativeDriver: true,
+      friction: 10,
+      tension: 160
+    }).start();
+    buildCalendar(monthDate, statsCache, limitSnapshotsCache, limitsCache, savedMoodsCache, focusDecisionsCache, trackingStartDate, mode);
   };
 
   return (
@@ -381,9 +546,8 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
         <View style={styles.header}>
           <View>
             <Text style={[styles.brandMark, { color: isDark ? '#AAB0BD' : '#6E6E73' }]}>unlure</Text>
-            <Text style={[styles.pageTitle, { color: theme.text }]}>Month</Text>
-            <Text style={[styles.monthTitle, { color: theme.subtext }]}>{monthTitle}</Text>
-            <Text style={[styles.monthSummary, { color: isDark ? '#8E95A3' : '#777B84' }]}>{monthSummary}</Text>
+            <Text style={[styles.pageTitle, { color: theme.text }]}>Analytics</Text>
+            <Text style={[styles.monthTitle, { color: theme.subtext }]}>{periodTitle}</Text>
           </View>
           <View style={[styles.monthControls, { backgroundColor: theme.pill, borderColor: theme.border }]}>
             <TouchableOpacity style={styles.chevronButton} onPress={() => shiftMonth(-1)} activeOpacity={0.76}>
@@ -396,52 +560,120 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
           </View>
         </View>
 
-        <View style={styles.daysOfWeekContainer}>
-          {DAYS_OF_WEEK.map((day) => (
-            <View key={day} style={[styles.dayPill, { backgroundColor: theme.dayPill }]}>
-              <Text style={[styles.dayText, { color: theme.subtext }]}>{day}</Text>
-            </View>
-          ))}
+        <View style={[styles.periodToggle, { backgroundColor: theme.pill, borderColor: theme.border }]}>
+          <Animated.View
+            style={[
+              styles.periodActiveSegment,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#FFFFFF',
+                borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#D8D8DE',
+                transform: [{ translateX: periodToggleAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 69] }) }]
+              }
+            ]}
+          />
+          <TouchableOpacity
+            style={styles.periodToggleButton}
+            onPress={() => handlePeriodModeChange('month')}
+            activeOpacity={0.72}
+          >
+            <Text style={[styles.periodToggleText, { color: periodMode === 'month' ? theme.text : theme.subtext }]}>Month</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.periodToggleButton}
+            onPress={() => handlePeriodModeChange('week')}
+            activeOpacity={0.72}
+          >
+            <Text style={[styles.periodToggleText, { color: periodMode === 'week' ? theme.text : theme.subtext }]}>Week</Text>
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.gridContainer}>
-          {calendarData.map((item, index) => {
-            const isFaint = !item.isCurrentMonth;
-            return (
+        {periodMode === 'week' ? (
+          <View style={styles.weekMoodBoard}>
+            {weeklyMoodItems.map((item) => (
               <View
-                key={`${item.date}-${index}`}
+                key={item.dateKey || item.date}
                 style={[
-                  styles.cellPill,
-                  { backgroundColor: theme.panel, borderColor: theme.border },
-                  item.mood === MOOD_TYPES.EMPTY && styles.cellPillEmpty,
-                  item.mood === MOOD_TYPES.EMPTY && { backgroundColor: theme.panelEmpty, borderColor: theme.border },
-                  item.isToday
-                    ? {
-                        backgroundColor: lightenHex(COLORS.moods[item.mood].bg),
-                        borderColor: COLORS.moods[item.mood].line
-                      }
-                    : null
+                  styles.weekMoodChip,
+                  {
+                    backgroundColor: item.mood === MOOD_TYPES.EMPTY ? theme.panelEmpty : theme.panel,
+                    borderColor: item.mood === MOOD_TYPES.EMPTY ? theme.border : COLORS.moods[item.mood].line
+                  }
                 ]}
               >
-                <Text
-                  style={[
-                    styles.dateText,
-                    { color: theme.text },
-                    isFaint && styles.dateTextFaint,
-                    isFaint && { color: theme.faint },
-                    item.mood === MOOD_TYPES.EMPTY && item.isCurrentMonth && styles.dateTextQuiet,
-                    item.mood === MOOD_TYPES.EMPTY && item.isCurrentMonth && { color: theme.quietDate },
-                    item.isToday && styles.dateTextSelected,
-                    item.isToday && { color: isDark ? '#1A1A24' : '#111111' }
-                  ]}
-                >
-                  {item.date}
-                </Text>
+                <Text style={[styles.weekMoodLabel, { color: theme.subtext }]}>{item.label}</Text>
                 <MoodFace type={item.mood} />
               </View>
-            );
-          })}
+            ))}
+          </View>
+        ) : (
+          <>
+            <View style={styles.daysOfWeekContainer}>
+              {DAYS_OF_WEEK.map((day) => (
+                <View key={day} style={[styles.dayPill, { backgroundColor: theme.dayPill }]}>
+                  <Text style={[styles.dayText, { color: theme.subtext }]}>{day}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.gridContainer}>
+              {calendarData.map((item, index) => {
+                const isFaint = !item.isCurrentMonth;
+                return (
+                  <View
+                    key={`${item.date}-${index}`}
+                    style={[
+                      styles.cellPill,
+                      { backgroundColor: theme.panel, borderColor: theme.border },
+                      item.mood === MOOD_TYPES.EMPTY && styles.cellPillEmpty,
+                      item.mood === MOOD_TYPES.EMPTY && { backgroundColor: theme.panelEmpty, borderColor: theme.border },
+                      item.isToday
+                        ? {
+                            backgroundColor: lightenHex(COLORS.moods[item.mood].bg),
+                            borderColor: COLORS.moods[item.mood].line
+                          }
+                        : null
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.dateText,
+                        { color: theme.text },
+                        isFaint && styles.dateTextFaint,
+                        isFaint && { color: theme.faint },
+                        item.mood === MOOD_TYPES.EMPTY && item.isCurrentMonth && styles.dateTextQuiet,
+                        item.mood === MOOD_TYPES.EMPTY && item.isCurrentMonth && { color: theme.quietDate },
+                        item.isToday && styles.dateTextSelected,
+                        item.isToday && { color: isDark ? '#1A1A24' : '#111111' }
+                      ]}
+                    >
+                      {item.date}
+                    </Text>
+                    <MoodFace type={item.mood} />
+                  </View>
+                );
+              })}
+            </View>
+          </>
+        )}
+
+        <View style={styles.behaviorStatsRow}>
+          <Text style={[styles.behaviorStatText, { color: theme.subtext }]}>
+            {`${periodStats.cleanDays} clean days | ${formatTime(periodStats.averageMinutes)} avg / day | best streak: ${periodStats.bestStreak}`}
+          </Text>
         </View>
+        <Text style={[styles.insightLine, { color: isDark ? '#8A93A6' : '#888888' }]}>{insightLine}</Text>
+        {periodMode === 'week' ? (
+          <View style={styles.weekBentoGrid}>
+            <View style={[styles.weekBentoCard, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+              <Text style={[styles.weekBentoLabel, { color: theme.subtext }]}>Best decision</Text>
+              <Text style={[styles.weekBentoText, { color: theme.text }]}>{bestDecision}</Text>
+            </View>
+            <View style={[styles.weekBentoCard, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+              <Text style={[styles.weekBentoLabel, { color: theme.subtext }]}>Biggest slip</Text>
+              <Text style={[styles.weekBentoText, { color: theme.text }]}>{biggestSlip}</Text>
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.legendRow}>
           {LEGEND_ITEMS.map((mood) => (
@@ -519,6 +751,44 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ECECF2'
   },
+  periodToggle: {
+    width: 150,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 18,
+    position: 'relative'
+  },
+  periodActiveSegment: {
+    position: 'absolute',
+    top: 5,
+    left: 5,
+    width: 69,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2
+  },
+  periodToggleButton: {
+    flex: 1,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1
+  },
+  periodToggleText: {
+    fontFamily: FONT_SANS_SEMIBOLD,
+    fontSize: 13,
+    fontWeight: '600'
+  },
   chevronButton: {
     width: 38,
     height: 34,
@@ -556,6 +826,76 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between'
+  },
+  weekMoodBoard: {
+    minHeight: 92,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    marginBottom: 18,
+    paddingHorizontal: 6
+  },
+  weekMoodChip: {
+    width: CELL_WIDTH,
+    height: 66,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  weekMoodLabel: {
+    fontFamily: FONT_SANS,
+    fontSize: 12,
+    fontWeight: '500',
+    marginBottom: 7
+  },
+  behaviorStatsRow: {
+    alignItems: 'center',
+    marginTop: 2,
+    marginBottom: 8
+  },
+  behaviorStatText: {
+    fontFamily: FONT_MONO,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '400',
+    textAlign: 'center'
+  },
+  insightLine: {
+    fontFamily: FONT_SANS,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '400',
+    textAlign: 'center',
+    marginBottom: 18
+  },
+  weekBentoGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+    marginBottom: 18
+  },
+  weekBentoCard: {
+    flex: 1,
+    minHeight: 104,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    justifyContent: 'space-between'
+  },
+  weekBentoLabel: {
+    fontFamily: FONT_SANS,
+    fontSize: 12,
+    fontWeight: '500',
+    marginBottom: 4
+  },
+  weekBentoText: {
+    fontFamily: FONT_SANS,
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '500'
   },
   cellPill: {
     width: CELL_WIDTH,

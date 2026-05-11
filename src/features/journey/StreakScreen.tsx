@@ -17,21 +17,6 @@ type StreakAppRow = {
 
 type DayMood = 'happy' | 'lightSmile' | 'neutral' | 'dotted' | 'empty';
 
-type DayCell = {
-  key: string;
-  label: string;
-  dayNumber: number;
-  completed: boolean;
-  mood: DayMood;
-};
-
-const moodFace: Record<Exclude<DayMood, 'empty'>, { bg: string; faceColor: string; type: 'smile' | 'neutral' | 'frown' }> = {
-  happy: { bg: '#D3D0FF', faceColor: '#5C56B6', type: 'smile' },
-  lightSmile: { bg: '#C6E3FF', faceColor: '#528DF5', type: 'smile' },
-  neutral: { bg: '#FCEFB4', faceColor: '#C2A320', type: 'neutral' },
-  dotted: { bg: '#FCE1B9', faceColor: '#D0933C', type: 'frown' }
-};
-
 const FONT_REGULAR = Platform.select({ ios: 'Geist-Regular', android: 'Geist-Regular', default: 'System' });
 const FONT_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Geist-SemiBold', default: 'System' });
 const FONT_MONO = Platform.select({ ios: 'GeistMono-Regular', android: 'GeistMono-Regular', default: 'monospace' });
@@ -55,8 +40,9 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
     border: isDark ? 'rgba(255,255,255,0.08)' : '#EEE8DC'
   };
   const [streak, setStreak] = useState(0);
+  const [bestStreak, setBestStreak] = useState(0);
+  const [monthCleanDays, setMonthCleanDays] = useState(0);
   const [todayApps, setTodayApps] = useState<StreakAppRow[]>([]);
-  const [weekCells, setWeekCells] = useState<DayCell[]>([]);
   const [isExceededToday, setIsExceededToday] = useState(false);
   const [hasActiveLimits, setHasActiveLimits] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -71,15 +57,6 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
   const labelFromPackage = (pkg: string) => {
     const raw = pkg.split('.').pop() || pkg;
     return raw.charAt(0).toUpperCase() + raw.slice(1);
-  };
-
-  const getMondayStart = (date: Date) => {
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = day === 0 ? -6 : 1 - day;
-    d.setDate(d.getDate() + diff);
-    d.setHours(0, 0, 0, 0);
-    return d;
   };
 
   const resolveMood = useCallback((
@@ -161,6 +138,39 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
     return count;
   }, [getMoodForDate]);
 
+  const calculateStreakMilestones = useCallback((
+    stats: DailyUsageMap,
+    limitSnapshots: DailyLimitSnapshots,
+    currentLimits: Record<string, number>,
+    savedMoods: DailyMoodSnapshots,
+    focusDecisions: FocusModeDecisions,
+    trackingStartDate: string
+  ) => {
+    let best = 0;
+    let running = 0;
+    let monthClean = 0;
+    const start = new Date(`${trackingStartDate}T00:00:00`);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+
+    for (const cursor = new Date(start); cursor <= today; cursor.setDate(cursor.getDate() + 1)) {
+      const key = formatDateKey(cursor);
+      const mood = getMoodForDate(key, stats[key], limitSnapshots, currentLimits, savedMoods, focusDecisions);
+      const isClean = mood !== 'dotted' && mood !== 'empty';
+      if (isClean) {
+        running += 1;
+        best = Math.max(best, running);
+        if (cursor.getMonth() === currentMonth && cursor.getFullYear() === currentYear) monthClean += 1;
+      } else {
+        running = 0;
+      }
+    }
+
+    return { best, monthClean };
+  }, [getMoodForDate]);
+
   const load = useCallback(async () => {
     await ScreenTimeService.storeTodayStats();
     const [storedStats, installedApps, limits, limitSnapshots, savedMoods, trackingStartDate] = await Promise.all([
@@ -201,7 +211,10 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
     const moodsWithToday = { ...(savedMoods || {}), [todayKey]: todayMood };
 
     const derivedStreak = calculateStreakFromStats(storedStats as DailyUsageMap, limitSnapshots || {}, activeLimits, moodsWithToday, focusDecisions, trackingStartDate);
+    const milestones = calculateStreakMilestones(storedStats as DailyUsageMap, limitSnapshots || {}, activeLimits, moodsWithToday, focusDecisions, trackingStartDate);
     setStreak(derivedStreak);
+    setBestStreak(milestones.best);
+    setMonthCleanDays(milestones.monthClean);
     await ScreenTimeService.syncStreakShield(derivedStreak);
 
     const rows = Object.keys(activeLimits)
@@ -227,29 +240,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
       app.minutes >= app.limitMinutes &&
       (focusDecisions.bypassedApps[app.id] || !focusDecisions.protectedApps[app.id])
     )));
-
-    const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-    const monday = getMondayStart(new Date());
-    const now = new Date();
-    now.setHours(23, 59, 59, 999);
-    const trackingStartMs = new Date(`${trackingStartDate}T00:00:00`).getTime();
-    const cells: DayCell[] = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      const key = formatDateKey(d);
-      const dayMap = (storedStats as DailyUsageMap)[key];
-      const isBeforeTrackingStart = d.getTime() < trackingStartMs;
-      const mood = isBeforeTrackingStart ? 'empty' : getMoodForDate(key, dayMap, limitSnapshots || {}, activeLimits, moodsWithToday, focusDecisions);
-      return {
-        key,
-        label: labels[i],
-        dayNumber: d.getDate(),
-        completed: !isBeforeTrackingStart && d <= now && mood !== 'empty',
-        mood
-      };
-    });
-    setWeekCells(cells);
-  }, [calculateStreakFromStats, getMoodForDate, resolveMood]);
+  }, [calculateStreakFromStats, calculateStreakMilestones, resolveMood]);
 
   const formatTime = (mins: number) => {
     const h = Math.floor(mins / 60);
@@ -276,8 +267,14 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
   }, [load]);
 
   const heroStreakLabel = !hasActiveLimits ? 'Set a limit to start' : streak === 1 ? 'Day on fire' : 'Days on fire';
-  const weekProgressCount = weekCells.filter((cell) => cell.completed && cell.mood !== 'dotted').length;
-  const weekProgressLabel = !hasActiveLimits ? 'No streak is counted until a limit is active' : isExceededToday ? 'Bring today back under limit' : `${weekProgressCount} of 7 days this week`;
+  const shieldCount = Math.floor(streak / 5);
+  const shieldProgressLabel = !hasActiveLimits
+    ? 'No streak is counted until a limit is active'
+    : isExceededToday
+      ? 'Bring today back under limit'
+      : shieldCount > 0
+        ? `${shieldCount} shield${shieldCount === 1 ? '' : 's'} earned`
+        : `${5 - (streak % 5)} clean day${5 - (streak % 5) === 1 ? '' : 's'} to a shield`;
   const screenGradientColors = isDark
     ? ['#121418', '#14171A', '#171A16', '#121418']
     : ['#FFFFFF', '#FFFCF6', '#FFFFFF'];
@@ -299,7 +296,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
           <View style={styles.headerCopy}>
             <Text style={[styles.brandMark, { color: isDark ? '#AAB0BD' : '#6E6E73' }]}>unlure</Text>
             <Text style={[styles.pageTitle, { color: theme.text }]}>Streak</Text>
-            <Text style={[styles.pageDate, { color: theme.textSecondary }]}>This week</Text>
+            <Text style={[styles.pageDate, { color: theme.textSecondary }]}>Trophy room</Text>
           </View>
           <TouchableOpacity style={[styles.focusSetupButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.74)', borderColor: theme.border }]} onPress={onOpenFocusSetup} activeOpacity={0.76}>
             <Image source={require('../../assets/image.png')} style={[styles.focusSetupImage, { tintColor: theme.text }]} resizeMode="contain" />
@@ -326,7 +323,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
                   <Text style={styles.streakNumber}>{streak}</Text>
                 </View>
                 <Text style={styles.streakLabel}>{isExceededToday ? 'A limited app crossed its cap' : heroStreakLabel}</Text>
-                <Text style={styles.streakSubLabel}>{weekProgressLabel}</Text>
+                <Text style={styles.streakSubLabel}>{shieldProgressLabel}</Text>
               </View>
               <Image
                 source={isExceededToday ? require('../../assets/Sad.gif') : require('../../assets/Fire (1).gif')}
@@ -337,38 +334,38 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
           </LinearGradient>
         </View>
 
+        <View style={styles.trophyStatsRow}>
+          <View style={[styles.trophyStat, { borderColor: theme.border }]}>
+            <Text style={[styles.trophyStatValue, { color: theme.text }]}>{streak}</Text>
+            <Text style={[styles.trophyStatLabel, { color: theme.textSecondary }]}>current</Text>
+          </View>
+          <View style={[styles.trophyStat, { borderColor: theme.border }]}>
+            <Text style={[styles.trophyStatValue, { color: theme.text }]}>{bestStreak}</Text>
+            <Text style={[styles.trophyStatLabel, { color: theme.textSecondary }]}>best ever</Text>
+          </View>
+          <View style={[styles.trophyStat, { borderColor: theme.border }]}>
+            <Text style={[styles.trophyStatValue, { color: theme.text }]}>{monthCleanDays}</Text>
+            <Text style={[styles.trophyStatLabel, { color: theme.textSecondary }]}>this month</Text>
+          </View>
+        </View>
+
         <View style={styles.sectionBlock}>
           <View style={styles.titleRow}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Streak Journey</Text>
-            <Text style={[styles.sectionMeta, { color: theme.textSecondary }]}>daily check</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Streak Shield</Text>
+            <Text style={[styles.sectionMeta, { color: theme.textSecondary }]}>inventory</Text>
           </View>
-          <View style={[styles.weekStrip, { borderColor: theme.border }]}>
-            {weekCells.map((cell) => (
-              <View key={cell.key} style={styles.weekDay}>
-                <Text style={styles.weekLabel}>{cell.label}</Text>
-                {cell.completed && cell.mood !== 'empty' ? (
-                  <View style={[styles.dayBadge, { backgroundColor: moodFace[cell.mood].bg }]}>
-                    <View style={styles.eyesRow}>
-                      <View style={[styles.eye, { backgroundColor: moodFace[cell.mood].faceColor }]} />
-                      <View style={[styles.eye, { backgroundColor: moodFace[cell.mood].faceColor }]} />
-                    </View>
-                    {moodFace[cell.mood].type === 'neutral' ? (
-                      <View style={[styles.mouthNeutral, { backgroundColor: moodFace[cell.mood].faceColor }]} />
-                    ) : (
-                      <View
-                        style={[
-                          styles.mouthCurve,
-                          { borderColor: moodFace[cell.mood].faceColor },
-                          moodFace[cell.mood].type === 'frown' && styles.mouthFrown
-                        ]}
-                      />
-                    )}
-                  </View>
-                ) : (
-                  <Text style={[styles.dayNumber, { color: theme.text }]}>{cell.dayNumber}</Text>
-                )}
-              </View>
-            ))}
+          <View style={[styles.shieldCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.045)' : 'rgba(255,255,255,0.72)', borderColor: theme.border }]}>
+            <View style={styles.shieldToken}>
+              <Text style={styles.shieldTokenText}>{shieldCount}</Text>
+            </View>
+            <View style={styles.shieldCopy}>
+              <Text style={[styles.shieldTitle, { color: theme.text }]}>
+                {shieldCount === 1 ? '1 shield ready' : `${shieldCount} shields ready`}
+              </Text>
+              <Text style={[styles.shieldText, { color: theme.textSecondary }]}>
+                {shieldCount > 0 ? 'One rough day can be protected.' : `${5 - (streak % 5)} clean days until your first shield.`}
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -630,6 +627,70 @@ const styles = StyleSheet.create({
   sectionBlock: {
     marginBottom: 30
   },
+  trophyStatsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 30
+  },
+  trophyStat: {
+    flex: 1,
+    minHeight: 66,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    justifyContent: 'center'
+  },
+  trophyStatValue: {
+    fontFamily: FONT_MONO,
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: '500'
+  },
+  trophyStatLabel: {
+    marginTop: 2,
+    fontFamily: FONT_REGULAR,
+    fontSize: 12,
+    fontWeight: '500'
+  },
+  shieldCard: {
+    minHeight: 86,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12
+  },
+  shieldToken: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#171C24',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14
+  },
+  shieldTokenText: {
+    color: '#FFFFFF',
+    fontFamily: FONT_MONO,
+    fontSize: 24,
+    fontWeight: '500'
+  },
+  shieldCopy: {
+    flex: 1
+  },
+  shieldTitle: {
+    fontFamily: FONT_SEMIBOLD,
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: '600'
+  },
+  shieldText: {
+    marginTop: 4,
+    fontFamily: FONT_REGULAR,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500'
+  },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -648,70 +709,6 @@ const styles = StyleSheet.create({
     fontFamily: FONT_REGULAR,
     fontWeight: '500',
     textTransform: 'lowercase'
-  },
-  weekStrip: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#EFEFF4',
-    paddingVertical: 14,
-    position: 'relative'
-  },
-  weekDay: {
-    alignItems: 'center',
-    width: '13.7%',
-    zIndex: 1
-  },
-  weekLabel: {
-    fontSize: 12,
-    color: '#8E8E93',
-    marginBottom: 10,
-    fontFamily: FONT_REGULAR,
-    fontWeight: '500'
-  },
-  dayBadge: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative'
-  },
-  eyesRow: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: 3
-  },
-  eye: {
-    width: 3,
-    height: 3,
-    borderRadius: 2
-  },
-  mouthCurve: {
-    width: 10,
-    height: 5,
-    borderBottomWidth: 1.5,
-    borderLeftWidth: 1.5,
-    borderRightWidth: 1.5,
-    borderBottomLeftRadius: 6,
-    borderBottomRightRadius: 6
-  },
-  mouthFrown: {
-    transform: [{ rotate: '180deg' }],
-    marginTop: 2
-  },
-  mouthNeutral: {
-    width: 8,
-    height: 1.5,
-    borderRadius: 1,
-    marginTop: 2
-  },
-  dayNumber: {
-    fontSize: 17,
-    color: '#1C1C1E',
-    fontFamily: FONT_MONO,
-    fontWeight: '500'
   },
   limitedList: {
     borderTopWidth: 1,

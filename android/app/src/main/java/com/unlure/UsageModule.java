@@ -23,6 +23,7 @@ import com.facebook.react.bridge.Arguments;
 import java.util.List;
 import java.util.Calendar;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.SharedPreferences;
@@ -46,8 +47,11 @@ public class UsageModule extends ReactContextBaseJavaModule {
     private static final String PREFS_NAME = "UsageDailyPrefs";
     private static final String PREFS_KEY = "daily_usage_json";
     private static final String PREFS_LAST_DATE_KEY = "last_stored_date";
+    private static final String PREFS_TODAY_CHECKPOINT_KEY = "today_usage_checkpoint";
+    private static final String ICON_PREFS_NAME = "UsageIconCache";
     private static final String DATE_FORMAT = "yyyy-MM-dd";
     private static final int DAILY_USAGE_RETENTION_DAYS = 180;
+    private static final long ACTIVE_AT_START_LOOKBACK_MS = 2L * 60L * 60L * 1000L;
     private BroadcastReceiver packageChangeReceiver;
 
     UsageModule(ReactApplicationContext context) {
@@ -180,12 +184,34 @@ public class UsageModule extends ReactContextBaseJavaModule {
         }
     }
 
+    private String getCachedIconBase64(PackageManager pm, String packageName, ApplicationInfo appInfo) {
+        try {
+            PackageInfo packageInfo = pm.getPackageInfo(packageName, 0);
+            long versionCode = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                ? packageInfo.getLongVersionCode()
+                : packageInfo.versionCode;
+            String cacheKey = "icon_" + packageName + "_" + versionCode;
+            SharedPreferences prefs = getReactApplicationContext()
+                .getSharedPreferences(ICON_PREFS_NAME, Context.MODE_PRIVATE);
+            String cached = prefs.getString(cacheKey, null);
+            if (cached != null) return cached;
+
+            Drawable icon = appInfo.loadIcon(pm);
+            String encoded = drawableToBase64(icon);
+            if (encoded != null) {
+                prefs.edit().putString(cacheKey, encoded).apply();
+            }
+            return encoded;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
     @ReactMethod
 public void getDailyStats(Promise promise) {
     UsageStatsManager usm = (UsageStatsManager) getReactApplicationContext().getSystemService(Context.USAGE_STATS_SERVICE);
     PackageManager pm = getReactApplicationContext().getPackageManager();
     
-    // 🚨 RESET CALENDAR TO EXACT MIDNIGHT TODAY
     Calendar calendar = Calendar.getInstance();
     long endTime = calendar.getTimeInMillis();
     
@@ -304,7 +330,7 @@ public void getDailyStats(Promise promise) {
     private HashMap<String, Boolean> getActivePackagesAtStart(UsageStatsManager usm, PackageManager pm, long startTime) {
         HashMap<String, Integer> lastEvents = new HashMap<>();
         Set<String> countablePackages = getCountableLaunchablePackages(pm);
-        long lookbackStart = startTime - (12L * 60L * 60L * 1000L);
+        long lookbackStart = startTime - ACTIVE_AT_START_LOOKBACK_MS;
         UsageEvents previousEvents = usm.queryEvents(lookbackStart, startTime);
         if (previousEvents == null) return new HashMap<>();
 
@@ -407,15 +433,22 @@ public void getDailyStats(Promise promise) {
                 root.put(yesterdayKey, yDay);
             }
 
-            HashMap<String, Long> todayTotals = queryUsageTotals(usm, pm, startTime, endTime);
-            JSONObject day = new JSONObject();
+            long checkpoint = prefs.getLong(PREFS_TODAY_CHECKPOINT_KEY, startTime);
+            boolean canUseCheckpoint = todayKey.equals(lastStoredDate) && checkpoint >= startTime && checkpoint < endTime;
+            long queryStart = canUseCheckpoint ? checkpoint : startTime;
+            HashMap<String, Long> todayTotals = queryUsageTotals(usm, pm, queryStart, endTime);
+            JSONObject day = canUseCheckpoint && root.has(todayKey)
+                ? root.getJSONObject(todayKey)
+                : new JSONObject();
             for (Map.Entry<String, Long> entry : todayTotals.entrySet()) {
-                day.put(entry.getKey(), entry.getValue());
+                long previous = canUseCheckpoint ? day.optLong(entry.getKey(), 0L) : 0L;
+                day.put(entry.getKey(), previous + entry.getValue());
             }
             root.put(todayKey, day);
             prefs.edit()
                 .putString(PREFS_KEY, root.toString())
                 .putString(PREFS_LAST_DATE_KEY, todayKey)
+                .putLong(PREFS_TODAY_CHECKPOINT_KEY, endTime)
                 .apply();
             promise.resolve(true);
         } catch (JSONException e) {
@@ -475,11 +508,6 @@ public void getDailyStats(Promise promise) {
             }
         }
 
-        android.util.Log.d(
-            "FocusMode",
-            "getTodayFocusModeDecisions protected=" + protectedApps.toString()
-                + " bypassed=" + bypassedApps.toString()
-        );
         result.putMap("protectedApps", protectedApps);
         result.putMap("bypassedApps", bypassedApps);
         promise.resolve(result);
@@ -650,7 +678,7 @@ public void getInstalledApps(Promise promise) {
                 WritableMap map = Arguments.createMap();
                 map.putString("appName", resolveInfo.loadLabel(pm).toString());
                 map.putString("packageName", packageName);
-                String iconBase64 = drawableToBase64(appInfo.loadIcon(pm));
+                String iconBase64 = getCachedIconBase64(pm, packageName, appInfo);
                 if (iconBase64 != null) {
                     map.putString("iconBase64", iconBase64);
                 }

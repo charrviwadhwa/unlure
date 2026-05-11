@@ -7,10 +7,11 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.app.usage.UsageEvents;
-import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -21,6 +22,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
@@ -35,16 +37,19 @@ import org.json.JSONObject;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 public class FocusMonitorService extends Service {
     private static final String CHANNEL_ID = "unlure_privacy_focus";
     private static final int NOTIFICATION_ID = 3101;
     private static final long POLL_MS = 2500L;
-    private static final long LOOKBACK_MS = 15000L;
+    private static final long SCREEN_OFF_POLL_MS = 30000L;
+    private static final long EVENT_QUERY_OVERLAP_MS = 500L;
+    private static final long LIMITS_CACHE_TTL_MS = 5000L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private WindowManager windowManager;
@@ -52,11 +57,44 @@ public class FocusMonitorService extends Service {
     private String overlayPackage;
     private String lastForegroundPackage = "";
     private Runnable pollRunnable;
+    private SharedPreferences focusPrefs;
+    private Map<String, Integer> cachedLimits = new HashMap<>();
+    private long limitsLastLoaded = 0L;
+    private final Map<String, Long> todayUsageCache = new HashMap<>();
+    private final Map<String, Long> activeStarts = new HashMap<>();
+    private final Map<String, Integer> openActivityCounts = new HashMap<>();
+    private long lastEventQueryTime = 0L;
+    private String usageCacheDate = "";
+    private final Set<String> bypassedToday = new HashSet<>();
+    private final Set<String> protectedToday = new HashSet<>();
+    private String decisionsCacheDate = "";
+    private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent == null || intent.getAction() == null) return;
+            if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
+                handler.removeCallbacks(pollRunnable);
+                hideOverlay();
+            } else if (Intent.ACTION_SCREEN_ON.equals(intent.getAction())) {
+                handler.removeCallbacks(pollRunnable);
+                handler.post(pollRunnable);
+            }
+        }
+    };
+    private final SharedPreferences.OnSharedPreferenceChangeListener prefListener = (prefs, key) -> {
+        if (FocusModePrefs.KEY_LIMITS_JSON.equals(key)) invalidateLimitsCache();
+        if (key != null && (key.startsWith(FocusModePrefs.KEY_BYPASS_PREFIX) || key.startsWith(FocusModePrefs.KEY_PROTECTED_PREFIX))) {
+            decisionsCacheDate = "";
+        }
+    };
 
     @Override
     public void onCreate() {
         super.onCreate();
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
+        focusPrefs = getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE);
+        focusPrefs.registerOnSharedPreferenceChangeListener(prefListener);
+        registerScreenReceiver();
         createNotificationChannel();
         startForeground(NOTIFICATION_ID, buildNotification());
         startPolling();
@@ -76,6 +114,10 @@ public class FocusMonitorService extends Service {
     @Override
     public void onDestroy() {
         handler.removeCallbacksAndMessages(null);
+        try { unregisterReceiver(screenReceiver); } catch (Exception ignored) {}
+        if (focusPrefs != null) {
+            focusPrefs.unregisterOnSharedPreferenceChangeListener(prefListener);
+        }
         hideOverlay();
         super.onDestroy();
     }
@@ -84,19 +126,52 @@ public class FocusMonitorService extends Service {
         if (pollRunnable != null) return;
         pollRunnable = () -> {
             checkForegroundApp();
-            handler.postDelayed(pollRunnable, POLL_MS);
+            handler.postDelayed(pollRunnable, getAdaptivePollInterval());
         };
-        handler.post(pollRunnable);
+        if (isScreenInteractive()) {
+            handler.post(pollRunnable);
+        } else {
+            handler.postDelayed(pollRunnable, SCREEN_OFF_POLL_MS);
+        }
+    }
+
+    private void registerScreenReceiver() {
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_SCREEN_ON);
+        filter.addAction(Intent.ACTION_SCREEN_OFF);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(screenReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(screenReceiver, filter);
+        }
+    }
+
+    private long getAdaptivePollInterval() {
+        return isScreenInteractive() ? POLL_MS : SCREEN_OFF_POLL_MS;
+    }
+
+    private boolean isScreenInteractive() {
+        try {
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            if (pm == null) return true;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+                return pm.isInteractive();
+            }
+            return pm.isScreenOn();
+        } catch (Exception ignored) {
+            return true;
+        }
     }
 
     private void checkForegroundApp() {
-        Map<String, Integer> limits = readLimits();
+        Map<String, Integer> limits = getLimits();
         if (limits.isEmpty()) {
             stopSelf();
             return;
         }
+        resetDailyCachesIfNeeded();
 
-        String foregroundPackage = getForegroundPackage();
+        String foregroundPackage = updateUsageAndForeground(limits.keySet());
         if (foregroundPackage == null || foregroundPackage.isEmpty() || isSystemOrSelfPackage(foregroundPackage)) {
             lastForegroundPackage = "";
             hideOverlay();
@@ -113,20 +188,48 @@ public class FocusMonitorService extends Service {
             return;
         }
 
-        if (isBypassedToday(foregroundPackage)) return;
+        if (isBypassedToday(foregroundPackage) || isProtectedToday(foregroundPackage)) {
+            hideOverlay();
+            return;
+        }
 
         long limitMs = limitMinutes * 60L * 1000L;
         long usedMs = getTodayUsageMs(foregroundPackage);
         if (usedMs >= limitMs) {
             showLimitOverlay(foregroundPackage, getAppName(foregroundPackage));
+        } else {
+            hideOverlay();
         }
     }
 
-    private String getForegroundPackage() {
+    private void resetDailyCachesIfNeeded() {
+        String today = todayKey();
+        if (today.equals(usageCacheDate)) return;
+        usageCacheDate = today;
+        todayUsageCache.clear();
+        activeStarts.clear();
+        openActivityCounts.clear();
+        lastEventQueryTime = getStartOfTodayMs();
+    }
+
+    private long getStartOfTodayMs() {
+        Calendar calendar = Calendar.getInstance();
+        calendar.set(Calendar.HOUR_OF_DAY, 0);
+        calendar.set(Calendar.MINUTE, 0);
+        calendar.set(Calendar.SECOND, 0);
+        calendar.set(Calendar.MILLISECOND, 0);
+        return calendar.getTimeInMillis();
+    }
+
+    private String updateUsageAndForeground(Set<String> limitedPackages) {
         try {
             UsageStatsManager usm = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
             long now = System.currentTimeMillis();
-            UsageEvents events = usm.queryEvents(now - LOOKBACK_MS, now);
+            if (lastEventQueryTime <= 0L) {
+                lastEventQueryTime = getStartOfTodayMs();
+            }
+            long queryStart = Math.max(getStartOfTodayMs(), lastEventQueryTime - EVENT_QUERY_OVERLAP_MS);
+            UsageEvents events = usm.queryEvents(queryStart, now);
             if (events == null) return lastForegroundPackage;
 
             UsageEvents.Event event = new UsageEvents.Event();
@@ -137,8 +240,14 @@ public class FocusMonitorService extends Service {
                 if (pkg == null) continue;
 
                 int type = event.getEventType();
+                long eventTime = Math.min(Math.max(event.getTimeStamp(), queryStart), now);
                 if (type == UsageEvents.Event.MOVE_TO_FOREGROUND || type == UsageEvents.Event.ACTIVITY_RESUMED) {
                     if (!isSystemOrSelfPackage(pkg)) foreground = pkg;
+                    if (limitedPackages.contains(pkg) && eventTime > lastEventQueryTime) {
+                        int currentOpen = openActivityCounts.getOrDefault(pkg, 0);
+                        if (currentOpen == 0) activeStarts.put(pkg, eventTime);
+                        openActivityCounts.put(pkg, currentOpen + 1);
+                    }
                 } else if (
                     pkg.equals(foreground) &&
                     (type == UsageEvents.Event.MOVE_TO_BACKGROUND ||
@@ -147,7 +256,28 @@ public class FocusMonitorService extends Service {
                 ) {
                     foreground = "";
                 }
+
+                if (
+                    limitedPackages.contains(pkg) &&
+                    eventTime > lastEventQueryTime &&
+                    (type == UsageEvents.Event.MOVE_TO_BACKGROUND ||
+                     type == UsageEvents.Event.ACTIVITY_PAUSED ||
+                     type == UsageEvents.Event.ACTIVITY_STOPPED)
+                ) {
+                    int currentOpen = openActivityCounts.getOrDefault(pkg, 0);
+                    if (currentOpen > 0) {
+                        currentOpen -= 1;
+                        openActivityCounts.put(pkg, currentOpen);
+                    }
+                    if (currentOpen == 0) {
+                        Long start = activeStarts.remove(pkg);
+                        if (start != null && eventTime > start) {
+                            todayUsageCache.put(pkg, todayUsageCache.getOrDefault(pkg, 0L) + (eventTime - start));
+                        }
+                    }
+                }
             }
+            lastEventQueryTime = now;
             return foreground;
         } catch (Exception ignored) {
             return lastForegroundPackage;
@@ -155,67 +285,11 @@ public class FocusMonitorService extends Service {
     }
 
     private long getTodayUsageMs(String packageName) {
-        UsageStatsManager usm = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
-        Calendar calendar = Calendar.getInstance();
-        long endTime = calendar.getTimeInMillis();
-        calendar.set(Calendar.HOUR_OF_DAY, 0);
-        calendar.set(Calendar.MINUTE, 0);
-        calendar.set(Calendar.SECOND, 0);
-        calendar.set(Calendar.MILLISECOND, 0);
-        long startTime = calendar.getTimeInMillis();
-
-        long total = 0L;
-        long maxWindow = Math.max(endTime - startTime, 0L);
-        UsageEvents events = usm.queryEvents(startTime, endTime);
-        if (events != null) {
-            UsageEvents.Event event = new UsageEvents.Event();
-            Long activeStart = null;
-            int openActivityCount = 0;
-            while (events.hasNextEvent()) {
-                events.getNextEvent(event);
-                if (!packageName.equals(event.getPackageName())) continue;
-
-                int type = event.getEventType();
-                long eventTime = Math.min(Math.max(event.getTimeStamp(), startTime), endTime);
-                if (type == UsageEvents.Event.MOVE_TO_FOREGROUND || type == UsageEvents.Event.ACTIVITY_RESUMED) {
-                    if (openActivityCount == 0) activeStart = eventTime;
-                    openActivityCount++;
-                } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND || type == UsageEvents.Event.ACTIVITY_PAUSED) {
-                    if (openActivityCount > 0) openActivityCount--;
-                    if (openActivityCount == 0 && activeStart != null && eventTime > activeStart) {
-                        total += eventTime - activeStart;
-                        activeStart = null;
-                    }
-                } else if (type == UsageEvents.Event.ACTIVITY_STOPPED) {
-                    if (openActivityCount == 0 && activeStart != null && eventTime > activeStart) {
-                        total += eventTime - activeStart;
-                        activeStart = null;
-                    }
-                }
-            }
-
-            if (activeStart != null && endTime > activeStart) {
-                total += Math.min(endTime - activeStart, maxWindow);
-            }
+        long total = todayUsageCache.getOrDefault(packageName, 0L);
+        Long activeStart = activeStarts.get(packageName);
+        if (activeStart != null) {
+            total += Math.max(0L, System.currentTimeMillis() - activeStart);
         }
-
-        long statsTotal = 0L;
-        try {
-            List<UsageStats> stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime);
-            if (stats != null) {
-                for (UsageStats stat : stats) {
-                    if (!packageName.equals(stat.getPackageName())) continue;
-                    long foreground = stat.getTotalTimeInForeground();
-                    long visible = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-                        ? stat.getTotalTimeVisible()
-                        : 0L;
-                    statsTotal = Math.max(statsTotal, Math.max(foreground, visible));
-                }
-            }
-        } catch (Exception ignored) {}
-
-        if (total <= 0L) return statsTotal;
-        if (statsTotal > total && statsTotal - total <= 90L * 1000L) return statsTotal;
         return total;
     }
 
@@ -278,7 +352,7 @@ public class FocusMonitorService extends Service {
         ));
 
         TextView title = new TextView(this);
-        title.setText("Limit reached");
+        title.setText("Take five seconds");
         title.setTextColor(Color.rgb(247, 249, 255));
         title.setTextSize(22);
         title.setTypeface(Typeface.DEFAULT_BOLD);
@@ -293,7 +367,7 @@ public class FocusMonitorService extends Service {
         titleBlock.addView(subtitle);
 
         TextView body = new TextView(this);
-        body.setText("Close the app now to protect " + shieldLabel + ". Continuing spends that shield and marks today over limit.");
+        body.setText("You set this limit for " + appName + ". Breathe for a moment, then choose whether you still want to continue.");
         body.setTextColor(Color.rgb(208, 216, 232));
         body.setTextSize(15);
         body.setLineSpacing(dp(3), 1.0f);
@@ -305,7 +379,7 @@ public class FocusMonitorService extends Service {
         root.addView(body, bodyParams);
 
         TextView close = new TextView(this);
-        close.setText("Close app");
+        close.setText("I'm done for now");
         close.setTextColor(Color.rgb(14, 17, 24));
         close.setTextSize(16);
         close.setTypeface(Typeface.DEFAULT_BOLD);
@@ -329,8 +403,10 @@ public class FocusMonitorService extends Service {
         root.addView(close, closeParams);
 
         TextView bypass = new TextView(this);
-        bypass.setText(streakShieldCount > 0 ? "Spend shield and continue" : "Break streak and continue");
-        bypass.setTextColor(Color.rgb(224, 231, 246));
+        bypass.setText("Continue in 5");
+        bypass.setEnabled(false);
+        bypass.setAlpha(0.58f);
+        bypass.setTextColor(Color.rgb(190, 200, 220));
         bypass.setTextSize(15);
         bypass.setTypeface(Typeface.DEFAULT_BOLD);
         bypass.setGravity(Gravity.CENTER);
@@ -342,13 +418,19 @@ public class FocusMonitorService extends Service {
         ));
         bypass.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-            markBypassedToday(packageName);
+            if (getStreakShieldCount() > 0) {
+                markProtectedToday(packageName);
+                spendStreakShield();
+            } else {
+                markBypassedToday(packageName);
+            }
             hideOverlay();
         });
         root.addView(bypass, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ));
+        startBreathingCountdown(bypass, streakShieldCount);
 
         FrameLayout overlayContainer = new FrameLayout(this);
         overlayContainer.setClickable(true);
@@ -399,9 +481,32 @@ public class FocusMonitorService extends Service {
         overlayPackage = null;
     }
 
+    private void startBreathingCountdown(TextView bypass, int streakShieldCount) {
+        final int[] remaining = {5};
+        Runnable tick = new Runnable() {
+            @Override
+            public void run() {
+                if (overlayView == null) return;
+                if (remaining[0] <= 0) {
+                    bypass.setEnabled(true);
+                    bypass.setAlpha(1f);
+                    bypass.setTextColor(Color.rgb(224, 231, 246));
+                    bypass.setText(streakShieldCount > 0 ? "Use shield and continue" : "Continue anyway");
+                    return;
+                }
+                bypass.setText("Continue in " + remaining[0]);
+                remaining[0] -= 1;
+                handler.postDelayed(this, 1000L);
+            }
+        };
+        handler.post(tick);
+    }
+
     private Map<String, Integer> readLimits() {
         HashMap<String, Integer> limits = new HashMap<>();
-        SharedPreferences prefs = getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE);
+        SharedPreferences prefs = focusPrefs != null
+            ? focusPrefs
+            : getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE);
         String raw = prefs.getString(FocusModePrefs.KEY_LIMITS_JSON, "{}");
         try {
             JSONObject json = new JSONObject(raw);
@@ -413,6 +518,20 @@ public class FocusMonitorService extends Service {
             }
         } catch (Exception ignored) {}
         return limits;
+    }
+
+    private Map<String, Integer> getLimits() {
+        long now = System.currentTimeMillis();
+        if (now - limitsLastLoaded > LIMITS_CACHE_TTL_MS) {
+            cachedLimits = readLimits();
+            limitsLastLoaded = now;
+        }
+        return cachedLimits;
+    }
+
+    private void invalidateLimitsCache() {
+        limitsLastLoaded = 0L;
+        cachedLimits = new HashMap<>();
     }
 
     private String getAppName(String packageName) {
@@ -435,17 +554,51 @@ public class FocusMonitorService extends Service {
     }
 
     private boolean isBypassedToday(String packageName) {
-        return getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE)
-            .getBoolean(FocusModePrefs.KEY_BYPASS_PREFIX + todayKey() + "_" + packageName, false);
+        ensureDecisionCache();
+        return bypassedToday.contains(packageName);
+    }
+
+    private boolean isProtectedToday(String packageName) {
+        ensureDecisionCache();
+        return protectedToday.contains(packageName);
+    }
+
+    private void ensureDecisionCache() {
+        String today = todayKey();
+        if (today.equals(decisionsCacheDate)) return;
+        decisionsCacheDate = today;
+        bypassedToday.clear();
+        protectedToday.clear();
+
+        SharedPreferences prefs = focusPrefs != null
+            ? focusPrefs
+            : getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE);
+        String protectedPrefix = FocusModePrefs.KEY_PROTECTED_PREFIX + today + "_";
+        String bypassPrefix = FocusModePrefs.KEY_BYPASS_PREFIX + today + "_";
+        for (Map.Entry<String, ?> entry : prefs.getAll().entrySet()) {
+            Object value = entry.getValue();
+            if (!(value instanceof Boolean) || !((Boolean) value)) continue;
+
+            String key = entry.getKey();
+            if (key.startsWith(protectedPrefix)) {
+                protectedToday.add(key.substring(protectedPrefix.length()));
+            } else if (key.startsWith(bypassPrefix)) {
+                bypassedToday.add(key.substring(bypassPrefix.length()));
+            }
+        }
     }
 
     private void markBypassedToday(String packageName) {
+        bypassedToday.add(packageName);
+        decisionsCacheDate = todayKey();
         getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE).edit()
             .putBoolean(FocusModePrefs.KEY_BYPASS_PREFIX + todayKey() + "_" + packageName, true)
             .apply();
     }
 
     private void markProtectedToday(String packageName) {
+        protectedToday.add(packageName);
+        decisionsCacheDate = todayKey();
         getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE).edit()
             .putBoolean(FocusModePrefs.KEY_PROTECTED_PREFIX + todayKey() + "_" + packageName, true)
             .apply();
@@ -456,10 +609,18 @@ public class FocusMonitorService extends Service {
             .getInt(FocusModePrefs.KEY_STREAK_SHIELD_COUNT, 0));
     }
 
+    private void spendStreakShield() {
+        SharedPreferences prefs = getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE);
+        int nextCount = Math.max(0, prefs.getInt(FocusModePrefs.KEY_STREAK_SHIELD_COUNT, 0) - 1);
+        prefs.edit()
+            .putInt(FocusModePrefs.KEY_STREAK_SHIELD_COUNT, nextCount)
+            .apply();
+    }
+
     private String formatStreakShieldLabel(int count) {
         if (count <= 0) return "your streak";
-        if (count == 1) return "your 1-day streak shield";
-        return "your " + count + "-day streak shield";
+        if (count == 1) return "your streak shield";
+        return "one of your " + count + " streak shields";
     }
 
     private String todayKey() {
@@ -477,8 +638,8 @@ public class FocusMonitorService extends Service {
 
         return new Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(getApplicationInfo().icon)
-            .setContentTitle("Unlure is watching selected limits")
-            .setContentText("Privacy-first mode uses usage totals, not screen content.")
+            .setContentTitle("Unlure is keeping an eye on your limits")
+            .setContentText("Just checking in when a selected app reaches its time.")
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .build();

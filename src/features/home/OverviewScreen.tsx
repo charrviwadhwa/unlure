@@ -21,6 +21,7 @@ import {
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import LinearGradient from 'react-native-linear-gradient';
 import { ScreenTimeService, DailyUsageMap } from '../../services/ScreenTimeService';
+import { UserStore } from '../../services/storage';
 import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
 
 const { width } = Dimensions.get('window');
@@ -235,6 +236,30 @@ const formatAxisTime = (mins: number) => {
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 };
 
+const getTotalMinutesForDay = (dayMap: Record<string, number> | undefined) =>
+  Math.floor(Object.values(dayMap || {}).reduce((sum, ms) => sum + ms, 0) / 60000);
+
+const getSavedMinutesForDay = (
+  dayMap: Record<string, number> | undefined,
+  baselineMinutes: number
+) => Math.max(baselineMinutes - getTotalMinutesForDay(dayMap), 0);
+
+const getPacingFace = (usageMinutes: number, limitMinutes: number) => {
+  if (limitMinutes <= 0) return ':)';
+  const ratio = usageMinutes / limitMinutes;
+  if (ratio >= 1) return ':|';
+  if (ratio >= 0.8) return ':o';
+  return ':)';
+};
+
+const getDaysSince = (startDateKey: string | null, endDateKey: string) => {
+  if (!startDateKey) return 1;
+  const start = new Date(`${startDateKey}T00:00:00`).getTime();
+  const end = new Date(`${endDateKey}T00:00:00`).getTime();
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return 1;
+  return Math.floor((end - start) / 86400000) + 1;
+};
+
 const hexToRgba = (hex: string, alpha: number) => {
   const clean = hex.replace('#', '');
   const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean;
@@ -381,6 +406,8 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
   const chartFadeTail = isDark ? '#1E232B' : '#FFFFFF';
   const [viewMode, setViewMode] = useState('day');
   const [storedStats, setStoredStats] = useState<DailyUsageMap>({});
+  const [trackingStartDate, setTrackingStartDate] = useState<string | null>(null);
+  const [limits, setLimits] = useState<Record<string, number>>({});
   const [appNames, setAppNames] = useState<Record<string, string>>({});
   const [appIcons, setAppIcons] = useState<Record<string, string | undefined>>({});
   const [selectedCategory, setSelectedCategory] = useState<ChartCategory | null>(null);
@@ -394,9 +421,11 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
 
   const load = useCallback(async () => {
     await ScreenTimeService.storeTodayStats();
-    const [dailyStats, installedApps] = await Promise.all([
+    const [dailyStats, installedApps, savedTrackingStartDate, savedLimits] = await Promise.all([
       ScreenTimeService.getStoredDailyStats(),
-      ScreenTimeService.getInstalledApps()
+      ScreenTimeService.getInstalledApps(),
+      UserStore.getTrackingStartDate(),
+      UserStore.getAllLimits()
     ]);
 
     const nameMap = installedApps.reduce<Record<string, string>>((acc, app) => {
@@ -415,6 +444,8 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
     setCurrentTime(now);
     setTodayKey(nextTodayKey);
     setStoredStats(dailyStats);
+    setTrackingStartDate(savedTrackingStartDate);
+    setLimits(savedLimits || {});
   }, []);
 
   useEffect(() => {
@@ -464,6 +495,13 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
       }),
     [todayKey]
   );
+  const weekRangeLabel = useMemo(() => {
+    const first = new Date(`${weekDays[0]?.key || todayKey}T00:00:00`);
+    const last = new Date(`${weekDays[6]?.key || todayKey}T00:00:00`);
+    const firstLabel = first.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const lastLabel = last.toLocaleDateString('en-US', first.getMonth() === last.getMonth() ? { day: 'numeric' } : { month: 'short', day: 'numeric' });
+    return `${firstLabel} - ${lastLabel}`;
+  }, [todayKey, weekDays]);
 
   const todayApps = useMemo(() => {
     const todayMap = storedStats[todayKey] || {};
@@ -592,6 +630,25 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
   const dayChartCategories = useMemo(() => buildChartCategories(categoryMinutes, categoryPalette, 2), [categoryMinutes, categoryPalette]);
   const weekAverageMinutes = Math.floor(weekTotalMinutes / 7);
   const dayTotalMinutes = Math.floor(todayApps.reduce((acc, app) => acc + app.totalMs, 0) / 60000);
+  const totalLimitMinutes = Object.values(limits).reduce((sum, limit) => sum + Math.max(0, limit || 0), 0);
+  const pacingFace = getPacingFace(dayTotalMinutes, totalLimitMinutes);
+  const daysTracked = getDaysSince(trackingStartDate, todayKey);
+  const baselineAverageMinutes = useMemo(() => {
+    if (!trackingStartDate) return 0;
+    const baselineDays = Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(`${trackingStartDate}T00:00:00`);
+      date.setDate(date.getDate() + i);
+      return formatDateKey(date);
+    });
+    const total = baselineDays.reduce((sum, key) => sum + getTotalMinutesForDay(storedStats[key]), 0);
+    return Math.floor(total / baselineDays.length);
+  }, [storedStats, trackingStartDate]);
+  const canShowSavedTime = daysTracked > 7 && baselineAverageMinutes > 0;
+  const daySavedMinutes = useMemo(
+    () => getSavedMinutesForDay(storedStats[todayKey], baselineAverageMinutes),
+    [baselineAverageMinutes, storedStats, todayKey]
+  );
+  const shouldShowSavedTime = canShowSavedTime;
   const weekMaxMinutes = Math.max(...weekData.map((d) => CATEGORY_KEYS.reduce((acc, key) => acc + d.totals[key], 0)), 1);
   const weekAxisScale = getWeekAxisScale(weekMaxMinutes);
   const weekAxisMaxMinutes = weekAxisScale.max;
@@ -688,7 +745,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
           </View>
 
           <View style={styles.dateHeader}>
-            <Text style={[styles.dateText, { color: ui.textSecondary }]}>{todayLabel}</Text>
+            <Text style={[styles.dateText, { color: ui.textSecondary }]}>{isWeek ? weekRangeLabel : `${todayLabel} ${pacingFace}`}</Text>
             {!isWeek && <Text style={[styles.updatedSmall, { color: ui.textSecondary }]}>{updatedLabel}</Text>}
           </View>
 
@@ -698,10 +755,9 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
           <Animated.View style={{ opacity: fadeAnim }}>
           {isWeek ? (
             <View style={styles.weekViewContainer}>
-              {/* Week Top Stats */}
               <Text style={[styles.timeBigText, { color: ui.text }]}>{formatTime(weekTotalMinutes)}</Text>
               <Text style={[styles.subTextMain, { color: ui.text }]}>Total usage this week</Text>
-              <Text style={[styles.subText, { color: ui.textSecondary }]}>Daily Average this week {formatTime(weekAverageMinutes)}</Text>
+              <Text style={[styles.subText, { color: ui.textSecondary }]}>Daily average this week: {formatTime(weekAverageMinutes)}</Text>
 
               <View style={[styles.weekInsightRow, { backgroundColor: isDark ? 'rgba(255,255,255,0.028)' : 'rgba(255,255,255,0.74)', borderColor: isDark ? 'transparent' : ui.border }, isDark && styles.darkSoftBand]}>
                 <View style={styles.weekInsightBlock}>
@@ -723,13 +779,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                 <Text style={[styles.weekInsightTime, { color: ui.text }]}>{weekTopApp ? formatTime(weekTopApp.minutes) : '0m'}</Text>
               </View>
 
-              {/* Week Chart */}
               <View style={styles.weekChartContainer}>
-                
-                {/* 
-                  The gridLineContainer bottom is perfectly aligned to match the height 
-                  of the xLabel (16px) + the margin of the bars (8px) = 24px total 
-                */}
                 <View style={styles.gridLineContainer}>
                   {weekAxisTicks.map((tick) => (
                     <View style={[styles.gridLine, { borderBottomColor: ui.border }]} key={tick}>
@@ -749,37 +799,35 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                       };
                     }).filter((segment) => segment.height > 0);
                     return (
-                    <View key={index} style={styles.barColumn}>
-                      <View style={styles.weekBarStack}>
-                        {segments.map((segment, segmentIndex) => (
-                          <LinearGradient
-                            key={segment.key}
-                            colors={
-                              isDark
-                                ? [hexToRgba(segment.color.border, 0.54), hexToRgba(segment.color.border, 0.16)]
-                                : [segment.color.light, chartFadeTail]
-                            }
-                            start={{ x: 0.5, y: 0 }}
-                            end={{ x: 0.5, y: 1 }}
-                            style={[
-                              styles.weekBarSegment,
-                              {
-                                height: segment.height,
-                                borderColor: segment.color.border,
-                                borderTopLeftRadius: segmentIndex === 0 ? 6 : 3,
-                                borderTopRightRadius: segmentIndex === 0 ? 6 : 3,
-                                borderBottomLeftRadius: segmentIndex === segments.length - 1 ? 6 : 3,
-                                borderBottomRightRadius: segmentIndex === segments.length - 1 ? 6 : 3,
-                                marginBottom: segmentIndex === segments.length - 1 ? 0 : 2
+                      <View key={index} style={styles.barColumn}>
+                        <View style={styles.weekBarStack}>
+                          {segments.map((segment, segmentIndex) => (
+                            <LinearGradient
+                              key={segment.key}
+                              colors={
+                                isDark
+                                  ? [hexToRgba(segment.color.border, 0.54), hexToRgba(segment.color.border, 0.16)]
+                                  : [segment.color.light, chartFadeTail]
                               }
-                            ]}
-                          />
-                        ))}
+                              start={{ x: 0.5, y: 0 }}
+                              end={{ x: 0.5, y: 1 }}
+                              style={[
+                                styles.weekBarSegment,
+                                {
+                                  height: segment.height,
+                                  borderColor: segment.color.border,
+                                  borderTopLeftRadius: segmentIndex === 0 ? 6 : 3,
+                                  borderTopRightRadius: segmentIndex === 0 ? 6 : 3,
+                                  borderBottomLeftRadius: segmentIndex === segments.length - 1 ? 6 : 3,
+                                  borderBottomRightRadius: segmentIndex === segments.length - 1 ? 6 : 3,
+                                  marginBottom: segmentIndex === segments.length - 1 ? 0 : 2
+                                }
+                              ]}
+                            />
+                          ))}
+                        </View>
+                        <Text style={[styles.xLabel, { color: ui.text }]}>{item.day}</Text>
                       </View>
-                      
-                      {/* Fixed X-Axis Label */}
-                      <Text style={[styles.xLabel, { color: ui.text }]}>{item.day}</Text>
-                    </View>
                     );
                   })}
                 </View>
@@ -792,7 +840,6 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                 )}
               </View>
 
-              {/* Categories Legend */}
               <View style={styles.legendContainer}>
                 {weekChartCategories.map((category) => (
                   <View style={styles.legendItem} key={category.key}>
@@ -846,6 +893,15 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
             </View>
           ) : (
             <View style={styles.dayViewContainer}>
+              <Text style={[styles.timeBigText, { color: ui.text }]}>
+                {formatTime(dayTotalMinutes)}
+              </Text>
+              <Text style={[styles.subTextMain, { color: ui.text }]}>Screen time today</Text>
+              <Text style={[styles.savedVsAverage, { color: shouldShowSavedTime ? '#39B987' : ui.textSecondary }]}>
+                {shouldShowSavedTime
+                  ? `↓ ${formatTime(daySavedMinutes)} saved vs your average`
+                  : 'Building your first week baseline'}
+              </Text>
               
               <View style={[
                 styles.dayChartContainer,
@@ -886,15 +942,6 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                     />
                   </View>
                 ))}
-              </View>
-
-              {/* Day Bottom Stats */}
-              <View style={[styles.dayFooter, { borderTopColor: ui.border }]}>
-                <View>
-                  <Text style={[styles.totalTodayText, { color: ui.text }]}>total today</Text>
-                  <Text style={[styles.subText, { color: ui.textSecondary }]}>Resets at midnight</Text>
-                </View>
-                <Text style={[styles.timeBigTextDay, { color: ui.text }]}>{formatTime(dayTotalMinutes)}</Text>
               </View>
 
               <Text style={[styles.sectionTitle, { color: ui.text }]}>Apps today</Text>
@@ -1111,6 +1158,13 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginTop: 4,
   },
+  savedVsAverage: {
+    fontSize: 13,
+    fontFamily: FONT_SANS_SEMIBOLD,
+    fontWeight: '600',
+    marginTop: 5,
+    marginBottom: 8
+  },
   weekChartContainer: {
     height: 222,
     marginTop: 24,
@@ -1222,7 +1276,7 @@ const styles = StyleSheet.create({
     borderColor: '#ECECF2',
     marginTop: 18,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between'
@@ -1273,6 +1327,40 @@ const styles = StyleSheet.create({
     fontFamily: FONT_MONO,
     fontSize: 22,
     color: COLORS.textMain,
+    fontWeight: '500'
+  },
+  distributionTrack: {
+    height: 14,
+    borderRadius: 999,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    marginTop: 24
+  },
+  distributionSegment: {
+    height: '100%'
+  },
+  distributionLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 18,
+    marginBottom: 14
+  },
+  distributionLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    maxWidth: '48%'
+  },
+  distributionGlyph: {
+    width: 18,
+    height: 18,
+    marginRight: 5,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  distributionText: {
+    fontFamily: FONT_SANS,
+    fontSize: 12,
     fontWeight: '500'
   },
   darkCardLift: {
