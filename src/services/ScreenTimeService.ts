@@ -107,16 +107,6 @@ export const ScreenTimeService = {
     }
   },
 
-  async syncStreakShield(streak: number): Promise<boolean> {
-    if (Platform.OS !== 'android') return false;
-    try {
-      const earnedShields = Math.floor(Math.max(0, Math.floor(streak || 0)) / 5);
-      return Boolean(await UsageModule.syncStreakShield(earnedShields));
-    } catch {
-      return false;
-    }
-  },
-
   async storeTodayStats(forceRefresh = false): Promise<boolean> {
     if (Platform.OS !== 'android') return false;
     const now = Date.now();

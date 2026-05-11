@@ -215,7 +215,6 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
     setStreak(derivedStreak);
     setBestStreak(milestones.best);
     setMonthCleanDays(milestones.monthClean);
-    await ScreenTimeService.syncStreakShield(derivedStreak);
 
     const rows = Object.keys(activeLimits)
       .filter((pkg) => (activeLimits[pkg] || 0) > 0)
@@ -267,14 +266,13 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
   }, [load]);
 
   const heroStreakLabel = !hasActiveLimits ? 'Set a limit to start' : streak === 1 ? 'Day on fire' : 'Days on fire';
-  const shieldCount = Math.floor(streak / 5);
-  const shieldProgressLabel = !hasActiveLimits
+  const streakProgressLabel = !hasActiveLimits
     ? 'No streak is counted until a limit is active'
     : isExceededToday
       ? 'Bring today back under limit'
-      : shieldCount > 0
-        ? `${shieldCount} shield${shieldCount === 1 ? '' : 's'} earned`
-        : `${5 - (streak % 5)} clean day${5 - (streak % 5) === 1 ? '' : 's'} to a shield`;
+      : streak > 0
+        ? `${streak} clean day${streak === 1 ? '' : 's'} in a row`
+        : 'Start with one clean day';
   const screenGradientColors = isDark
     ? ['#121418', '#14171A', '#171A16', '#121418']
     : ['#FFFFFF', '#FFFCF6', '#FFFFFF'];
@@ -323,7 +321,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
                   <Text style={styles.streakNumber}>{streak}</Text>
                 </View>
                 <Text style={styles.streakLabel}>{isExceededToday ? 'A limited app crossed its cap' : heroStreakLabel}</Text>
-                <Text style={styles.streakSubLabel}>{shieldProgressLabel}</Text>
+                <Text style={styles.streakSubLabel}>{streakProgressLabel}</Text>
               </View>
               <Image
                 source={isExceededToday ? require('../../assets/Sad.gif') : require('../../assets/Fire (1).gif')}
@@ -346,26 +344,6 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
           <View style={[styles.trophyStat, { borderColor: theme.border }]}>
             <Text style={[styles.trophyStatValue, { color: theme.text }]}>{monthCleanDays}</Text>
             <Text style={[styles.trophyStatLabel, { color: theme.textSecondary }]}>this month</Text>
-          </View>
-        </View>
-
-        <View style={styles.sectionBlock}>
-          <View style={styles.titleRow}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Streak Shield</Text>
-            <Text style={[styles.sectionMeta, { color: theme.textSecondary }]}>inventory</Text>
-          </View>
-          <View style={[styles.shieldCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.045)' : 'rgba(255,255,255,0.72)', borderColor: theme.border }]}>
-            <View style={styles.shieldToken}>
-              <Text style={styles.shieldTokenText}>{shieldCount}</Text>
-            </View>
-            <View style={styles.shieldCopy}>
-              <Text style={[styles.shieldTitle, { color: theme.text }]}>
-                {shieldCount === 1 ? '1 shield ready' : `${shieldCount} shields ready`}
-              </Text>
-              <Text style={[styles.shieldText, { color: theme.textSecondary }]}>
-                {shieldCount > 0 ? 'One rough day can be protected.' : `${5 - (streak % 5)} clean days until your first shield.`}
-              </Text>
-            </View>
           </View>
         </View>
 
@@ -651,46 +629,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500'
   },
-  shieldCard: {
-    minHeight: 86,
-    borderRadius: 8,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 12
-  },
-  shieldToken: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: '#171C24',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14
-  },
-  shieldTokenText: {
-    color: '#FFFFFF',
-    fontFamily: FONT_MONO,
-    fontSize: 24,
-    fontWeight: '500'
-  },
-  shieldCopy: {
-    flex: 1
-  },
-  shieldTitle: {
-    fontFamily: FONT_SEMIBOLD,
-    fontSize: 16,
-    lineHeight: 21,
-    fontWeight: '600'
-  },
-  shieldText: {
-    marginTop: 4,
-    fontFamily: FONT_REGULAR,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '500'
-  },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -702,13 +640,6 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontFamily: FONT_REGULAR,
     fontWeight: '500'
-  },
-  sectionMeta: {
-    fontSize: 12,
-    color: '#8E8E93',
-    fontFamily: FONT_REGULAR,
-    fontWeight: '500',
-    textTransform: 'lowercase'
   },
   limitedList: {
     borderTopWidth: 1,

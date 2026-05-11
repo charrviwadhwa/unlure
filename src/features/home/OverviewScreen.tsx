@@ -24,7 +24,8 @@ import { ScreenTimeService, DailyUsageMap } from '../../services/ScreenTimeServi
 import { UserStore } from '../../services/storage';
 import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
 
-const { width } = Dimensions.get('window');
+const { width, height: windowHeight } = Dimensions.get('window');
+const CATEGORY_SHEET_HEIGHT = Math.min(430, Math.max(340, windowHeight * 0.48));
 
 const COLORS = {
   social: { solid: '#2F8F6B', light: '#DDF4EA', border: '#2F8F6B' },
@@ -994,7 +995,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
       </LinearGradient>
       <Modal visible={Boolean(selectedCategory)} transparent statusBarTranslucent animationType="none" onRequestClose={closeCategorySheet}>
         <View style={styles.modalRoot}>
-          <View style={styles.sheetBackdrop} />
+          <Pressable style={styles.sheetBackdrop} onPress={closeCategorySheet} />
           <Animated.View style={[styles.sheetWrap, { backgroundColor: ui.sheet, transform: [{ translateY: sheetTranslateY }] }]}>
             <View style={styles.sheetHandle} />
             <View style={styles.sheetTitleRow}>
@@ -1005,25 +1006,32 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                 <Text style={[styles.sheetCloseText, { color: ui.textSecondary }]}>Close</Text>
               </Pressable>
             </View>
-            {selectedApps.length > 0 ? (
-              selectedApps.map((app) => (
-                <View key={app.id} style={[styles.sheetRow, { borderBottomColor: ui.border }]}>
-                  <View style={styles.sheetAppLeft}>
-                    {app.iconBase64 ? (
-                      <Image source={{ uri: `data:image/png;base64,${app.iconBase64}` }} style={styles.sheetAppIcon} resizeMode="cover" />
-                    ) : (
-                      <View style={styles.sheetAppFallback}>
-                        <Text style={[styles.sheetAppFallbackText, { color: ui.textSecondary }]}>{app.name.charAt(0).toUpperCase()}</Text>
-                      </View>
-                    )}
-                    <Text style={[styles.sheetAppName, { color: ui.text }]} numberOfLines={1}>{app.name}</Text>
+            <ScrollView
+              style={styles.sheetList}
+              contentContainerStyle={selectedApps.length > 0 ? styles.sheetListContent : styles.sheetEmptyContent}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
+              {selectedApps.length > 0 ? (
+                selectedApps.map((app) => (
+                  <View key={app.id} style={[styles.sheetRow, { borderBottomColor: ui.border }]}>
+                    <View style={styles.sheetAppLeft}>
+                      {app.iconBase64 ? (
+                        <Image source={{ uri: `data:image/png;base64,${app.iconBase64}` }} style={styles.sheetAppIcon} resizeMode="cover" />
+                      ) : (
+                        <View style={styles.sheetAppFallback}>
+                          <Text style={[styles.sheetAppFallbackText, { color: ui.textSecondary }]}>{app.name.charAt(0).toUpperCase()}</Text>
+                        </View>
+                      )}
+                      <Text style={[styles.sheetAppName, { color: ui.text }]} numberOfLines={1}>{app.name}</Text>
+                    </View>
+                    <Text style={[styles.sheetAppTime, { color: ui.text }]}>{formatTime(app.minutes)}</Text>
                   </View>
-                  <Text style={[styles.sheetAppTime, { color: ui.text }]}>{formatTime(app.minutes)}</Text>
-                </View>
-              ))
-            ) : (
-              <Text style={[styles.sheetEmpty, { color: ui.textSecondary }]}>No usage in this category yet.</Text>
-            )}
+                ))
+              ) : (
+                <Text style={[styles.sheetEmpty, { color: ui.textSecondary }]}>No usage in this category yet.</Text>
+              )}
+            </ScrollView>
           </Animated.View>
         </View>
       </Modal>
@@ -1527,7 +1535,7 @@ const styles = StyleSheet.create({
   },
   sheetBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.38)'
+    backgroundColor: 'rgba(0,0,0,0.5)'
   },
   sheetWrap: {
     backgroundColor: '#FFFFFF',
@@ -1535,8 +1543,8 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     paddingHorizontal: 18,
     paddingTop: 10,
-    paddingBottom: 28,
-    minHeight: 260,
+    paddingBottom: Platform.OS === 'android' ? 18 : 24,
+    height: CATEGORY_SHEET_HEIGHT,
     shadowOpacity: 0,
     elevation: 0
   },
@@ -1570,6 +1578,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: FONT_SANS,
     fontWeight: '500'
+  },
+  sheetList: {
+    flex: 1
+  },
+  sheetListContent: {
+    paddingBottom: 8
+  },
+  sheetEmptyContent: {
+    flexGrow: 1,
+    justifyContent: 'center'
   },
   sheetRow: {
     flexDirection: 'row',

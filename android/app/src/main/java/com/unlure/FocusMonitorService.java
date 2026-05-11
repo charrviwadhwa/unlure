@@ -188,7 +188,7 @@ public class FocusMonitorService extends Service {
             return;
         }
 
-        if (isBypassedToday(foregroundPackage) || isProtectedToday(foregroundPackage)) {
+        if (isBypassedToday(foregroundPackage)) {
             hideOverlay();
             return;
         }
@@ -299,8 +299,6 @@ public class FocusMonitorService extends Service {
         hideOverlay();
 
         overlayPackage = packageName;
-        int streakShieldCount = getStreakShieldCount();
-        String shieldLabel = formatStreakShieldLabel(streakShieldCount);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -418,19 +416,14 @@ public class FocusMonitorService extends Service {
         ));
         bypass.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-            if (getStreakShieldCount() > 0) {
-                markProtectedToday(packageName);
-                spendStreakShield();
-            } else {
-                markBypassedToday(packageName);
-            }
+            markBypassedToday(packageName);
             hideOverlay();
         });
         root.addView(bypass, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ));
-        startBreathingCountdown(bypass, streakShieldCount);
+        startBreathingCountdown(bypass);
 
         FrameLayout overlayContainer = new FrameLayout(this);
         overlayContainer.setClickable(true);
@@ -481,7 +474,7 @@ public class FocusMonitorService extends Service {
         overlayPackage = null;
     }
 
-    private void startBreathingCountdown(TextView bypass, int streakShieldCount) {
+    private void startBreathingCountdown(TextView bypass) {
         final int[] remaining = {5};
         Runnable tick = new Runnable() {
             @Override
@@ -491,7 +484,7 @@ public class FocusMonitorService extends Service {
                     bypass.setEnabled(true);
                     bypass.setAlpha(1f);
                     bypass.setTextColor(Color.rgb(224, 231, 246));
-                    bypass.setText(streakShieldCount > 0 ? "Use shield and continue" : "Continue anyway");
+                    bypass.setText("Continue anyway");
                     return;
                 }
                 bypass.setText("Continue in " + remaining[0]);
@@ -602,25 +595,6 @@ public class FocusMonitorService extends Service {
         getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE).edit()
             .putBoolean(FocusModePrefs.KEY_PROTECTED_PREFIX + todayKey() + "_" + packageName, true)
             .apply();
-    }
-
-    private int getStreakShieldCount() {
-        return Math.max(0, getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE)
-            .getInt(FocusModePrefs.KEY_STREAK_SHIELD_COUNT, 0));
-    }
-
-    private void spendStreakShield() {
-        SharedPreferences prefs = getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE);
-        int nextCount = Math.max(0, prefs.getInt(FocusModePrefs.KEY_STREAK_SHIELD_COUNT, 0) - 1);
-        prefs.edit()
-            .putInt(FocusModePrefs.KEY_STREAK_SHIELD_COUNT, nextCount)
-            .apply();
-    }
-
-    private String formatStreakShieldLabel(int count) {
-        if (count <= 0) return "your streak";
-        if (count == 1) return "your streak shield";
-        return "one of your " + count + " streak shields";
     }
 
     private String todayKey() {

@@ -117,7 +117,6 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
       return acc;
     }, {});
     await ScreenTimeService.syncFocusModeConfig(limits, appNames);
-    await ScreenTimeService.syncStreakShield(await UserStore.getStreak());
   }, [apps]);
 
   const handleConfirmLimit = async (minutes: number) => {

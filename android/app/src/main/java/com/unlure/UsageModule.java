@@ -639,21 +639,6 @@ public void getDailyStats(Promise promise) {
     }
 
     @ReactMethod
-    public void syncStreakShield(int streak, Promise promise) {
-        try {
-            int safeStreak = Math.max(streak, 0);
-            getReactApplicationContext()
-                .getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .putInt(FocusModePrefs.KEY_STREAK_SHIELD_COUNT, safeStreak)
-                .apply();
-            promise.resolve(true);
-        } catch (Exception e) {
-            promise.reject("ERROR", e.getMessage());
-        }
-    }
-
-    @ReactMethod
 public void getInstalledApps(Promise promise) {
     // Run this on a background thread to prevent UI freezing
     new Thread(() -> {
