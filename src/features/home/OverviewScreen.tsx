@@ -93,6 +93,11 @@ type ChartCategory = {
   includedKeys: CategoryKey[];
 };
 
+type SelectedDay = {
+  key: string;
+  label: string;
+};
+
 const formatDateKey = (date: Date) => {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -412,12 +417,14 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
   const [appNames, setAppNames] = useState<Record<string, string>>({});
   const [appIcons, setAppIcons] = useState<Record<string, string | undefined>>({});
   const [selectedCategory, setSelectedCategory] = useState<ChartCategory | null>(null);
+  const [selectedDay, setSelectedDay] = useState<SelectedDay | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [todayKey, setTodayKey] = useState(formatDateKey(new Date()));
   const [fadeAnim] = useState(new Animated.Value(1));
   const [toggleAnim] = useState(new Animated.Value(1));
   const sheetTranslateY = useRef(new Animated.Value(320)).current;
+  const daySheetTranslateY = useRef(new Animated.Value(260)).current;
   const isWeek = viewMode === 'week';
 
   const load = useCallback(async () => {
@@ -555,7 +562,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
         const category = categorizeApp(appName, pkg);
         totals[category] += Math.floor(ms / 60000);
       });
-      return { day: day.label, totals };
+      return { key: day.key, day: day.label, totals };
     });
   }, [appNames, storedStats, weekDays]);
 
@@ -664,6 +671,22 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
         .flatMap((key) => (isWeek ? weekCategoryApps[key] : categoryApps[key]))
         .sort((a, b) => b.minutes - a.minutes)
     : [];
+  const selectedDayApps = selectedDay
+    ? Object.entries(limits)
+        .filter(([, limit]) => limit > 0)
+        .map(([pkg, limit]) => ({
+          id: pkg,
+          name: appNames[pkg] || labelFromPackage(pkg),
+          minutes: Math.floor(((storedStats[selectedDay.key] || {})[pkg] || 0) / 60000),
+          limit
+        }))
+        .sort((a, b) => (b.minutes / Math.max(b.limit, 1)) - (a.minutes / Math.max(a.limit, 1)) || b.minutes - a.minutes)
+        .slice(0, 4)
+    : [];
+  const selectedDayWasUnderLimit = selectedDayApps.every((app) => app.minutes < app.limit);
+  const selectedDayTitle = selectedDay
+    ? new Date(`${selectedDay.key}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+    : '';
 
   const handleToggleMode = (mode: 'week' | 'day') => {
     if (mode === viewMode) return;
@@ -692,8 +715,22 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
     }).start();
   }, [selectedCategory, sheetTranslateY]);
 
+  useEffect(() => {
+    if (!selectedDay) return;
+    daySheetTranslateY.setValue(260);
+    Animated.timing(daySheetTranslateY, {
+      toValue: 0,
+      duration: 220,
+      useNativeDriver: true
+    }).start();
+  }, [daySheetTranslateY, selectedDay]);
+
   const closeCategorySheet = useCallback(() => {
     setSelectedCategory(null);
+  }, []);
+
+  const closeDaySheet = useCallback(() => {
+    setSelectedDay(null);
   }, []);
 
   return (
@@ -800,7 +837,11 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                       };
                     }).filter((segment) => segment.height > 0);
                     return (
-                      <View key={index} style={styles.barColumn}>
+                      <Pressable
+                        key={item.key}
+                        style={({ pressed }) => [styles.barColumn, pressed && styles.barColumnPressed]}
+                        onPress={() => setSelectedDay({ key: item.key, label: item.day })}
+                      >
                         <View style={styles.weekBarStack}>
                           {segments.map((segment, segmentIndex) => (
                             <LinearGradient
@@ -828,7 +869,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                           ))}
                         </View>
                         <Text style={[styles.xLabel, { color: ui.text }]}>{item.day}</Text>
-                      </View>
+                      </Pressable>
                     );
                   })}
                 </View>
@@ -1035,6 +1076,31 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
           </Animated.View>
         </View>
       </Modal>
+      <Modal visible={Boolean(selectedDay)} transparent statusBarTranslucent animationType="none" onRequestClose={closeDaySheet}>
+        <View style={styles.modalRoot}>
+          <Pressable style={styles.sheetBackdrop} onPress={closeDaySheet} />
+          <Animated.View style={[styles.daySheetWrap, { backgroundColor: ui.sheet, transform: [{ translateY: daySheetTranslateY }] }]}>
+            <View style={styles.sheetHandle} />
+            <Text style={[styles.daySheetTitle, { color: ui.text }]}>{selectedDayTitle}</Text>
+            <View style={[styles.daySheetRule, { backgroundColor: ui.border }]} />
+            <Text style={[styles.daySheetStatus, { color: ui.text }]}>
+              {selectedDayApps.length === 0
+                ? ':) No limited apps that day'
+                : selectedDayWasUnderLimit
+                  ? ':) Under limit all day'
+                  : ':| A limit was crossed'}
+            </Text>
+            <View style={styles.daySheetApps}>
+              {selectedDayApps.map((app) => (
+                <View key={app.id} style={styles.daySheetAppRow}>
+                  <Text style={[styles.daySheetAppName, { color: ui.textSecondary }]} numberOfLines={1}>{app.name}</Text>
+                  <Text style={[styles.daySheetAppUsage, { color: ui.text }]}>{`${formatTime(app.minutes)} / ${formatTime(app.limit)}`}</Text>
+                </View>
+              ))}
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1234,6 +1300,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     height: '100%',
+  },
+  barColumnPressed: {
+    opacity: 0.72,
+    transform: [{ scale: 0.98 }]
   },
   weekBarStack: {
     width: 20,
@@ -1641,6 +1711,61 @@ const styles = StyleSheet.create({
     color: '#75757A',
     fontFamily: FONT_SANS,
     fontSize: 14
+  },
+  daySheetWrap: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 22,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'android' ? 24 : 30,
+    shadowOpacity: 0,
+    elevation: 0
+  },
+  daySheetTitle: {
+    fontSize: 18,
+    lineHeight: 23,
+    fontFamily: FONT_SANS_SEMIBOLD,
+    fontWeight: '600',
+    color: '#111111',
+    marginTop: 4
+  },
+  daySheetRule: {
+    height: 1,
+    backgroundColor: '#EFEFF4',
+    marginTop: 12,
+    marginBottom: 13
+  },
+  daySheetStatus: {
+    fontSize: 15,
+    lineHeight: 20,
+    fontFamily: FONT_SANS,
+    fontWeight: '600',
+    color: '#111111',
+    marginBottom: 10
+  },
+  daySheetApps: {
+    gap: 7
+  },
+  daySheetAppRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 24
+  },
+  daySheetAppName: {
+    flex: 1,
+    marginRight: 12,
+    fontSize: 14,
+    lineHeight: 19,
+    fontFamily: FONT_SANS,
+    fontWeight: '500'
+  },
+  daySheetAppUsage: {
+    fontSize: 14,
+    lineHeight: 19,
+    fontFamily: FONT_MONO,
+    fontWeight: '500'
   },
 
   // --- Day View Styles ---

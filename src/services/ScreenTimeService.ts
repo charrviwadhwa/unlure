@@ -4,6 +4,7 @@ const { UsageModule } = NativeModules;
 
 let storeTodayStatsPromise: Promise<boolean> | null = null;
 let storedDailyStatsPromise: Promise<DailyUsageMap> | null = null;
+let storedDailyOpenCountsPromise: Promise<DailyOpenCountMap> | null = null;
 let installedAppsPromise: Promise<AppInfo[]> | null = null;
 let lastStoreTodayStatsAt = 0;
 const STORE_TODAY_STATS_TTL_MS = 15000;
@@ -31,9 +32,19 @@ export interface DailyUsageMap {
   };
 }
 
+export interface DailyOpenCountMap {
+  [date: string]: {
+    [packageName: string]: number;
+  };
+}
+
 export interface FocusModeDecisions {
   protectedApps: Record<string, boolean>;
   bypassedApps: Record<string, boolean>;
+}
+
+export interface WeeklyUsageInsights {
+  firstOpenCounts: Record<string, number>;
 }
 
 export const ScreenTimeService = {
@@ -119,6 +130,7 @@ export const ScreenTimeService = {
         .then((result: boolean) => {
           lastStoreTodayStatsAt = Date.now();
           storedDailyStatsPromise = null;
+          storedDailyOpenCountsPromise = null;
           return result;
         })
         .catch(() => false)
@@ -144,12 +156,34 @@ export const ScreenTimeService = {
     } catch { return {}; }
   },
 
+  async getStoredDailyOpenCounts(): Promise<DailyOpenCountMap> {
+    if (Platform.OS !== 'android') return {};
+    if (storedDailyOpenCountsPromise) return storedDailyOpenCountsPromise;
+    try {
+      const promise = UsageModule.getStoredDailyOpenCounts()
+        .catch(() => ({} as DailyOpenCountMap));
+      storedDailyOpenCountsPromise = promise;
+      return await promise;
+    } catch { return {}; }
+  },
+
   async getTodayFocusModeDecisions(): Promise<FocusModeDecisions> {
     if (Platform.OS !== 'android') return { protectedApps: {}, bypassedApps: {} };
     try {
       return await UsageModule.getTodayFocusModeDecisions();
     } catch {
       return { protectedApps: {}, bypassedApps: {} };
+    }
+  },
+
+  async getWeeklyUsageInsights(): Promise<WeeklyUsageInsights> {
+    if (Platform.OS !== 'android') {
+      return { firstOpenCounts: {} };
+    }
+    try {
+      return await UsageModule.getWeeklyUsageInsights();
+    } catch {
+      return { firstOpenCounts: {} };
     }
   },
 

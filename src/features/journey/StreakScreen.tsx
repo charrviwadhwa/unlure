@@ -1,7 +1,7 @@
-﻿import React, { useCallback, useEffect, useState } from 'react';
-import { Image, InteractionManager, Platform, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View, useColorScheme } from 'react-native';
+﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Animated, Image, InteractionManager, Platform, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View, useColorScheme } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import { ScreenTimeService, DailyUsageMap, FocusModeDecisions } from '../../services/ScreenTimeService';
+import { ScreenTimeService, DailyUsageMap, FocusModeDecisions, WeeklyUsageInsights } from '../../services/ScreenTimeService';
 import { DailyLimitSnapshots, DailyMoodSnapshots, UserStore } from '../../services/storage';
 import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
 
@@ -10,6 +10,7 @@ type StreakAppRow = {
   name: string;
   minutes: number;
   limitMinutes: number;
+  opens: number;
   iconBase64?: string;
   protectedToday: boolean;
   bypassedToday: boolean;
@@ -22,6 +23,39 @@ const FONT_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Geist-S
 const FONT_MONO = Platform.select({ ios: 'GeistMono-Regular', android: 'GeistMono-Regular', default: 'monospace' });
 const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
 const EMPTY_FOCUS_DECISIONS: FocusModeDecisions = { protectedApps: {}, bypassedApps: {} };
+const EMPTY_WEEKLY_INSIGHTS: WeeklyUsageInsights = { firstOpenCounts: {} };
+
+const AnimatedCount = ({
+  value,
+  style,
+  delay = 0
+}: {
+  value: number;
+  style: any;
+  delay?: number;
+}) => {
+  const animated = useRef(new Animated.Value(0)).current;
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    const listenerId = animated.addListener(({ value: nextValue }) => {
+      setDisplayValue(Math.round(nextValue));
+    });
+    animated.setValue(0);
+    Animated.timing(animated, {
+      toValue: value,
+      duration: 600,
+      delay,
+      useNativeDriver: false
+    }).start();
+
+    return () => {
+      animated.removeListener(listenerId);
+    };
+  }, [animated, delay, value]);
+
+  return <Text style={style}>{displayValue}</Text>;
+};
 
 interface StreakScreenProps {
   active?: boolean;
@@ -43,9 +77,11 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
   const [bestStreak, setBestStreak] = useState(0);
   const [monthCleanDays, setMonthCleanDays] = useState(0);
   const [todayApps, setTodayApps] = useState<StreakAppRow[]>([]);
+  const [appNameMap, setAppNameMap] = useState<Record<string, string>>({});
   const [isExceededToday, setIsExceededToday] = useState(false);
   const [hasActiveLimits, setHasActiveLimits] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [weeklyInsights, setWeeklyInsights] = useState<WeeklyUsageInsights>(EMPTY_WEEKLY_INSIGHTS);
 
   const formatDateKey = (date: Date) => {
     const y = date.getFullYear();
@@ -173,13 +209,15 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
 
   const load = useCallback(async () => {
     await ScreenTimeService.storeTodayStats();
-    const [storedStats, installedApps, limits, limitSnapshots, savedMoods, trackingStartDate] = await Promise.all([
+    const [storedStats, storedOpenCounts, installedApps, limits, limitSnapshots, savedMoods, trackingStartDate, loadedInsights] = await Promise.all([
       ScreenTimeService.getStoredDailyStats(),
+      ScreenTimeService.getStoredDailyOpenCounts(),
       ScreenTimeService.getInstalledApps(),
       UserStore.getAllLimits(),
       UserStore.getDailyLimitSnapshots(),
       UserStore.getDailyMoods(),
-      UserStore.ensureTrackingStartDate()
+      UserStore.ensureTrackingStartDate(),
+      ScreenTimeService.getWeeklyUsageInsights()
     ]);
     const focusDecisions = await ScreenTimeService.getTodayFocusModeDecisions();
 
@@ -187,6 +225,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
       acc[app.packageName] = app.appName;
       return acc;
     }, {});
+    setAppNameMap(nameMap);
     const iconMap = installedApps.reduce<Record<string, string | undefined>>((acc, app) => {
       acc[app.packageName] = app.iconBase64;
       return acc;
@@ -206,6 +245,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
 
     const todayKey = formatDateKey(new Date());
     const todayMap = (storedStats as DailyUsageMap)[todayKey] || {};
+    const todayOpenMap = storedOpenCounts[todayKey] || {};
     const todayMood = resolveMood(todayMap, activeLimits, focusDecisions);
     await UserStore.saveDailyMood(todayKey, todayMood);
     const moodsWithToday = { ...(savedMoods || {}), [todayKey]: todayMood };
@@ -215,6 +255,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
     setStreak(derivedStreak);
     setBestStreak(milestones.best);
     setMonthCleanDays(milestones.monthClean);
+    setWeeklyInsights(loadedInsights);
 
     const rows = Object.keys(activeLimits)
       .filter((pkg) => (activeLimits[pkg] || 0) > 0)
@@ -223,6 +264,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
         name: nameMap[pkg] || labelFromPackage(pkg),
         minutes: Math.floor((todayMap[pkg] || 0) / 60000),
         limitMinutes: activeLimits[pkg] || 0,
+        opens: todayOpenMap[pkg] || 0,
         iconBase64: iconMap[pkg],
         protectedToday: Boolean(focusDecisions.protectedApps[pkg]),
         bypassedToday: Boolean(focusDecisions.bypassedApps[pkg])
@@ -247,6 +289,13 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
     if (h === 0) return `${m}m`;
     return m === 0 ? `${h}h` : `${h}h ${m}m`;
   };
+
+  const firstOpenInsight = (() => {
+    const top = Object.entries(weeklyInsights.firstOpenCounts || {})
+      .sort((a, b) => b[1] - a[1])[0];
+    if (!top || top[1] <= 0) return '';
+    return `This week you started ${top[1]} morning${top[1] === 1 ? '' : 's'} with ${appNameMap[top[0]] || labelFromPackage(top[0])}.`;
+  })();
 
   useEffect(() => {
     if (!active) return;
@@ -277,7 +326,6 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
     ? ['#121418', '#14171A', '#171A16', '#121418']
     : ['#FFFFFF', '#FFFCF6', '#FFFFFF'];
   const heroCardColors = ['#171C24', '#191E24', '#242116'];
-
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
       <LinearGradient colors={screenGradientColors} style={styles.screenGradient}>
@@ -317,8 +365,8 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
             <View style={styles.heroBody}>
               <View style={styles.heroCopy}>
                 <View style={styles.streakNumberWrap}>
-                  <Text style={styles.streakNumberEcho}>{streak}</Text>
-                  <Text style={styles.streakNumber}>{streak}</Text>
+                  <AnimatedCount value={streak} style={styles.streakNumberEcho} />
+                  <AnimatedCount value={streak} style={styles.streakNumber} />
                 </View>
                 <Text style={styles.streakLabel}>{isExceededToday ? 'A limited app crossed its cap' : heroStreakLabel}</Text>
                 <Text style={styles.streakSubLabel}>{streakProgressLabel}</Text>
@@ -334,18 +382,22 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
 
         <View style={styles.trophyStatsRow}>
           <View style={[styles.trophyStat, { borderColor: theme.border }]}>
-            <Text style={[styles.trophyStatValue, { color: theme.text }]}>{streak}</Text>
+            <AnimatedCount value={streak} delay={0} style={[styles.trophyStatValue, { color: theme.text }]} />
             <Text style={[styles.trophyStatLabel, { color: theme.textSecondary }]}>current</Text>
           </View>
           <View style={[styles.trophyStat, { borderColor: theme.border }]}>
-            <Text style={[styles.trophyStatValue, { color: theme.text }]}>{bestStreak}</Text>
+            <AnimatedCount value={bestStreak} delay={100} style={[styles.trophyStatValue, { color: theme.text }]} />
             <Text style={[styles.trophyStatLabel, { color: theme.textSecondary }]}>best ever</Text>
           </View>
           <View style={[styles.trophyStat, { borderColor: theme.border }]}>
-            <Text style={[styles.trophyStatValue, { color: theme.text }]}>{monthCleanDays}</Text>
+            <AnimatedCount value={monthCleanDays} delay={200} style={[styles.trophyStatValue, { color: theme.text }]} />
             <Text style={[styles.trophyStatLabel, { color: theme.textSecondary }]}>this month</Text>
           </View>
         </View>
+
+        {firstOpenInsight ? (
+          <Text style={[styles.behaviorInsight, { color: theme.textSecondary }]}>{firstOpenInsight}</Text>
+        ) : null}
 
         <View style={styles.sectionBlock}>
           <View style={styles.titleRow}>
@@ -393,7 +445,10 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
                             <Text style={styles.appIconFallbackText}>{app.name.charAt(0).toUpperCase()}</Text>
                           </View>
                         )}
-                        <Text style={[styles.appName, { color: theme.text }]} numberOfLines={1}>{app.name}</Text>
+                        <View style={styles.appNameTextWrap}>
+                          <Text style={[styles.appName, { color: theme.text }]} numberOfLines={1}>{app.name}</Text>
+                          <Text style={[styles.appOpenCount, { color: theme.textSecondary }]}>{`opened ${app.opens}x`}</Text>
+                        </View>
                       </View>
                       <View style={styles.appUsageRight}>
                         <Text
@@ -610,6 +665,14 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 30
   },
+  behaviorInsight: {
+    marginTop: -16,
+    marginBottom: 30,
+    fontFamily: FONT_REGULAR,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500'
+  },
   trophyStat: {
     flex: 1,
     minHeight: 66,
@@ -706,9 +769,20 @@ const styles = StyleSheet.create({
     fontWeight: '600'
   },
   appName: {
-    flex: 1,
     color: '#000000',
     fontSize: 15,
+    fontFamily: FONT_REGULAR,
+    fontWeight: '500'
+  },
+  appNameTextWrap: {
+    flex: 1,
+    minWidth: 0
+  },
+  appOpenCount: {
+    marginTop: 2,
+    color: '#8E8E93',
+    fontSize: 11,
+    lineHeight: 14,
     fontFamily: FONT_REGULAR,
     fontWeight: '500'
   },

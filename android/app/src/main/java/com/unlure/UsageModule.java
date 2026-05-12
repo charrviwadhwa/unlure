@@ -46,6 +46,7 @@ import java.io.ByteArrayOutputStream;
 public class UsageModule extends ReactContextBaseJavaModule {
     private static final String PREFS_NAME = "UsageDailyPrefs";
     private static final String PREFS_KEY = "daily_usage_json";
+    private static final String PREFS_OPEN_COUNTS_KEY = "daily_open_counts_json";
     private static final String PREFS_LAST_DATE_KEY = "last_stored_date";
     private static final String PREFS_TODAY_CHECKPOINT_KEY = "today_usage_checkpoint";
     private static final String ICON_PREFS_NAME = "UsageIconCache";
@@ -234,12 +235,17 @@ public void getDailyStats(Promise promise) {
     promise.resolve(array);
 }
 
-    private HashMap<String, Long> queryUsageTotals(UsageStatsManager usm, PackageManager pm, long startTime, long endTime) {
-        return queryUsageTotalsFromEvents(usm, pm, startTime, endTime);
+    private UsageSnapshot queryUsageSnapshot(UsageStatsManager usm, PackageManager pm, long startTime, long endTime) {
+        return queryUsageSnapshotFromEvents(usm, pm, startTime, endTime);
     }
 
-    private HashMap<String, Long> queryUsageTotalsFromEvents(UsageStatsManager usm, PackageManager pm, long startTime, long endTime) {
+    private HashMap<String, Long> queryUsageTotals(UsageStatsManager usm, PackageManager pm, long startTime, long endTime) {
+        return queryUsageSnapshot(usm, pm, startTime, endTime).totals;
+    }
+
+    private UsageSnapshot queryUsageSnapshotFromEvents(UsageStatsManager usm, PackageManager pm, long startTime, long endTime) {
         HashMap<String, Long> totals = new HashMap<>();
+        HashMap<String, Integer> openCounts = new HashMap<>();
         HashMap<String, Long> activeStarts = new HashMap<>();
         HashMap<String, Integer> openActivityCounts = new HashMap<>();
         Set<String> countablePackages = getCountableLaunchablePackages(pm);
@@ -252,7 +258,7 @@ public void getDailyStats(Promise promise) {
         }
 
         UsageEvents usageEvents = usm.queryEvents(startTime, endTime);
-        if (usageEvents == null) return totals;
+        if (usageEvents == null) return new UsageSnapshot(totals, openCounts);
 
         UsageEvents.Event event = new UsageEvents.Event();
         while (usageEvents.hasNextEvent()) {
@@ -267,6 +273,9 @@ public void getDailyStats(Promise promise) {
                 int currentOpen = openActivityCounts.getOrDefault(pkg, 0);
                 if (currentOpen == 0) {
                     activeStarts.put(pkg, eventTime);
+                    if (type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                        openCounts.put(pkg, openCounts.getOrDefault(pkg, 0) + 1);
+                    }
                 }
                 openActivityCounts.put(pkg, currentOpen + 1);
             } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND || type == UsageEvents.Event.ACTIVITY_PAUSED) {
@@ -324,7 +333,17 @@ public void getDailyStats(Promise promise) {
             }
         }
 
-        return totals;
+        return new UsageSnapshot(totals, openCounts);
+    }
+
+    private static class UsageSnapshot {
+        final HashMap<String, Long> totals;
+        final HashMap<String, Integer> openCounts;
+
+        UsageSnapshot(HashMap<String, Long> totals, HashMap<String, Integer> openCounts) {
+            this.totals = totals;
+            this.openCounts = openCounts;
+        }
     }
 
     private HashMap<String, Boolean> getActivePackagesAtStart(UsageStatsManager usm, PackageManager pm, long startTime) {
@@ -412,11 +431,14 @@ public void getDailyStats(Promise promise) {
         String todayKey = sdf.format(startOfToday.getTime());
         SharedPreferences prefs = getReactApplicationContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         String existing = prefs.getString(PREFS_KEY, "{}");
+        String existingOpenCounts = prefs.getString(PREFS_OPEN_COUNTS_KEY, "{}");
         String lastStoredDate = prefs.getString(PREFS_LAST_DATE_KEY, null);
 
         try {
             JSONObject root = new JSONObject(existing);
+            JSONObject openRoot = new JSONObject(existingOpenCounts);
             root = pruneOldDailyStats(root, startOfToday, sdf);
+            openRoot = pruneOldDailyStats(openRoot, startOfToday, sdf);
 
             if (lastStoredDate == null || !lastStoredDate.equals(todayKey)) {
                 Calendar startOfYesterday = (Calendar) startOfToday.clone();
@@ -425,28 +447,43 @@ public void getDailyStats(Promise promise) {
                 long yEnd = startTime;
                 String yesterdayKey = sdf.format(startOfYesterday.getTime());
 
-                HashMap<String, Long> yesterdayTotals = queryUsageTotals(usm, pm, yStart, yEnd);
+                UsageSnapshot yesterdaySnapshot = queryUsageSnapshot(usm, pm, yStart, yEnd);
                 JSONObject yDay = new JSONObject();
-                for (Map.Entry<String, Long> entry : yesterdayTotals.entrySet()) {
+                JSONObject yOpenDay = new JSONObject();
+                for (Map.Entry<String, Long> entry : yesterdaySnapshot.totals.entrySet()) {
                     yDay.put(entry.getKey(), entry.getValue());
                 }
+                for (Map.Entry<String, Integer> entry : yesterdaySnapshot.openCounts.entrySet()) {
+                    yOpenDay.put(entry.getKey(), entry.getValue());
+                }
                 root.put(yesterdayKey, yDay);
+                openRoot.put(yesterdayKey, yOpenDay);
             }
 
             long checkpoint = prefs.getLong(PREFS_TODAY_CHECKPOINT_KEY, startTime);
             boolean canUseCheckpoint = todayKey.equals(lastStoredDate) && checkpoint >= startTime && checkpoint < endTime;
             long queryStart = canUseCheckpoint ? checkpoint : startTime;
-            HashMap<String, Long> todayTotals = queryUsageTotals(usm, pm, queryStart, endTime);
+            UsageSnapshot todaySnapshot = queryUsageSnapshot(usm, pm, queryStart, endTime);
             JSONObject day = canUseCheckpoint && root.has(todayKey)
                 ? root.getJSONObject(todayKey)
                 : new JSONObject();
-            for (Map.Entry<String, Long> entry : todayTotals.entrySet()) {
+            for (Map.Entry<String, Long> entry : todaySnapshot.totals.entrySet()) {
                 long previous = canUseCheckpoint ? day.optLong(entry.getKey(), 0L) : 0L;
                 day.put(entry.getKey(), previous + entry.getValue());
             }
+
+            UsageSnapshot todayOpenSnapshot = canUseCheckpoint
+                ? queryUsageSnapshot(usm, pm, startTime, endTime)
+                : todaySnapshot;
+            JSONObject openDay = new JSONObject();
+            for (Map.Entry<String, Integer> entry : todayOpenSnapshot.openCounts.entrySet()) {
+                openDay.put(entry.getKey(), entry.getValue());
+            }
             root.put(todayKey, day);
+            openRoot.put(todayKey, openDay);
             prefs.edit()
                 .putString(PREFS_KEY, root.toString())
+                .putString(PREFS_OPEN_COUNTS_KEY, openRoot.toString())
                 .putString(PREFS_LAST_DATE_KEY, todayKey)
                 .putLong(PREFS_TODAY_CHECKPOINT_KEY, endTime)
                 .apply();
@@ -473,6 +510,32 @@ public void getDailyStats(Promise promise) {
                 while (appKeys.hasNext()) {
                     String pkg = appKeys.next();
                     dayMap.putDouble(pkg, day.getLong(pkg));
+                }
+                result.putMap(dateKey, dayMap);
+            }
+            promise.resolve(result);
+        } catch (JSONException e) {
+            promise.reject("ERROR", e.getMessage());
+        }
+    }
+
+    @ReactMethod
+    public void getStoredDailyOpenCounts(Promise promise) {
+        SharedPreferences prefs = getReactApplicationContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String existing = prefs.getString(PREFS_OPEN_COUNTS_KEY, "{}");
+        try {
+            JSONObject root = new JSONObject(existing);
+            WritableMap result = Arguments.createMap();
+
+            java.util.Iterator<String> keys = root.keys();
+            while (keys.hasNext()) {
+                String dateKey = keys.next();
+                JSONObject day = root.getJSONObject(dateKey);
+                WritableMap dayMap = Arguments.createMap();
+                java.util.Iterator<String> appKeys = day.keys();
+                while (appKeys.hasNext()) {
+                    String pkg = appKeys.next();
+                    dayMap.putInt(pkg, day.getInt(pkg));
                 }
                 result.putMap(dateKey, dayMap);
             }
@@ -511,6 +574,56 @@ public void getDailyStats(Promise promise) {
         result.putMap("protectedApps", protectedApps);
         result.putMap("bypassedApps", bypassedApps);
         promise.resolve(result);
+    }
+
+    @ReactMethod
+    public void getWeeklyUsageInsights(Promise promise) {
+        try {
+            UsageStatsManager usm = (UsageStatsManager) getReactApplicationContext().getSystemService(Context.USAGE_STATS_SERVICE);
+            PackageManager pm = getReactApplicationContext().getPackageManager();
+            Set<String> countablePackages = getCountableLaunchablePackages(pm);
+            Calendar today = Calendar.getInstance();
+            today.set(Calendar.HOUR_OF_DAY, 0);
+            today.set(Calendar.MINUTE, 0);
+            today.set(Calendar.SECOND, 0);
+            today.set(Calendar.MILLISECOND, 0);
+
+            HashMap<String, Integer> firstOpenCounts = new HashMap<>();
+
+            for (int i = 6; i >= 0; i--) {
+                Calendar day = (Calendar) today.clone();
+                day.add(Calendar.DATE, -i);
+                long dayStart = day.getTimeInMillis();
+                Calendar dayEndCal = (Calendar) day.clone();
+                dayEndCal.add(Calendar.DATE, 1);
+                long dayEnd = Math.min(dayEndCal.getTimeInMillis(), System.currentTimeMillis());
+
+                UsageEvents firstEvents = usm.queryEvents(dayStart, dayEnd);
+                if (firstEvents != null) {
+                    UsageEvents.Event event = new UsageEvents.Event();
+                    while (firstEvents.hasNextEvent()) {
+                        firstEvents.getNextEvent(event);
+                        String pkg = event.getPackageName();
+                        if (pkg == null || !countablePackages.contains(pkg)) continue;
+                        if (event.getEventType() == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                            firstOpenCounts.put(pkg, firstOpenCounts.getOrDefault(pkg, 0) + 1);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            WritableMap firstOpenMap = Arguments.createMap();
+            for (Map.Entry<String, Integer> entry : firstOpenCounts.entrySet()) {
+                firstOpenMap.putInt(entry.getKey(), entry.getValue());
+            }
+
+            WritableMap result = Arguments.createMap();
+            result.putMap("firstOpenCounts", firstOpenMap);
+            promise.resolve(result);
+        } catch (Exception e) {
+            promise.reject("ERROR", e.getMessage());
+        }
     }
 
     @ReactMethod

@@ -7,6 +7,8 @@ import {
   ScrollView,
   RefreshControl,
   TouchableOpacity,
+  Pressable,
+  Modal,
   Dimensions,
   Platform,
   StatusBar,
@@ -172,6 +174,7 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
   const [monthDate, setMonthDate] = useState(new Date());
   const [periodMode, setPeriodMode] = useState<PeriodMode>('month');
   const [calendarData, setCalendarData] = useState<CalendarItem[]>([]);
+  const [selectedDay, setSelectedDay] = useState<CalendarItem | null>(null);
   const [statsCache, setStatsCache] = useState<DailyUsageMap>({});
   const [limitsCache, setLimitsCache] = useState<Record<string, number>>({});
   const [limitSnapshotsCache, setLimitSnapshotsCache] = useState<DailyLimitSnapshots>({});
@@ -520,6 +523,29 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
     return `${day}: ${labelFromPackage(slip.appName)} went ${formatTime(slip.overBy)} over.`;
   }, [calendarData, getLimitsForDate, limitSnapshotsCache, limitsCache, statsCache]);
 
+  const selectedDayTitle = selectedDay?.dateKey
+    ? new Date(`${selectedDay.dateKey}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+    : '';
+
+  const selectedDayApps = useMemo(() => {
+    if (!selectedDay?.dateKey) return [];
+    const dayMap = statsCache[selectedDay.dateKey] || {};
+    return Object.entries(dayMap)
+      .map(([pkg, ms]) => ({
+        id: pkg,
+        name: labelFromPackage(pkg),
+        minutes: Math.floor(ms / 60000),
+        limit: getLimitsForDate(selectedDay.dateKey || '', limitSnapshotsCache, limitsCache)[pkg] || 0
+      }))
+      .filter((app) => app.minutes > 0)
+      .sort((a, b) => b.minutes - a.minutes)
+      .slice(0, 8);
+  }, [getLimitsForDate, limitSnapshotsCache, limitsCache, selectedDay, statsCache]);
+
+  const selectedDayUnderLimit = selectedDayApps
+    .filter((app) => app.limit > 0)
+    .every((app) => app.minutes < app.limit);
+
   const handlePeriodModeChange = (mode: PeriodMode) => {
     if (mode === periodMode) return;
     setPeriodMode(mode);
@@ -619,8 +645,9 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
               {calendarData.map((item, index) => {
                 const isFaint = !item.isCurrentMonth;
                 return (
-                  <View
+                  <Pressable
                     key={`${item.date}-${index}`}
+                    onPress={() => item.dateKey && item.isCurrentMonth && setSelectedDay(item)}
                     style={[
                       styles.cellPill,
                       { backgroundColor: theme.panel, borderColor: theme.border },
@@ -649,7 +676,7 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
                       {item.date}
                     </Text>
                     <MoodFace type={item.mood} />
-                  </View>
+                  </Pressable>
                 );
               })}
             </View>
@@ -685,6 +712,33 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
         </View>
         </ScrollView>
       </LinearGradient>
+      <Modal visible={Boolean(selectedDay)} transparent statusBarTranslucent animationType="fade" onRequestClose={() => setSelectedDay(null)}>
+        <View style={styles.dayModalRoot}>
+          <Pressable style={styles.dayModalBackdrop} onPress={() => setSelectedDay(null)} />
+          <View style={[styles.daySheet, { backgroundColor: isDark ? '#171C24' : '#FFFFFF' }]}>
+            <View style={styles.daySheetHandle} />
+            <Text style={[styles.daySheetTitle, { color: theme.text }]}>{selectedDayTitle}</Text>
+            <View style={[styles.daySheetRule, { backgroundColor: theme.border }]} />
+            <Text style={[styles.daySheetStatus, { color: theme.text }]}>
+              {selectedDayApps.length === 0
+                ? 'No app usage that day'
+                : selectedDayUnderLimit
+                  ? ':) Under limit all day'
+                  : ':| A limit was crossed'}
+            </Text>
+            <View style={styles.daySheetApps}>
+              {selectedDayApps.map((app) => (
+                <View key={app.id} style={styles.daySheetAppRow}>
+                  <Text style={[styles.daySheetAppName, { color: theme.subtext }]} numberOfLines={1}>{app.name}</Text>
+                  <Text style={[styles.daySheetAppUsage, { color: theme.text }]}>
+                    {app.limit > 0 ? `${formatTime(app.minutes)} / ${formatTime(app.limit)}` : formatTime(app.minutes)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -967,6 +1021,70 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.textSecondary,
     fontFamily: FONT_SANS,
+    fontWeight: '500'
+  },
+  dayModalRoot: {
+    flex: 1,
+    justifyContent: 'flex-end'
+  },
+  dayModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)'
+  },
+  daySheet: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 22,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'android' ? 24 : 30
+  },
+  daySheetHandle: {
+    width: 42,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#D2D3D9',
+    alignSelf: 'center',
+    marginBottom: 12
+  },
+  daySheetTitle: {
+    fontSize: 18,
+    lineHeight: 23,
+    fontFamily: FONT_SANS_SEMIBOLD,
+    fontWeight: '600'
+  },
+  daySheetRule: {
+    height: 1,
+    marginTop: 12,
+    marginBottom: 13
+  },
+  daySheetStatus: {
+    fontSize: 15,
+    lineHeight: 20,
+    fontFamily: FONT_SANS,
+    fontWeight: '600',
+    marginBottom: 10
+  },
+  daySheetApps: {
+    gap: 7
+  },
+  daySheetAppRow: {
+    minHeight: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  daySheetAppName: {
+    flex: 1,
+    marginRight: 12,
+    fontSize: 14,
+    lineHeight: 19,
+    fontFamily: FONT_SANS,
+    fontWeight: '500'
+  },
+  daySheetAppUsage: {
+    fontSize: 14,
+    lineHeight: 19,
+    fontFamily: FONT_MONO,
     fontWeight: '500'
   },
 });

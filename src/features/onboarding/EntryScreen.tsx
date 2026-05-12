@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
-import { Animated, Dimensions, Image, PanResponder, Platform, SafeAreaView, StyleSheet, Text, View } from 'react-native';
-import type { DimensionValue } from 'react-native';
-import Svg, { Circle, Path, Polygon } from 'react-native-svg';
+import { Animated, Dimensions, PanResponder, Platform, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Path, Stop } from 'react-native-svg';
+import LinearGradient from 'react-native-linear-gradient';
 
 interface EntryScreenProps {
   onAnimationComplete: () => void;
@@ -10,100 +10,121 @@ interface EntryScreenProps {
 const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
 const FONT_SANS = Platform.select({ ios: 'Geist-Regular', android: 'Geist-Regular', default: 'System' });
 const FONT_SANS_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Geist-SemiBold', default: 'System' });
+const FONT_MONO = Platform.select({ ios: 'GeistMono-Regular', android: 'GeistMono-Regular', default: 'monospace' });
 const { width } = Dimensions.get('window');
-const SWIPE_WIDTH = Math.min(width - 44, 344);
-const KNOB_SIZE = 52;
+const SWIPE_WIDTH = Math.min(width - 68, 316);
+const KNOB_SIZE = 56;
 const SWIPE_MAX = SWIPE_WIDTH - KNOB_SIZE - 8;
-type Ornament = {
-  top: DimensionValue;
-  left?: DimensionValue;
-  right?: DimensionValue;
-  size: number;
-  opacity: number;
-  rotate?: string;
-};
 
-const STARS: Ornament[] = [
-  { top: '44%', left: '13%', size: 15, opacity: 0.42, rotate: '12deg' },
-  { top: '42%', right: '10%', size: 15, opacity: 0.42, rotate: '-8deg' },
-  { top: '61%', left: '24%', size: 11, opacity: 0.34, rotate: '18deg' },
-  { top: '66%', right: '20%', size: 12, opacity: 0.32, rotate: '-16deg' }
-];
-const DOTS: Ornament[] = [
-  { top: '31%', left: '52%', size: 4, opacity: 0.4 },
-  { top: '48%', left: '14%', size: 8, opacity: 0.58 },
-  { top: '52%', right: '14%', size: 6, opacity: 0.56 },
-  { top: '72%', left: '42%', size: 4, opacity: 0.34 }
-];
-
-const StarIcon = ({ size, color = '#FFFFFF', fill = color }: { size: number; color?: string; fill?: string }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24">
-    <Polygon
-      points="12 2 14.9 8.5 22 9.2 16.7 13.9 18.2 21 12 17.4 5.8 21 7.3 13.9 2 9.2 9.1 8.5 12 2"
-      fill={fill}
-      stroke={color}
-      strokeWidth={1.4}
-      strokeLinejoin="round"
-    />
+const PauseIcon = () => (
+  <Svg width={28} height={28} viewBox="0 0 24 24">
+    <Path d="M9 7v10M15 7v10" stroke="#A991FF" strokeWidth={2.2} strokeLinecap="round" />
   </Svg>
 );
 
-const SparkleIcon = ({ size, color }: { size: number; color: string }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24">
-    <Path d="M12 2l1.9 6.1L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.9L12 2z" fill="none" stroke={color} strokeWidth={2.2} strokeLinejoin="round" />
-    <Circle cx={18.5} cy={17.5} r={1.7} fill={color} />
-    <Circle cx={5.5} cy={18.5} r={1.2} fill={color} />
+const ChartIcon = () => (
+  <Svg width={28} height={28} viewBox="0 0 24 24">
+    <Path d="M5 19V11M12 19V6M19 19V3" stroke="#A991FF" strokeWidth={2.2} strokeLinecap="round" />
+    <Path d="M5 19h14" stroke="#6656B8" strokeWidth={1.4} strokeLinecap="round" opacity={0.5} />
   </Svg>
 );
 
-const FireIcon = ({ size, color }: { size: number; color: string }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24">
-    <Path
-      d="M13.4 2.8c.5 3.2-.8 4.9-2.2 6.4-1.2 1.3-2.4 2.5-2 4.7.6-1.1 1.5-1.9 2.7-2.5 3.4 2.2 4.6 4.8 3.2 7.1-.7 1.2-1.9 2-3.4 2-3.3 0-5.7-2.4-5.7-5.9 0-3 1.7-5.3 3.6-7.2 1.7-1.6 2.9-2.8 3.8-4.6z"
-      fill={color}
-    />
-    <Path
-      d="M15.4 7.3c2.1 1.5 3.6 3.9 3.6 6.8 0 3.9-2.8 6.9-6.9 6.9 2.8-1.1 4.4-3.2 4.4-5.7 0-1.7-.6-3.3-1.8-4.8.8-.8 1.1-1.9.7-3.2z"
-      fill={color}
-      opacity={0.74}
-    />
+const LeafIcon = () => (
+  <Svg width={28} height={28} viewBox="0 0 24 24">
+    <Path d="M5 19c7.6-.5 12.8-5.7 14-14-8.7.4-14 5.6-14 14z" fill="none" stroke="#A991FF" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M5 19 14 10" stroke="#A991FF" strokeWidth={1.7} strokeLinecap="round" />
   </Svg>
 );
 
-const ArrowRightIcon = ({ size, color }: { size: number; color: string }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24">
-    <Path d="M4 12h14" stroke={color} strokeWidth={3} strokeLinecap="round" />
-    <Path d="M13 6l6 6-6 6" stroke={color} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+const ArrowIcon = ({ color = '#FFFFFF' }: { color?: string }) => (
+  <Svg width={26} height={26} viewBox="0 0 24 24">
+    <Path d="M5 12h13M13 6l6 6-6 6" stroke={color} strokeWidth={2.8} strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
 );
 
-const ChevronsRightIcon = ({ size, color }: { size: number; color: string }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24">
-    <Path d="M7 6l6 6-6 6" stroke={color} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M13 6l6 6-6 6" stroke={color} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
+const WaveArt = () => (
+  <View style={styles.waveWrap} pointerEvents="none">
+    <View style={styles.waveGlow} />
+    <Svg width="130%" height={220} viewBox="0 0 460 220">
+      <Defs>
+        <SvgLinearGradient id="wave" x1="0" y1="0" x2="1" y2="0">
+          <Stop offset="0" stopColor="#4C6DFF" stopOpacity="0.05" />
+          <Stop offset="0.46" stopColor="#9B8CFF" stopOpacity="0.92" />
+          <Stop offset="1" stopColor="#6C7CFF" stopOpacity="0.1" />
+        </SvgLinearGradient>
+        <SvgLinearGradient id="dot" x1="0" y1="0" x2="1" y2="1">
+          <Stop offset="0" stopColor="#AFA4FF" stopOpacity="0.7" />
+          <Stop offset="1" stopColor="#6074FF" stopOpacity="0.15" />
+        </SvgLinearGradient>
+      </Defs>
+      {Array.from({ length: 22 }).map((_, index) => {
+        const offset = index * 4.3;
+        const opacity = 0.08 + index * 0.018;
+        return (
+          <Path
+            key={index}
+            d={`M-12 ${112 - offset} C 80 ${40 + offset}, 144 ${42 + offset}, 230 ${110} C 316 ${178 - offset}, 380 ${180 - offset}, 472 ${108 + offset}`}
+            fill="none"
+            stroke="url(#wave)"
+            strokeWidth={index === 11 ? 2.2 : 1}
+            opacity={Math.min(opacity, 0.55)}
+          />
+        );
+      })}
+      {Array.from({ length: 28 }).map((_, index) => (
+        <Circle
+          key={`dot-${index}`}
+          cx={40 + ((index * 37) % 380)}
+          cy={68 + ((index * 31) % 94)}
+          r={index % 4 === 0 ? 1.5 : 1}
+          fill="url(#dot)"
+          opacity={0.32}
+        />
+      ))}
+    </Svg>
+  </View>
 );
 
+const FeatureRow = ({
+  icon,
+  title,
+  copy
+}: {
+  icon: React.ReactNode;
+  title: string;
+  copy: string;
+}) => (
+  <View style={styles.featureRow}>
+    <View style={styles.featureIcon}>{icon}</View>
+    <View style={styles.featureTextWrap}>
+      <Text style={styles.featureTitle}>{title}</Text>
+      <Text style={styles.featureCopy}>{copy}</Text>
+    </View>
+  </View>
+);
 
 const EntryScreen: React.FC<EntryScreenProps> = ({ onAnimationComplete }) => {
   const swipeX = useRef(new Animated.Value(0)).current;
-  const swipeTextColor = swipeX.interpolate({
+  const swipeTextOpacity = swipeX.interpolate({
     inputRange: [0, SWIPE_MAX * 0.55, SWIPE_MAX],
-    outputRange: ['#111111', '#7D7D84', '#D7D7DC']
+    outputRange: [1, 0.38, 0]
+  });
+  const fillWidth = swipeX.interpolate({
+    inputRange: [0, SWIPE_MAX],
+    outputRange: [KNOB_SIZE + 8, SWIPE_WIDTH]
   });
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dx) > 8 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
       onPanResponderMove: (_, gesture) => {
-        const nextValue = Math.max(0, Math.min(gesture.dx, SWIPE_MAX));
-        swipeX.setValue(nextValue);
+        swipeX.setValue(Math.max(0, Math.min(gesture.dx, SWIPE_MAX)));
       },
       onPanResponderRelease: (_, gesture) => {
         if (gesture.dx > SWIPE_MAX * 0.68) {
           Animated.timing(swipeX, {
             toValue: SWIPE_MAX,
-            duration: 160,
-            useNativeDriver: true
+            duration: 170,
+            useNativeDriver: false
           }).start(onAnimationComplete);
           return;
         }
@@ -111,8 +132,8 @@ const EntryScreen: React.FC<EntryScreenProps> = ({ onAnimationComplete }) => {
         Animated.spring(swipeX, {
           toValue: 0,
           tension: 95,
-          friction: 10,
-          useNativeDriver: true
+          friction: 11,
+          useNativeDriver: false
         }).start();
       }
     })
@@ -121,77 +142,42 @@ const EntryScreen: React.FC<EntryScreenProps> = ({ onAnimationComplete }) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.screen}>
-        <View style={styles.glowOne} />
-        <View style={styles.glowTwo} />
-        <View style={styles.lineShape} />
-        <View style={styles.lineShapeTwo} />
-        <View style={styles.lineShapeThree} />
-        {STARS.map((star, index) => (
-          <View
-            key={`star-${index}`}
-            style={[
-              styles.star,
-              {
-                width: star.size,
-                height: star.size,
-                top: star.top,
-                left: star.left,
-                right: star.right,
-                opacity: star.opacity,
-                transform: [{ rotate: star.rotate ?? '0deg' }]
-              }
-            ]}
-          >
-            <StarIcon size={star.size} />
-          </View>
-        ))}
-        {DOTS.map((dot, index) => (
-          <View
-            key={`dot-${index}`}
-            style={[
-              styles.dot,
-              {
-                top: dot.top,
-                left: dot.left,
-                right: dot.right,
-                width: dot.size,
-                height: dot.size,
-                borderRadius: dot.size / 2,
-                opacity: dot.opacity
-              }
-            ]}
-          />
-        ))}
-        <View style={styles.heroCopy}>
+        <View style={styles.topGlow} />
+        <View style={styles.bottomGlow} />
+
+        <View style={styles.hero}>
           <Text style={styles.wordmark}>unlure</Text>
-          <Text style={styles.headline}>Turn noisy apps into quiet choices.</Text>
-          <Text style={styles.subtitle}>Set calm limits, protect your streaks, and see your screen time clearly.</Text>
-          <View style={styles.promiseRow}>
-            <View style={styles.promisePill}>
-              <SparkleIcon size={14} color="#B9FFA6" />
-              <Text style={styles.promiseText}>gentle limits</Text>
-            </View>
-            <View style={styles.promisePill}>
-              <FireIcon size={14} color="#D1C9FF" />
-              <Text style={styles.promiseText}>daily streaks</Text>
-            </View>
-          </View>
+          <Text style={styles.tagline}>Real awareness.{'\n'}Lasting change.</Text>
         </View>
 
-        <View style={styles.illustrationWrap}>
-          <Image source={require('../../assets/share-paper-plane.png')} style={styles.illustration} resizeMode="contain" />
+        <WaveArt />
+
+        <View style={styles.features}>
+          <FeatureRow
+            icon={<PauseIcon />}
+            title="Pause with purpose"
+            copy="Break autopilot with mindful pauses that create clarity."
+          />
+          <FeatureRow
+            icon={<ChartIcon />}
+            title="See the full picture"
+            copy="Understand your digital habits with depth and honesty."
+          />
+          <FeatureRow
+            icon={<LeafIcon />}
+            title="Design a life on purpose"
+            copy="Small shifts. Consistent choices. A better you."
+          />
         </View>
 
         <View style={styles.swipeTrack}>
-          <Animated.Text style={[styles.swipeText, { color: swipeTextColor }]}>Swipe to get started</Animated.Text>
-          <View style={styles.swipeEndArrow}>
-            <ChevronsRightIcon size={28} color="#111111" />
-          </View>
+          <Animated.View style={[styles.swipeFill, { width: fillWidth }]} />
+          <Animated.Text style={[styles.swipeText, { opacity: swipeTextOpacity }]}>Swipe to continue</Animated.Text>
           <Animated.View
             {...panResponder.panHandlers}
             style={[styles.swipeKnob, { transform: [{ translateX: swipeX }] }]}
           >
-            <ArrowRightIcon size={28} color="#111111" />
+            <ArrowIcon />
           </Animated.View>
         </View>
       </View>
@@ -202,139 +188,107 @@ const EntryScreen: React.FC<EntryScreenProps> = ({ onAnimationComplete }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#050506'
+    backgroundColor: '#070A10'
   },
   screen: {
     flex: 1,
-    backgroundColor: '#050506',
-    paddingHorizontal: 28,
-    paddingTop: 76,
+    backgroundColor: '#070A10',
+    paddingHorizontal: 34,
+    paddingTop: 84,
     paddingBottom: 34,
     overflow: 'hidden'
   },
-  glowOne: {
+  topGlow: {
     position: 'absolute',
-    top: 74,
-    right: -106,
-    width: 218,
-    height: 218,
-    borderRadius: 109,
-    backgroundColor: 'rgba(134,216,238,0.08)'
+    top: -90,
+    left: -70,
+    right: -70,
+    height: 260,
+    backgroundColor: 'rgba(73, 104, 255, 0.075)',
+    borderBottomLeftRadius: 180,
+    borderBottomRightRadius: 180
   },
-  glowTwo: {
+  bottomGlow: {
     position: 'absolute',
-    bottom: 126,
-    left: -118,
-    width: 226,
-    height: 226,
-    borderRadius: 113,
-    backgroundColor: 'rgba(209,201,255,0.07)'
+    bottom: -120,
+    left: -60,
+    right: -60,
+    height: 260,
+    backgroundColor: 'rgba(132, 109, 255, 0.07)',
+    borderTopLeftRadius: 180,
+    borderTopRightRadius: 180
   },
-  lineShape: {
-    position: 'absolute',
-    top: 92,
-    left: -54,
-    width: 210,
-    height: 96,
-    borderRadius: 64,
-    borderWidth: 1.2,
-    borderColor: 'rgba(255,255,255,0.1)',
-    transform: [{ rotate: '-14deg' }]
-  },
-  lineShapeTwo: {
-    position: 'absolute',
-    top: 292,
-    right: -118,
-    width: 214,
-    height: 78,
-    borderRadius: 54,
-    borderWidth: 1,
-    borderColor: 'rgba(185,255,166,0.08)',
-    transform: [{ rotate: '18deg' }]
-  },
-  lineShapeThree: {
-    position: 'absolute',
-    bottom: 224,
-    left: 44,
-    width: 230,
-    height: 76,
-    borderRadius: 52,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.055)',
-    transform: [{ rotate: '-24deg' }]
-  },
-  star: {
-    position: 'absolute',
-    zIndex: 1
-  },
-  dot: {
-    position: 'absolute',
-    zIndex: 1,
-    backgroundColor: '#FFFFFF'
-  },
-  heroCopy: {
-    zIndex: 2,
-    maxWidth: 320
+  hero: {
+    alignItems: 'center',
+    zIndex: 2
   },
   wordmark: {
-    color: '#FFFFFF',
-    fontSize: 52,
+    color: '#DAD0FF',
+    fontSize: 54,
     lineHeight: 66,
     fontFamily: FONT_SCRIPT,
     fontWeight: '600',
-    letterSpacing: 0,
-    marginBottom: 10
+    letterSpacing: 0
   },
-  headline: {
-    maxWidth: 312,
-    color: '#FFFFFF',
-    fontSize: 23,
-    lineHeight: 30,
-    fontFamily: FONT_SANS_SEMIBOLD,
-    fontWeight: '600',
-    marginBottom: 8
-  },
-  subtitle: {
-    maxWidth: 302,
-    color: 'rgba(255,255,255,0.68)',
-    fontSize: 15,
+  tagline: {
+    marginTop: 8,
+    color: 'rgba(226, 229, 242, 0.68)',
+    fontSize: 16,
     lineHeight: 22,
+    textAlign: 'center',
     fontFamily: FONT_SANS,
     fontWeight: '500'
   },
-  promiseRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 18
-  },
-  promisePill: {
-    minHeight: 34,
-    borderRadius: 17,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
+  waveWrap: {
+    height: 234,
     alignItems: 'center',
-    gap: 7,
-    backgroundColor: 'rgba(255,255,255,0.065)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)'
-  },
-  promiseText: {
-    color: 'rgba(255,255,255,0.78)',
-    fontSize: 12,
-    fontFamily: FONT_SANS,
-    fontWeight: '500',
-    includeFontPadding: false
-  },
-  illustrationWrap: {
-    flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 12,
-    marginBottom: 24
+    marginHorizontal: -90,
+    marginTop: 24,
+    marginBottom: 10
   },
-  illustration: {
-    width: '111%',
-    height: '92%'
+  waveGlow: {
+    position: 'absolute',
+    width: 190,
+    height: 90,
+    borderRadius: 95,
+    backgroundColor: 'rgba(145, 125, 255, 0.2)'
+  },
+  features: {
+    gap: 24,
+    marginTop: 2,
+    marginBottom: 28
+  },
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  featureIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14
+  },
+  featureTextWrap: {
+    flex: 1,
+    minWidth: 0
+  },
+  featureTitle: {
+    color: '#F2F3FA',
+    fontSize: 14,
+    lineHeight: 18,
+    fontFamily: FONT_SANS_SEMIBOLD,
+    fontWeight: '600'
+  },
+  featureCopy: {
+    marginTop: 3,
+    color: 'rgba(226, 229, 242, 0.58)',
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: FONT_SANS,
+    fontWeight: '500'
   },
   swipeTrack: {
     width: SWIPE_WIDTH,
@@ -342,30 +296,41 @@ const styles = StyleSheet.create({
     borderRadius: 33,
     alignSelf: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
     overflow: 'hidden'
   },
+  swipeFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    borderRadius: 33,
+    backgroundColor: '#7E6AF2'
+  },
   swipeText: {
-    color: '#111111',
-    fontSize: 17,
+    color: '#FFFFFF',
+    fontSize: 16,
     fontFamily: FONT_SANS_SEMIBOLD,
     fontWeight: '600',
     textAlign: 'center',
     includeFontPadding: false
   },
-  swipeEndArrow: {
-    position: 'absolute',
-    right: 25
-  },
   swipeKnob: {
     position: 'absolute',
-    left: 7,
+    left: 4,
     width: KNOB_SIZE,
     height: KNOB_SIZE,
-    borderRadius: 26,
+    borderRadius: KNOB_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#B9FFA6'
+    backgroundColor: '#6F5DE5',
+    shadowColor: '#7E6AF2',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    elevation: 8
   }
 });
 
