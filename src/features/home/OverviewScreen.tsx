@@ -971,7 +971,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
               ]}>
                 {dayChartCategories.length === 0 ? (
                   <View style={styles.quietDayState}>
-                    <Text style={[styles.quietDayTitle, { color: ui.text }]}>The day is quiet.</Text>
+                    <Text style={[styles.quietDayTitle, { color: ui.textSecondary }]}>"The day is quiet." </Text>
                     <Text style={[styles.quietDayCaption, { color: ui.textSecondary }]}>No tracked app time yet.</Text>
                   </View>
                 ) : dayChartCategories.map((category) => (
@@ -1038,7 +1038,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                 })}
                 {visibleTodayApps.length === 0 ? (
                   <View style={styles.iosEmpty}>
-                    <Text style={[styles.emptySerif, { color: ui.text }]}>Quiet choices compound.</Text>
+                    <Text style={[styles.emptySerif, { color: ui.text }]}>No apps tracked today.</Text>
                     <Text style={[styles.emptyHint, { color: ui.textSecondary }]}>Your timeline will appear when there is something to count.</Text>
                   </View>
                 ) : null}
@@ -1165,11 +1165,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#F2F2F7',
     borderRadius: 22,
+    borderWidth: 1,
     paddingHorizontal: 6,
     paddingVertical: 6,
     position: 'relative',
     width: 150,
-    height: 44
+    height: 44,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1
   },
   toggleButton: {
     width: 69,
@@ -1591,10 +1597,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24
   },
   quietDayTitle: {
-    fontFamily: FONT_SANS_SEMIBOLD,
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: '600',
+    fontFamily: FONT_SANS,
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: '400',
+    fontStyle: 'italic',
     textAlign: 'center',
     letterSpacing: 0
   },

@@ -15,6 +15,7 @@ const hourData = Array.from({ length: 13 }, (_, i) => String(i));
 const minuteData = Array.from({ length: 60 }, (_, i) => String(i));
 const FONT_SANS = Platform.select({ ios: 'Geist-Regular', android: 'Geist-Regular', default: 'System' });
 const FONT_SANS_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Geist-SemiBold', default: 'System' });
+const DATA_MINT = '#39D98A';
 
 export const TimeLimitModal = ({ visible, appName, iconBase64, initialMinutes = 30, onConfirm, onCancel }: TimeLimitModalProps) => {
   const isDark = useColorScheme() === 'dark';
@@ -108,14 +109,14 @@ export const TimeLimitModal = ({ visible, appName, iconBase64, initialMinutes = 
               <Text style={[styles.cancelText, { color: theme.textSecondary }]}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity 
-              style={[styles.confirmButton, isDark && { backgroundColor: '#FFFFFF' }]} 
+              style={styles.confirmButton} 
               onPress={() => {
                 settle();
                 const totalMinutes = (parseInt(hours, 10) * 60) + parseInt(minutes, 10);
                 onConfirm(totalMinutes);
                 }}
             >
-              <Text style={[styles.confirmText, isDark && { color: '#101319' }]}>Confirm</Text>
+              <Text style={styles.confirmText}>Confirm</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -181,13 +182,17 @@ const styles = StyleSheet.create({
   },
   cancelText: { color: '#666', fontSize: 16, fontFamily: FONT_SANS, fontWeight: '500' },
   confirmButton: {
-    flex: 1,
-    minHeight: 54,
-    backgroundColor: '#1C1C1E',
+    flex: 1.18,
+    minHeight: 58,
+    backgroundColor: DATA_MINT,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 18,
-    elevation: 3
+    borderRadius: 20,
+    shadowColor: DATA_MINT,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.26,
+    shadowRadius: 18,
+    elevation: 5
   },
-  confirmText: { color: '#FFF', fontFamily: FONT_SANS_SEMIBOLD, fontWeight: '600', fontSize: 16 }
+  confirmText: { color: '#101319', fontFamily: FONT_SANS_SEMIBOLD, fontWeight: '700', fontSize: 16 }
 });

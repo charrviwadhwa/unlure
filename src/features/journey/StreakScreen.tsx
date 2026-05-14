@@ -314,14 +314,24 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
     }
   }, [load]);
 
-  const heroStreakLabel = !hasActiveLimits ? 'Set a limit to start' : streak === 1 ? 'Day on fire' : 'Days on fire';
+  const heroStreakLabel = !hasActiveLimits
+    ? 'Set a limit to start'
+    : isExceededToday
+      ? 'A limited app crossed its cap'
+      : streak <= 0
+        ? 'Momentum starts today.'
+        : streak === 1
+          ? 'Momentum started.'
+          : 'Your streak is alive.';
   const streakProgressLabel = !hasActiveLimits
     ? 'No streak is counted until a limit is active'
     : isExceededToday
       ? 'Bring today back under limit'
       : streak > 0
-        ? `${streak} clean day${streak === 1 ? '' : 's'} in a row`
-        : 'Start with one clean day';
+        ? streak === 1
+          ? 'One focused day. Keep protecting it.'
+          : 'Discipline compounds daily.'
+        : 'Choose one app limit and protect today.';
   const screenGradientColors = isDark
     ? ['#121418', '#14171A', '#171A16', '#121418']
     : ['#FFFFFF', '#FFFCF6', '#FFFFFF'];
@@ -368,7 +378,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
                   <AnimatedCount value={streak} style={styles.streakNumberEcho} />
                   <AnimatedCount value={streak} style={styles.streakNumber} />
                 </View>
-                <Text style={styles.streakLabel}>{isExceededToday ? 'A limited app crossed its cap' : heroStreakLabel}</Text>
+                <Text style={styles.streakLabel}>{heroStreakLabel}</Text>
                 <Text style={styles.streakSubLabel}>{streakProgressLabel}</Text>
               </View>
               <Image
@@ -380,20 +390,30 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
           </LinearGradient>
         </View>
 
-        <View style={styles.trophyStatsRow}>
-          <View style={[styles.trophyStat, { borderColor: theme.border }]}>
-            <AnimatedCount value={streak} delay={0} style={[styles.trophyStatValue, { color: theme.text }]} />
-            <Text style={[styles.trophyStatLabel, { color: theme.textSecondary }]}>current</Text>
-          </View>
-          <View style={[styles.trophyStat, { borderColor: theme.border }]}>
-            <AnimatedCount value={bestStreak} delay={100} style={[styles.trophyStatValue, { color: theme.text }]} />
-            <Text style={[styles.trophyStatLabel, { color: theme.textSecondary }]}>best ever</Text>
-          </View>
-          <View style={[styles.trophyStat, { borderColor: theme.border }]}>
-            <AnimatedCount value={monthCleanDays} delay={200} style={[styles.trophyStatValue, { color: theme.text }]} />
-            <Text style={[styles.trophyStatLabel, { color: theme.textSecondary }]}>this month</Text>
-          </View>
-        </View>
+        <LinearGradient
+          colors={isDark ? ['#171C24', '#151A20'] : ['#171C24', '#202327']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.trophyStatsRow}
+        >
+          {[
+            { label: 'Current Streak', value: streak, unit: 'days', delay: 0, accent: '#7ACB67' },
+            { label: 'Best Streak', value: bestStreak, unit: 'days', delay: 100, accent: '#E4A62A' },
+            { label: 'Clean Days', value: monthCleanDays, unit: 'this month', delay: 200, accent: '#6EA8FF' }
+          ].map((item, index) => (
+            <View
+              key={item.label}
+              style={[styles.trophyStat, index > 0 && styles.trophyStatDivider]}
+            >
+              <View style={styles.trophyStatLabelRow}>
+                <View style={[styles.trophyAccent, { backgroundColor: item.accent }]} />
+                <Text style={styles.trophyStatLabel}>{item.label}</Text>
+              </View>
+              <AnimatedCount value={item.value} delay={item.delay} style={[styles.trophyStatValue, { color: theme.text }]} />
+              <Text style={styles.trophyStatUnit}>{item.unit}</Text>
+            </View>
+          ))}
+        </LinearGradient>
 
         {firstOpenInsight ? (
           <Text style={[styles.behaviorInsight, { color: theme.textSecondary }]}>{firstOpenInsight}</Text>
@@ -661,8 +681,18 @@ const styles = StyleSheet.create({
   },
   trophyStatsRow: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 30
+    marginTop: -2,
+    marginBottom: 22,
+    minHeight: 58,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.065,
+    shadowRadius: 20,
+    elevation: 3
   },
   behaviorInsight: {
     marginTop: -16,
@@ -674,22 +704,48 @@ const styles = StyleSheet.create({
   },
   trophyStat: {
     flex: 1,
-    minHeight: 66,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    justifyContent: 'center'
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 11
+  },
+  trophyStatDivider: {
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(255,255,255,0.08)'
+  },
+  trophyStatLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2
+  },
+  trophyAccent: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    marginRight: 5
   },
   trophyStatValue: {
     fontFamily: FONT_MONO,
-    fontSize: 24,
-    lineHeight: 30,
+    fontSize: 20,
+    lineHeight: 23,
     fontWeight: '500'
   },
   trophyStatLabel: {
-    marginTop: 2,
     fontFamily: FONT_REGULAR,
-    fontSize: 12,
-    fontWeight: '500'
+    fontSize: 8,
+    lineHeight: 10,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.45,
+    color: 'rgba(255,255,255,0.48)'
+  },
+  trophyStatUnit: {
+    fontFamily: FONT_REGULAR,
+    fontSize: 9,
+    lineHeight: 11,
+    fontWeight: '500',
+    marginTop: 1,
+    color: 'rgba(255,255,255,0.42)'
   },
   titleRow: {
     flexDirection: 'row',

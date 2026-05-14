@@ -154,6 +154,62 @@ const labelFromPackage = (pkg: string) => {
   return raw.charAt(0).toUpperCase() + raw.slice(1);
 };
 
+const ANDROID_TOOL_PACKAGES = new Set([
+  'android',
+  'com.android.systemui',
+  'com.android.settings',
+  'com.android.dialer',
+  'com.google.android.dialer',
+  'com.android.contacts',
+  'com.google.android.contacts',
+  'com.android.phone',
+  'com.android.server.telecom',
+  'com.android.incallui',
+  'com.google.android.googlequicksearchbox',
+  'com.google.android.inputmethod.latin',
+  'com.android.permissioncontroller',
+  'com.google.android.permissioncontroller',
+  'com.google.android.packageinstaller',
+  'com.android.packageinstaller'
+]);
+
+const ANDROID_TOOL_PACKAGE_PARTS = [
+  'launcher',
+  'systemui',
+  'permissioncontroller',
+  'packageinstaller',
+  'inputmethod',
+  'incallui',
+  'telecom',
+  'telephony',
+  'wallpaper',
+  'setupwizard',
+  'printspooler'
+];
+
+const ANDROID_TOOL_NAMES = new Set([
+  'dialer',
+  'phone',
+  'contacts',
+  'search',
+  'launcher',
+  'settings',
+  'keyboard',
+  'system ui',
+  'android system'
+]);
+
+const isAndroidToolApp = (pkg: string, name: string) => {
+  const normalizedPackage = pkg.toLowerCase();
+  const normalizedName = name.toLowerCase();
+
+  return (
+    ANDROID_TOOL_PACKAGES.has(normalizedPackage) ||
+    ANDROID_TOOL_PACKAGE_PARTS.some((part) => normalizedPackage.includes(part)) ||
+    ANDROID_TOOL_NAMES.has(normalizedName)
+  );
+};
+
 export const HomeScreen = ({ active = true }: { active?: boolean }) => {
   const isDark = useColorScheme() === 'dark';
   const theme = {
@@ -537,7 +593,7 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
         minutes: Math.floor(ms / 60000),
         limit: getLimitsForDate(selectedDay.dateKey || '', limitSnapshotsCache, limitsCache)[pkg] || 0
       }))
-      .filter((app) => app.minutes > 0)
+      .filter((app) => app.minutes > 0 && !isAndroidToolApp(app.id, app.name))
       .sort((a, b) => b.minutes - a.minutes)
       .slice(0, 8);
   }, [getLimitsForDate, limitSnapshotsCache, limitsCache, selectedDay, statsCache]);
