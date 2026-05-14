@@ -36,10 +36,10 @@ const COLORS = {
   education: { solid: '#6F9D2F', light: '#EAF4D6', border: '#6B9730' },
   informationReading: { solid: '#8B5CF6', light: '#EFE7FF', border: '#8456E8' },
   healthFitness: { solid: '#D96F2C', light: '#FFE8D8', border: '#CB6A2C' },
-  utilities: { solid: '#00A7B5', light: '#DDF7FA', border: '#0098A6' },
+  utilities: { solid: '#64748B', light: '#E8EEF6', border: '#5B6B82' },
   shoppingFood: { solid: '#F05D7E', light: '#FFE4EB', border: '#E15878' },
-  travel: { solid: '#1F9AA5', light: '#DDF5F7', border: '#22929C' },
-  others: { solid: '#A855F7', light: '#F3E8FF', border: '#9E4FEA' },
+  travel: { solid: '#14B8A6', light: '#D8F8F2', border: '#0F9F90' },
+  others: { solid: '#7C3AED', light: '#EDE7FF', border: '#6D35D6' },
   textMain: '#000000',
   textSecondary: '#6F737C',
   bg: '#FFFFFF',
@@ -79,10 +79,10 @@ const DARK_CATEGORY_COLORS: Record<CategoryKey, { solid: string; light: string; 
   education: { solid: '#B8F25C', light: '#2F3D18', border: '#B8F25C' },
   informationReading: { solid: '#C084FC', light: '#33214B', border: '#C084FC' },
   healthFitness: { solid: '#FF9F43', light: '#3F2A18', border: '#FF9F43' },
-  utilities: { solid: '#38E8F2', light: '#123B40', border: '#38E8F2' },
+  utilities: { solid: '#9AA8BC', light: '#26303D', border: '#9AA8BC' },
   shoppingFood: { solid: '#FF5FA2', light: '#431D31', border: '#FF5FA2' },
-  travel: { solid: '#4DE1C1', light: '#123D35', border: '#4DE1C1' },
-  others: { solid: '#E879F9', light: '#3C1D43', border: '#E879F9' },
+  travel: { solid: '#45F0D0', light: '#113F39', border: '#45F0D0' },
+  others: { solid: '#A78BFA', light: '#2E2547', border: '#A78BFA' },
 };
 
 type ChartCategory = {
@@ -417,6 +417,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
   const [appNames, setAppNames] = useState<Record<string, string>>({});
   const [appIcons, setAppIcons] = useState<Record<string, string | undefined>>({});
   const [selectedCategory, setSelectedCategory] = useState<ChartCategory | null>(null);
+  const [categorySheetVisible, setCategorySheetVisible] = useState(false);
   const [selectedDay, setSelectedDay] = useState<SelectedDay | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -707,6 +708,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
 
   useEffect(() => {
     if (!selectedCategory) return;
+    setCategorySheetVisible(true);
     sheetTranslateY.setValue(320);
     Animated.timing(sheetTranslateY, {
       toValue: 0,
@@ -725,9 +727,23 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
     }).start();
   }, [daySheetTranslateY, selectedDay]);
 
-  const closeCategorySheet = useCallback(() => {
-    setSelectedCategory(null);
+  const openCategorySheet = useCallback((category: ChartCategory) => {
+    setCategorySheetVisible(true);
+    setSelectedCategory(category);
   }, []);
+
+  const closeCategorySheet = useCallback(() => {
+    Animated.timing(sheetTranslateY, {
+      toValue: 320,
+      duration: 190,
+      useNativeDriver: true
+    }).start(({ finished }) => {
+      if (finished) {
+        setCategorySheetVisible(false);
+        setSelectedCategory(null);
+      }
+    });
+  }, [sheetTranslateY]);
 
   const closeDaySheet = useCallback(() => {
     setSelectedDay(null);
@@ -898,7 +914,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                   <Pressable
                     key={category.key}
                     style={({ pressed }) => [styles.iosUsageRow, { borderBottomColor: ui.border }, pressed && styles.iosUsageRowPressed]}
-                    onPress={() => setSelectedCategory(category)}
+                    onPress={() => openCategorySheet(category)}
                   >
                     <View style={styles.iosUsageMain}>
                       <View
@@ -913,7 +929,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                       >
                         <CategoryGlyph category={category.key} color={category.color.border} />
                       </View>
-                      <Text style={[styles.iosUsageName, { color: ui.text }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.86}>{category.label}</Text>
+                      <Text style={[styles.iosUsageName, styles.weekCategoryName, { color: ui.text }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.82}>{category.label}</Text>
                     </View>
                     <View style={styles.iosUsageRight}>
                       <Text style={[styles.iosUsageTime, { color: ui.text }]}>{formatTime(category.minutes)}</Text>
@@ -1034,7 +1050,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
 
         </ScrollView>
       </LinearGradient>
-      <Modal visible={Boolean(selectedCategory)} transparent statusBarTranslucent animationType="none" onRequestClose={closeCategorySheet}>
+      <Modal visible={categorySheetVisible} transparent statusBarTranslucent animationType="none" onRequestClose={closeCategorySheet}>
         <View style={styles.modalRoot}>
           <Pressable style={styles.sheetBackdrop} onPress={closeCategorySheet} />
           <Animated.View style={[styles.sheetWrap, { backgroundColor: ui.sheet, transform: [{ translateY: sheetTranslateY }] }]}>
@@ -1334,10 +1350,10 @@ const styles = StyleSheet.create({
   },
   legendLabel: {
     fontFamily: FONT_SANS,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '500',
     marginBottom: 4,
-    lineHeight: 17,
+    lineHeight: 15,
     flexShrink: 1,
   },
   legendValue: {
@@ -1535,6 +1551,10 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     lineHeight: 18,
     flexShrink: 1
+  },
+  weekCategoryName: {
+    fontSize: 13,
+    lineHeight: 16
   },
   iosUsageRight: {
     width: 78,

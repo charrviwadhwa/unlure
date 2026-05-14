@@ -342,7 +342,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
           <View style={styles.headerCopy}>
             <Text style={[styles.brandMark, { color: isDark ? '#AAB0BD' : '#6E6E73' }]}>unlure</Text>
             <Text style={[styles.pageTitle, { color: theme.text }]}>Streak</Text>
-            <Text style={[styles.pageDate, { color: theme.textSecondary }]}>Trophy room</Text>
+            <Text style={[styles.pageDate, { color: theme.textSecondary }]}>Progress</Text>
           </View>
           <TouchableOpacity style={[styles.focusSetupButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.74)', borderColor: theme.border }]} onPress={onOpenFocusSetup} activeOpacity={0.76}>
             <Image source={require('../../assets/image.png')} style={[styles.focusSetupImage, { tintColor: theme.text }]} resizeMode="contain" />
@@ -447,7 +447,6 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
                         )}
                         <View style={styles.appNameTextWrap}>
                           <Text style={[styles.appName, { color: theme.text }]} numberOfLines={1}>{app.name}</Text>
-                          <Text style={[styles.appOpenCount, { color: theme.textSecondary }]}>{`opened ${app.opens}x`}</Text>
                         </View>
                       </View>
                       <View style={styles.appUsageRight}>
@@ -777,14 +776,6 @@ const styles = StyleSheet.create({
   appNameTextWrap: {
     flex: 1,
     minWidth: 0
-  },
-  appOpenCount: {
-    marginTop: 2,
-    color: '#8E8E93',
-    fontSize: 11,
-    lineHeight: 14,
-    fontFamily: FONT_REGULAR,
-    fontWeight: '500'
   },
   appMinutes: {
     color: '#000000',

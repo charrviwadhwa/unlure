@@ -9,9 +9,12 @@ import android.os.Build;
 import org.json.JSONObject;
 
 public class BootReceiver extends BroadcastReceiver {
+    private static final String ACTION_QUICKBOOT_POWERON = "android.intent.action.QUICKBOOT_POWERON";
+    private static final String ACTION_HTC_QUICKBOOT_POWERON = "com.htc.intent.action.QUICKBOOT_POWERON";
+
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (intent == null || !Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) return;
+        if (intent == null || !isBootAction(intent.getAction())) return;
 
         SharedPreferences prefs = context.getSharedPreferences(FocusModePrefs.PREFS_NAME, Context.MODE_PRIVATE);
         String rawLimits = prefs.getString(FocusModePrefs.KEY_LIMITS_JSON, "{}");
@@ -27,5 +30,11 @@ public class BootReceiver extends BroadcastReceiver {
         } else {
             context.startService(serviceIntent);
         }
+    }
+
+    private boolean isBootAction(String action) {
+        return Intent.ACTION_BOOT_COMPLETED.equals(action) ||
+            ACTION_QUICKBOOT_POWERON.equals(action) ||
+            ACTION_HTC_QUICKBOOT_POWERON.equals(action);
     }
 }

@@ -602,14 +602,14 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
             onPress={() => handlePeriodModeChange('month')}
             activeOpacity={0.72}
           >
-            <Text style={[styles.periodToggleText, { color: periodMode === 'month' ? theme.text : theme.subtext }]}>Month</Text>
+            <Text style={[styles.periodToggleText, { color: periodMode === 'month' ? theme.text : theme.subtext }]}>month</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.periodToggleButton}
             onPress={() => handlePeriodModeChange('week')}
             activeOpacity={0.72}
           >
-            <Text style={[styles.periodToggleText, { color: periodMode === 'week' ? theme.text : theme.subtext }]}>Week</Text>
+            <Text style={[styles.periodToggleText, { color: periodMode === 'week' ? theme.text : theme.subtext }]}>week</Text>
           </TouchableOpacity>
         </View>
 

@@ -53,6 +53,7 @@ public class UsageModule extends ReactContextBaseJavaModule {
     private static final String DATE_FORMAT = "yyyy-MM-dd";
     private static final int DAILY_USAGE_RETENTION_DAYS = 180;
     private static final long ACTIVE_AT_START_LOOKBACK_MS = 2L * 60L * 60L * 1000L;
+    private static final long OPEN_COUNT_DEBOUNCE_MS = 15L * 1000L;
     private BroadcastReceiver packageChangeReceiver;
 
     UsageModule(ReactApplicationContext context) {
@@ -248,6 +249,8 @@ public void getDailyStats(Promise promise) {
         HashMap<String, Integer> openCounts = new HashMap<>();
         HashMap<String, Long> activeStarts = new HashMap<>();
         HashMap<String, Integer> openActivityCounts = new HashMap<>();
+        HashMap<String, Boolean> foregroundForOpenCounts = new HashMap<>();
+        HashMap<String, Long> lastOpenTimes = new HashMap<>();
         Set<String> countablePackages = getCountableLaunchablePackages(pm);
         HashMap<String, Boolean> activeAtStart = getActivePackagesAtStart(usm, pm, startTime);
         long maxWindow = Math.max(endTime - startTime, 0L);
@@ -255,6 +258,7 @@ public void getDailyStats(Promise promise) {
         for (String pkg : activeAtStart.keySet()) {
             activeStarts.put(pkg, startTime);
             openActivityCounts.put(pkg, 1);
+            foregroundForOpenCounts.put(pkg, true);
         }
 
         UsageEvents usageEvents = usm.queryEvents(startTime, endTime);
@@ -270,12 +274,19 @@ public void getDailyStats(Promise promise) {
             long eventTime = Math.min(Math.max(event.getTimeStamp(), startTime), endTime);
 
             if (type == UsageEvents.Event.MOVE_TO_FOREGROUND || type == UsageEvents.Event.ACTIVITY_RESUMED) {
+                if (type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                    boolean alreadyForeground = foregroundForOpenCounts.getOrDefault(pkg, false);
+                    long lastOpenTime = lastOpenTimes.getOrDefault(pkg, startTime - OPEN_COUNT_DEBOUNCE_MS);
+                    if (!alreadyForeground && eventTime - lastOpenTime >= OPEN_COUNT_DEBOUNCE_MS) {
+                        openCounts.put(pkg, openCounts.getOrDefault(pkg, 0) + 1);
+                        lastOpenTimes.put(pkg, eventTime);
+                    }
+                    foregroundForOpenCounts.put(pkg, true);
+                }
+
                 int currentOpen = openActivityCounts.getOrDefault(pkg, 0);
                 if (currentOpen == 0) {
                     activeStarts.put(pkg, eventTime);
-                    if (type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
-                        openCounts.put(pkg, openCounts.getOrDefault(pkg, 0) + 1);
-                    }
                 }
                 openActivityCounts.put(pkg, currentOpen + 1);
             } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND || type == UsageEvents.Event.ACTIVITY_PAUSED) {
@@ -286,6 +297,7 @@ public void getDailyStats(Promise promise) {
                 }
 
                 if (currentOpen == 0) {
+                    foregroundForOpenCounts.put(pkg, false);
                     Long start = activeStarts.remove(pkg);
                     if (start != null && eventTime > start) {
                         long delta = Math.min(eventTime - start, maxWindow);
@@ -297,6 +309,7 @@ public void getDailyStats(Promise promise) {
                 }
             } else if (type == UsageEvents.Event.ACTIVITY_STOPPED) {
                 if (openActivityCounts.getOrDefault(pkg, 0) == 0) {
+                    foregroundForOpenCounts.put(pkg, false);
                     Long start = activeStarts.remove(pkg);
                     if (start != null && eventTime > start) {
                         long delta = Math.min(eventTime - start, maxWindow);
@@ -318,6 +331,7 @@ public void getDailyStats(Promise promise) {
                 }
                 activeStarts.clear();
                 openActivityCounts.clear();
+                foregroundForOpenCounts.clear();
             }
         }
 
@@ -683,6 +697,7 @@ public void getDailyStats(Promise promise) {
                 int minutes = limits.getInt(key);
                 if (minutes > 0) limitsJson.put(key, minutes);
             }
+            android.util.Log.d("FocusMode", "syncFocusModeConfig limits=" + limitsJson);
 
             JSONObject namesJson = new JSONObject();
             ReadableMapKeySetIterator nameKeys = names.keySetIterator();

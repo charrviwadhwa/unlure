@@ -59,7 +59,6 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
   const [selectedLimits, setSelectedLimits] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [footerHeight, setFooterHeight] = useState(0);
   const [search, setSearch] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [activeApp, setActiveApp] = useState<AppInfo | null>(null);
@@ -174,7 +173,8 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
         windowSize={5}
         refreshing={refreshing}
         onRefresh={onRefresh}
-        contentContainerStyle={[styles.listContent, { paddingBottom: footerHeight + 34 }]}
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         renderItem={({ item }) => {
           const limit = selectedLimits[item.packageName];
@@ -219,9 +219,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
       />
 
       <View
-        pointerEvents="box-none"
         style={styles.footerWrap}
-        onLayout={(event) => setFooterHeight(event.nativeEvent.layout.height)}
       >
         <TouchableOpacity
           style={[styles.footerButton, isDark && { backgroundColor: '#FFFFFF' }]}
@@ -278,6 +276,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: FONT_SANS,
     fontWeight: '400'
+  },
+  list: {
+    flex: 1
   },
   listContent: {
     paddingBottom: 18
@@ -344,10 +345,7 @@ const styles = StyleSheet.create({
     elevation: 2
   },
   footerWrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+    marginHorizontal: -24,
     paddingHorizontal: 24,
     paddingTop: 12,
     paddingBottom: Platform.OS === 'android' ? 22 : 18,

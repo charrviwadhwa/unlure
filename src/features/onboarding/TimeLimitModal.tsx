@@ -23,7 +23,7 @@ export const TimeLimitModal = ({ visible, appName, iconBase64, initialMinutes = 
     panel: isDark ? 'rgba(255,255,255,0.045)' : '#FFFFFF',
     text: isDark ? '#F3F4F6' : '#111111',
     textSecondary: isDark ? '#A5ACB8' : '#6F737C',
-    border: isDark ? 'transparent' : '#ECECF2',
+    border: isDark ? 'transparent' : 'transparent',
     pickerText: isDark ? '#8E96A6' : '#6F737C'
   };
   const [hours, setHours] = useState('0');
@@ -59,10 +59,10 @@ export const TimeLimitModal = ({ visible, appName, iconBase64, initialMinutes = 
             <Text style={[styles.appName, { color: theme.text }]} numberOfLines={1}>{appName}</Text>
           </View>
 
-          <View style={[styles.pickerContainer, { backgroundColor: theme.panel, borderColor: theme.border, borderWidth: isDark ? 0 : 1 }]}>
+          <View style={styles.pickerContainer}>
             {/* Hours Infinite Roller */}
-            <View style={styles.column}>
-              <Text style={styles.columnLabel}>hrs</Text>
+            <View style={[styles.column, styles.columnDivider, { borderRightColor: isDark ? 'rgba(255,255,255,0.08)' : '#ECECF2' }]}>
+              <Text style={[styles.columnLabel, { color: theme.textSecondary }]}>HOURS</Text>
              <Picker
                 style={styles.picker}
                 selectedValue={hours}
@@ -80,7 +80,7 @@ export const TimeLimitModal = ({ visible, appName, iconBase64, initialMinutes = 
 
             {/* Minutes Infinite Roller */}
             <View style={styles.column}>
-              <Text style={styles.columnLabel}>mins</Text>
+              <Text style={[styles.columnLabel, { color: theme.textSecondary }]}>MINUTES</Text>
               <Picker
                 style={styles.picker}
                 selectedValue={minutes}
@@ -149,18 +149,30 @@ const styles = StyleSheet.create({
   appName: { flex: 1, fontSize: 26, fontFamily: FONT_SANS_SEMIBOLD, fontWeight: '600', color: '#111111' },
   pickerContainer: { 
     flexDirection: 'row', 
-    backgroundColor: '#FFFFFF',
-    borderRadius: 25,
-    borderWidth: 1,
-    borderColor: '#ECECF2',
-    overflow: 'hidden',
-    paddingVertical: 10,
+    backgroundColor: 'transparent',
+    paddingVertical: 0,
     position: 'relative'
   },
-  column: { flex: 1, alignItems: 'center' },
-  columnLabel: { fontSize: 13, color: '#777', fontFamily: FONT_SANS_SEMIBOLD, fontWeight: '600', marginTop: 10, marginBottom: -10 },
-  picker: { width: '100%', height: 200, backgroundColor: 'transparent' },
-  buttonRow: { flexDirection: 'row', alignItems: 'center', marginTop: 35, gap: 14 },
+  column: {
+    flex: 1,
+    alignItems: 'center',
+    paddingTop: 2,
+    paddingBottom: 4
+  },
+  columnDivider: {
+    borderRightWidth: 1
+  },
+  columnLabel: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: '#777',
+    fontFamily: FONT_SANS_SEMIBOLD,
+    fontWeight: '700',
+    marginBottom: -4,
+    letterSpacing: 0.6
+  },
+  picker: { width: '100%', height: 176, backgroundColor: 'transparent' },
+  buttonRow: { flexDirection: 'row', alignItems: 'center', marginTop: 28, gap: 14 },
   cancelButton: {
     flex: 1,
     minHeight: 54,

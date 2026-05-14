@@ -1,337 +1,391 @@
-import React, { useRef } from 'react';
-import { Animated, Dimensions, PanResponder, Platform, SafeAreaView, StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Path, Stop } from 'react-native-svg';
-import LinearGradient from 'react-native-linear-gradient';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Animated,
+  Easing,
+  Image,
+  Platform,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 
-interface EntryScreenProps {
+type EntryScreenProps = {
   onAnimationComplete: () => void;
-}
+};
 
-const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
-const FONT_SANS = Platform.select({ ios: 'Geist-Regular', android: 'Geist-Regular', default: 'System' });
-const FONT_SANS_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Geist-SemiBold', default: 'System' });
-const FONT_MONO = Platform.select({ ios: 'GeistMono-Regular', android: 'GeistMono-Regular', default: 'monospace' });
-const { width } = Dimensions.get('window');
-const SWIPE_WIDTH = Math.min(width - 68, 316);
-const KNOB_SIZE = 56;
-const SWIPE_MAX = SWIPE_WIDTH - KNOB_SIZE - 8;
+const FONT_SCRIPT = Platform.select({
+  ios: 'PlaywriteDESAS-Light',
+  android: 'PlaywriteDESAS-Light',
+  default: 'System',
+});
+const FONT_REG = Platform.select({
+  ios: 'Geist-Regular',
+  android: 'Geist-Regular',
+  default: 'System',
+});
+const FONT_SEMI = Platform.select({
+  ios: 'Geist-SemiBold',
+  android: 'Geist-SemiBold',
+  default: 'System',
+});
+const FONT_MONO = Platform.select({
+  ios: 'GeistMono-Regular',
+  android: 'GeistMono-Regular',
+  default: 'monospace',
+});
 
-const PauseIcon = () => (
+const ArrowUpRightIcon = ({ color }: { color: string }) => (
   <Svg width={28} height={28} viewBox="0 0 24 24">
-    <Path d="M9 7v10M15 7v10" stroke="#A991FF" strokeWidth={2.2} strokeLinecap="round" />
+    <Path
+      d="M7 17L17 7M10 7h7v7"
+      stroke={color}
+      strokeWidth={2.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
   </Svg>
-);
-
-const ChartIcon = () => (
-  <Svg width={28} height={28} viewBox="0 0 24 24">
-    <Path d="M5 19V11M12 19V6M19 19V3" stroke="#A991FF" strokeWidth={2.2} strokeLinecap="round" />
-    <Path d="M5 19h14" stroke="#6656B8" strokeWidth={1.4} strokeLinecap="round" opacity={0.5} />
-  </Svg>
-);
-
-const LeafIcon = () => (
-  <Svg width={28} height={28} viewBox="0 0 24 24">
-    <Path d="M5 19c7.6-.5 12.8-5.7 14-14-8.7.4-14 5.6-14 14z" fill="none" stroke="#A991FF" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M5 19 14 10" stroke="#A991FF" strokeWidth={1.7} strokeLinecap="round" />
-  </Svg>
-);
-
-const ArrowIcon = ({ color = '#FFFFFF' }: { color?: string }) => (
-  <Svg width={26} height={26} viewBox="0 0 24 24">
-    <Path d="M5 12h13M13 6l6 6-6 6" stroke={color} strokeWidth={2.8} strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
-);
-
-const WaveArt = () => (
-  <View style={styles.waveWrap} pointerEvents="none">
-    <View style={styles.waveGlow} />
-    <Svg width="130%" height={220} viewBox="0 0 460 220">
-      <Defs>
-        <SvgLinearGradient id="wave" x1="0" y1="0" x2="1" y2="0">
-          <Stop offset="0" stopColor="#4C6DFF" stopOpacity="0.05" />
-          <Stop offset="0.46" stopColor="#9B8CFF" stopOpacity="0.92" />
-          <Stop offset="1" stopColor="#6C7CFF" stopOpacity="0.1" />
-        </SvgLinearGradient>
-        <SvgLinearGradient id="dot" x1="0" y1="0" x2="1" y2="1">
-          <Stop offset="0" stopColor="#AFA4FF" stopOpacity="0.7" />
-          <Stop offset="1" stopColor="#6074FF" stopOpacity="0.15" />
-        </SvgLinearGradient>
-      </Defs>
-      {Array.from({ length: 22 }).map((_, index) => {
-        const offset = index * 4.3;
-        const opacity = 0.08 + index * 0.018;
-        return (
-          <Path
-            key={index}
-            d={`M-12 ${112 - offset} C 80 ${40 + offset}, 144 ${42 + offset}, 230 ${110} C 316 ${178 - offset}, 380 ${180 - offset}, 472 ${108 + offset}`}
-            fill="none"
-            stroke="url(#wave)"
-            strokeWidth={index === 11 ? 2.2 : 1}
-            opacity={Math.min(opacity, 0.55)}
-          />
-        );
-      })}
-      {Array.from({ length: 28 }).map((_, index) => (
-        <Circle
-          key={`dot-${index}`}
-          cx={40 + ((index * 37) % 380)}
-          cy={68 + ((index * 31) % 94)}
-          r={index % 4 === 0 ? 1.5 : 1}
-          fill="url(#dot)"
-          opacity={0.32}
-        />
-      ))}
-    </Svg>
-  </View>
-);
-
-const FeatureRow = ({
-  icon,
-  title,
-  copy
-}: {
-  icon: React.ReactNode;
-  title: string;
-  copy: string;
-}) => (
-  <View style={styles.featureRow}>
-    <View style={styles.featureIcon}>{icon}</View>
-    <View style={styles.featureTextWrap}>
-      <Text style={styles.featureTitle}>{title}</Text>
-      <Text style={styles.featureCopy}>{copy}</Text>
-    </View>
-  </View>
 );
 
 const EntryScreen: React.FC<EntryScreenProps> = ({ onAnimationComplete }) => {
-  const swipeX = useRef(new Animated.Value(0)).current;
-  const swipeTextOpacity = swipeX.interpolate({
-    inputRange: [0, SWIPE_MAX * 0.55, SWIPE_MAX],
-    outputRange: [1, 0.38, 0]
+  const [pressed, setPressed] = useState(false);
+  const [isRevealing, setIsRevealing] = useState(false);
+  const pulse = useRef(new Animated.Value(1)).current;
+  const buttonReveal = useRef(new Animated.Value(0)).current;
+  const buttonRevealScale = buttonReveal.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.01, 2.5],
   });
-  const fillWidth = swipeX.interpolate({
-    inputRange: [0, SWIPE_MAX],
-    outputRange: [KNOB_SIZE + 8, SWIPE_WIDTH]
-  });
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dx) > 8 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
-      onPanResponderMove: (_, gesture) => {
-        swipeX.setValue(Math.max(0, Math.min(gesture.dx, SWIPE_MAX)));
-      },
-      onPanResponderRelease: (_, gesture) => {
-        if (gesture.dx > SWIPE_MAX * 0.68) {
-          Animated.timing(swipeX, {
-            toValue: SWIPE_MAX,
-            duration: 170,
-            useNativeDriver: false
-          }).start(onAnimationComplete);
-          return;
-        }
 
-        Animated.spring(swipeX, {
-          toValue: 0,
-          tension: 95,
-          friction: 11,
-          useNativeDriver: false
-        }).start();
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1.15,
+          duration: 900,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 900,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    animation.start();
+    return () => animation.stop();
+  }, [pulse]);
+
+  const startReveal = () => {
+    if (isRevealing) {
+      return;
+    }
+
+    setIsRevealing(true);
+    setPressed(true);
+    pulse.stopAnimation();
+    buttonReveal.setValue(0);
+
+    Animated.timing(buttonReveal, {
+      toValue: 1,
+      duration: 850,
+      easing: Easing.bezier(0.4, 0, 0.2, 1),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        onAnimationComplete();
       }
-    })
-  ).current;
+    });
+  };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.screen}>
-        <View style={styles.topGlow} />
-        <View style={styles.bottomGlow} />
-
-        <View style={styles.hero}>
-          <Text style={styles.wordmark}>unlure</Text>
-          <Text style={styles.tagline}>Real awareness.{'\n'}Lasting change.</Text>
+    <View style={styles.fullScreen}>
+      <StatusBar barStyle="light-content" backgroundColor="#070a10" />
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.root}>
+        <View style={styles.gridLayer}>
+          {Array.from({ length: 13 }).map((_, index) => (
+            <View
+              key={`grid-slant-${index}`}
+              style={[styles.gridLineSlant, { left: -180 + index * 58 }]}
+            />
+          ))}
+          {Array.from({ length: 10 }).map((_, index) => (
+            <View
+              key={`grid-slant-soft-${index}`}
+              style={[styles.gridLineSoftSlant, { left: -120 + index * 70 }]}
+            />
+          ))}
         </View>
 
-        <WaveArt />
-
-        <View style={styles.features}>
-          <FeatureRow
-            icon={<PauseIcon />}
-            title="Pause with purpose"
-            copy="Break autopilot with mindful pauses that create clarity."
+        <View pointerEvents="none" style={styles.screenDoodles}>
+          <Image
+            source={require('../../assets/app-icons/fire.png')}
+            style={[styles.doodleImage, styles.doodleFireTop]}
           />
-          <FeatureRow
-            icon={<ChartIcon />}
-            title="See the full picture"
-            copy="Understand your digital habits with depth and honesty."
+          <Image
+            source={require('../../assets/app-icons/phone.png')}
+            style={[styles.doodleImage, styles.doodlePhoneTop]}
           />
-          <FeatureRow
-            icon={<LeafIcon />}
-            title="Design a life on purpose"
-            copy="Small shifts. Consistent choices. A better you."
+          <Image
+            source={require('../../assets/app-icons/image.png')}
+            style={[styles.doodleImage, styles.doodleImageMid]}
+          />
+          <Image
+            source={require('../../assets/app-icons/bar.png')}
+            style={[styles.doodleImage, styles.doodleBarBottom]}
           />
         </View>
 
-        <View style={styles.swipeTrack}>
-          <Animated.View style={[styles.swipeFill, { width: fillWidth }]} />
-          <Animated.Text style={[styles.swipeText, { opacity: swipeTextOpacity }]}>Swipe to continue</Animated.Text>
-          <Animated.View
-            {...panResponder.panHandlers}
-            style={[styles.swipeKnob, { transform: [{ translateX: swipeX }] }]}
-          >
-            <ArrowIcon />
-          </Animated.View>
+        <View style={styles.heroWrap}>
+          <View style={styles.glowCircle} />
+          <Image
+            source={require('../../assets/share-paper-plane.png')}
+            resizeMode="contain"
+            style={styles.heroImage}
+          />
         </View>
-      </View>
-    </SafeAreaView>
+
+        <View style={styles.copyWrap}>
+          <Text style={styles.brand}>unlure</Text>
+          <Text style={styles.titleLine}>Digital Focus</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.titleLine}>Made for </Text>
+            <View style={styles.arrowChip}>
+              <Text style={styles.arrowChipText}>{'->'}</Text>
+            </View>
+          </View>
+          <Text style={styles.titleLine}>Daily Users</Text>
+          <Text style={styles.sub}>Set limits, reduce noise, and reclaim your attention.</Text>
+        </View>
+
+        <View style={styles.bottomRow}>
+          <View style={styles.startWrap}>
+            <Text style={styles.startText}>Let's Start</Text>
+            <TouchableOpacity
+              activeOpacity={1}
+              onPressIn={() => setPressed(true)}
+              onPressOut={() => {
+                if (!isRevealing) {
+                  setPressed(false);
+                }
+              }}
+              onPress={startReveal}
+              disabled={isRevealing}
+            >
+              <Animated.View
+                style={[
+                  styles.startBtn,
+                  pressed ? styles.startBtnPressed : null,
+                  { transform: [{ scale: isRevealing ? 1 : pulse }] },
+                ]}
+              >
+                <Animated.View
+                  style={[
+                    styles.buttonRevealFill,
+                    {
+                      transform: [
+                        { translateX: 16 },
+                        { translateY: 16 },
+                        { scale: buttonRevealScale },
+                      ],
+                    },
+                  ]}
+                />
+                <View style={styles.startIcon}>
+                  <ArrowUpRightIcon color={isRevealing ? '#071006' : '#b0f47e'} />
+                </View>
+              </Animated.View>
+            </TouchableOpacity>
+          </View>
+        </View>
+        </View>
+      </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  fullScreen: {
     flex: 1,
-    backgroundColor: '#070A10'
+    backgroundColor: '#070a10',
   },
-  screen: {
+  safe: { flex: 1, backgroundColor: '#070a10' },
+  root: {
     flex: 1,
-    backgroundColor: '#070A10',
-    paddingHorizontal: 34,
-    paddingTop: 84,
-    paddingBottom: 34,
-    overflow: 'hidden'
+    backgroundColor: '#070a10',
+    paddingHorizontal: 24,
+    paddingTop: 22,
+    paddingBottom: 12,
   },
-  topGlow: {
+  gridLayer: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.82,
+  },
+  gridLineSlant: {
     position: 'absolute',
-    top: -90,
-    left: -70,
-    right: -70,
-    height: 260,
-    backgroundColor: 'rgba(73, 104, 255, 0.075)',
-    borderBottomLeftRadius: 180,
-    borderBottomRightRadius: 180
+    top: -180,
+    width: 1,
+    height: 1080,
+    backgroundColor: 'rgba(176,244,126,0.11)',
+    transform: [{ rotate: '-15deg' }],
   },
-  bottomGlow: {
+  gridLineSoftSlant: {
     position: 'absolute',
-    bottom: -120,
-    left: -60,
-    right: -60,
-    height: 260,
-    backgroundColor: 'rgba(132, 109, 255, 0.07)',
-    borderTopLeftRadius: 180,
-    borderTopRightRadius: 180
+    top: -210,
+    width: 1,
+    height: 1120,
+    backgroundColor: 'rgba(215,223,236,0.055)',
+    transform: [{ rotate: '15deg' }],
   },
-  hero: {
-    alignItems: 'center',
-    zIndex: 2
+  screenDoodles: {
+    ...StyleSheet.absoluteFillObject,
   },
-  wordmark: {
-    color: '#DAD0FF',
-    fontSize: 54,
-    lineHeight: 66,
-    fontFamily: FONT_SCRIPT,
-    fontWeight: '600',
-    letterSpacing: 0
+  doodleImage: {
+    position: 'absolute',
+    resizeMode: 'contain',
+    opacity: 0.68,
+    tintColor: '#b0f47e',
   },
-  tagline: {
-    marginTop: 8,
-    color: 'rgba(226, 229, 242, 0.68)',
-    fontSize: 16,
-    lineHeight: 22,
-    textAlign: 'center',
-    fontFamily: FONT_SANS,
-    fontWeight: '500'
+  doodleFireTop: {
+    width: 34,
+    height: 34,
+    top: 168,
+    left: 20,
+    transform: [{ rotate: '-12deg' }],
   },
-  waveWrap: {
-    height: 234,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: -90,
+  doodlePhoneTop: {
+    width: 38,
+    height: 38,
+    top: 104,
+    right: 20,
+    transform: [{ rotate: '12deg' }],
+  },
+  doodleImageMid: {
+    width: 48,
+    height: 48,
+    bottom: 124,
+    left: 24,
+    tintColor: '#d7dfec',
+    opacity: 0.64,
+    transform: [{ rotate: '-10deg' }],
+  },
+  doodleBarBottom: {
+    width: 38,
+    height: 38,
+    bottom: 176,
+    right: 28,
+    shadowColor: '#b0f47e',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+  },
+  heroWrap: {
     marginTop: 24,
-    marginBottom: 10
-  },
-  waveGlow: {
-    position: 'absolute',
-    width: 190,
-    height: 90,
-    borderRadius: 95,
-    backgroundColor: 'rgba(145, 125, 255, 0.2)'
-  },
-  features: {
-    gap: 24,
-    marginTop: 2,
-    marginBottom: 28
-  },
-  featureRow: {
-    flexDirection: 'row',
-    alignItems: 'center'
-  },
-  featureIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    height: 382,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14
   },
-  featureTextWrap: {
-    flex: 1,
-    minWidth: 0
+  glowCircle: {
+    position: 'absolute',
+    width: 246,
+    height: 246,
+    borderRadius: 123,
+    backgroundColor: 'rgba(176,244,126,0.18)',
   },
-  featureTitle: {
-    color: '#F2F3FA',
+  heroImage: {
+    width: '126%',
+    height: '122%',
+  },
+  copyWrap: { marginTop: 4 },
+  brand: {
+    color: '#cfd4df',
+    fontSize: 22,
+    lineHeight: 28,
+    fontFamily: FONT_SCRIPT,
+    marginBottom: 6,
+  },
+  titleLine: {
+    color: '#f0f4fb',
+    fontSize: 42,
+    lineHeight: 51,
+    fontFamily: FONT_MONO,
+    letterSpacing: 0.8,
+  },
+  titleRow: { flexDirection: 'row', alignItems: 'center' },
+  arrowChip: {
+    marginTop: 2,
+    marginLeft: 6,
+    height: 38,
+    minWidth: 66,
+    borderRadius: 19,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#b0f47e',
+  },
+  arrowChipText: {
+    color: '#0b1013',
+    fontSize: 24,
+    lineHeight: 26,
+    fontFamily: FONT_MONO,
+  },
+  sub: {
+    marginTop: 8,
+    color: '#8f98aa',
     fontSize: 14,
-    lineHeight: 18,
-    fontFamily: FONT_SANS_SEMIBOLD,
-    fontWeight: '600'
+    lineHeight: 20,
+    fontFamily: FONT_MONO,
+    maxWidth: 320,
   },
-  featureCopy: {
-    marginTop: 3,
-    color: 'rgba(226, 229, 242, 0.58)',
-    fontSize: 12,
-    lineHeight: 17,
-    fontFamily: FONT_SANS,
-    fontWeight: '500'
+  bottomRow: {
+    marginTop: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    minHeight: 116,
+    paddingTop: 28,
+    paddingBottom: 6,
   },
-  swipeTrack: {
-    width: SWIPE_WIDTH,
+  startWrap: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  startText: {
+    color: '#c5ccd9',
+    fontSize: 17,
+    lineHeight: 22,
+    fontFamily: FONT_MONO,
+    fontWeight: '700',
+  },
+  startBtn: {
+    width: 66,
     height: 66,
     borderRadius: 33,
-    alignSelf: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    overflow: 'hidden'
-  },
-  swipeFill: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    borderRadius: 33,
-    backgroundColor: '#7E6AF2'
-  },
-  swipeText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontFamily: FONT_SANS_SEMIBOLD,
-    fontWeight: '600',
-    textAlign: 'center',
-    includeFontPadding: false
-  },
-  swipeKnob: {
-    position: 'absolute',
-    left: 4,
-    width: KNOB_SIZE,
-    height: KNOB_SIZE,
-    borderRadius: KNOB_SIZE / 2,
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: '#b0f47e',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#6F5DE5',
-    shadowColor: '#7E6AF2',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 18,
-    elevation: 8
-  }
+    overflow: 'hidden',
+  },
+  startBtnPressed: {
+    borderColor: '#b0f47e',
+  },
+  buttonRevealFill: {
+    position: 'absolute',
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    backgroundColor: '#b0f47e',
+  },
+  startIcon: {
+    zIndex: 2,
+  },
 });
 
 export default EntryScreen;

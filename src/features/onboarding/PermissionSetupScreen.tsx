@@ -72,15 +72,15 @@ export const PermissionSetupScreen = ({
   const permissions: PermissionRow[] = [
     {
       key: 'usage',
-      title: 'Usage Access',
-      detail: 'Tracks time totals for selected apps without reading screen content.',
+      title: 'See app time',
+      detail: 'Lets Unlure count how long you use the apps you choose.',
       enabled: usageEnabled,
       action: ScreenTimeService.openUsageAccessSettings
     },
     {
       key: 'overlay',
-      title: 'Focus Overlay',
-      detail: 'Shows limit warnings over selected apps when a cap is reached.',
+      title: 'Show reminders',
+      detail: 'Lets Unlure show a gentle reminder when an app reaches its limit.',
       enabled: overlayEnabled,
       action: ScreenTimeService.openOverlaySettings
     }
@@ -97,16 +97,15 @@ export const PermissionSetupScreen = ({
         >
           <Image source={require('../../assets/Completed 1.png')} style={styles.heroImage} resizeMode="contain" />
           <Text style={[styles.brandMark, { color: isDark ? '#AAB0BD' : '#6E6E73' }]}>unlure</Text>
-          <Text style={[styles.title, { color: theme.text }]}>Set up Focus Mode</Text>
+          <Text style={[styles.title, { color: theme.text }]}>Allow Unlure to help</Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-            Standard mode uses Usage Access and Overlay only. Unlure does not read messages, passwords, payment screens, or app content.
+            Turn on these two settings so Unlure can track your selected apps and remind you when it is time to stop.
           </Text>
 
           <View style={[styles.disclosureBox, isDark && styles.disclosureBoxDark, { backgroundColor: isDark ? 'rgba(255,255,255,0.028)' : theme.surface, borderColor: isDark ? 'transparent' : theme.border, borderWidth: isDark ? 0 : 0.5 }]}>
-            <Text style={[styles.disclosureTitle, { color: theme.text }]}>What Unlure can see</Text>
+            <Text style={[styles.disclosureTitle, { color: theme.text }]}>Private by design</Text>
             <Text style={[styles.disclosureText, { color: theme.textSecondary }]}>
-              Standard mode sees app package names and usage duration for apps you select. It cannot inspect banking screens,
-              chats, typed text, passwords, notifications, or payment details.
+              Unlure cannot read your chats, passwords, notifications, payments, or anything you type.
             </Text>
           </View>
 
@@ -126,7 +125,7 @@ export const PermissionSetupScreen = ({
                   ]}
                 >
                   <Text style={[styles.permissionActionText, isDark && { color: '#101319' }, item.enabled && styles.permissionActionTextEnabled, item.enabled && isDark && { color: '#B7F3D8' }]}>
-                    {item.enabled ? 'Enabled' : 'Open'}
+                    {item.enabled ? 'On' : 'Open'}
                   </Text>
                 </View>
               </TouchableOpacity>
