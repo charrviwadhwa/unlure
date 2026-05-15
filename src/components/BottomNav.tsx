@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Pressable, StyleSheet, Animated, Image, ImageSourcePropType } from 'react-native';
+import { View, Pressable, StyleSheet, Animated, Image, ImageSourcePropType, Platform } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 
 type TabKey = 'home' | 'streak' | 'analytics';
@@ -81,7 +81,12 @@ const BottomNavComponent: React.FC<BottomNavProps> = ({ active, onChange }) => {
 export const BottomNav = React.memo(BottomNavComponent);
 
 const styles = StyleSheet.create({
-  wrapper: { paddingHorizontal: 20, paddingBottom: 28, alignItems: 'center', backgroundColor: 'transparent' },
+  wrapper: {
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === 'android' ? 0 : 28,
+    alignItems: 'center',
+    backgroundColor: 'transparent'
+  },
   bar: {
     flexDirection: 'row',
     borderRadius: 999,

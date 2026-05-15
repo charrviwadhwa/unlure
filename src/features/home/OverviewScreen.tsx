@@ -843,7 +843,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                 </View>
 
                 <View style={styles.barsWrapper}>
-                  {weekData.map((item, index) => {
+                  {weekData.map((item) => {
                     const segments = weekChartCategories.map((category) => {
                       const minutes = category.includedKeys.reduce((acc, key) => acc + item.totals[key], 0);
                       return {
@@ -1132,7 +1132,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 24,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 15 : 15,
-    paddingBottom: 176,
+    paddingBottom: Platform.OS === 'android' ? 220 : 176,
   },
   header: {
     flexDirection: 'row',
@@ -1288,11 +1288,13 @@ const styles = StyleSheet.create({
     fontFamily: FONT_MONO,
     fontSize: 12,
     color: COLORS.textSecondary,
+    width: 58,
+    textAlign: 'right',
   },
   averageLineWrap: {
     position: 'absolute',
     left: 10,
-    right: 35,
+    right: 62,
     flexDirection: 'row',
     alignItems: 'center',
     zIndex: 2
@@ -1315,7 +1317,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
-    paddingRight: 35, 
+    paddingRight: 62,
     paddingLeft: 10,
   },
   barColumn: {

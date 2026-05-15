@@ -18,6 +18,7 @@ import { ScreenTimeService } from '../../services/ScreenTimeService';
 type PermissionKey = 'usage' | 'overlay';
 const ENABLED_GREEN = '#2F8F6B';
 const ENABLED_GREEN_SURFACE = 'rgba(47,143,107,0.22)';
+const ANDROID_NAV_RESERVE = Platform.OS === 'android' ? 58 : 0;
 const FONT_SANS = Platform.select({ ios: 'Geist-Regular', android: 'Geist-Regular', default: 'System' });
 const FONT_SANS_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Geist-SemiBold', default: 'System' });
 const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
@@ -154,7 +155,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 24,
     paddingTop: Platform.OS === 'android' ? Math.max((StatusBar.currentHeight ?? 0) + 20, 44) : 18,
-    paddingBottom: 136
+    paddingBottom: Platform.OS === 'android' ? 172 : 136
   },
   heroImage: {
     width: 142,
@@ -279,7 +280,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     paddingHorizontal: 24,
     paddingTop: 12,
-    paddingBottom: Platform.OS === 'android' ? 22 : 18,
+    paddingBottom: Platform.OS === 'android' ? ANDROID_NAV_RESERVE : 18,
     backgroundColor: 'transparent'
   },
   continueButton: {

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { BackHandler, StyleSheet, View, StatusBar, useColorScheme } from 'react-native';
+import { BackHandler, Platform, StyleSheet, View, StatusBar, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import EntryScreen from './src/features/onboarding/EntryScreen';
@@ -20,6 +20,8 @@ import { ScreenTimeService } from './src/services/ScreenTimeService';
 type AppStep = 'entry' | 'permissions' | 'settings' | 'selection' | 'main';
 type MainTab = 'home' | 'streak' | 'analytics';
 type Route = { step: AppStep; tab: MainTab };
+
+const ANDROID_NAV_GAP = Platform.OS === 'android' ? 34 : 0;
 
 const syncFocusConfig = async () => {
   try {
@@ -223,7 +225,7 @@ const styles = StyleSheet.create({
   tabHidden:  { opacity: 0 },
   bottomNavWrap: {
     position: 'absolute',
-    left: 0, right: 0, bottom: 0,
+    left: 0, right: 0, bottom: ANDROID_NAV_GAP,
     zIndex: 10,
   },
 });

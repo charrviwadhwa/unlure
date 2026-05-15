@@ -9,11 +9,11 @@ import {
   TouchableOpacity,
   Pressable,
   Modal,
-  Dimensions,
   Platform,
   StatusBar,
   InteractionManager,
-  Animated
+  Animated,
+  useWindowDimensions
 } from 'react-native';
 import { useColorScheme } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
@@ -22,11 +22,12 @@ import { ScreenTimeService, DailyUsageMap, FocusModeDecisions } from '../../serv
 import { DailyLimitSnapshots, DailyMoodSnapshots, StoredMood, UserStore } from '../../services/storage';
 import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
 
-const { width } = Dimensions.get('window');
 const FONT_SANS = Platform.select({ ios: 'Geist-Regular', android: 'Geist-Regular', default: 'System' });
 const FONT_SANS_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Geist-SemiBold', default: 'System' });
 const FONT_MONO = Platform.select({ ios: 'GeistMono-Regular', android: 'GeistMono-Regular', default: 'monospace' });
 const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
+const SCREEN_HORIZONTAL_PADDING = 24;
+const CALENDAR_COLUMN_GAP = 5;
 
 const COLORS = {
   bg: '#FFFFFF',
@@ -211,6 +212,7 @@ const isAndroidToolApp = (pkg: string, name: string) => {
 };
 
 export const HomeScreen = ({ active = true }: { active?: boolean }) => {
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const isDark = useColorScheme() === 'dark';
   const theme = {
     bg: isDark ? '#121418' : COLORS.bg,
@@ -239,6 +241,11 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
   const [trackingStartDate, setTrackingStartDate] = useState(formatDateKey(new Date()));
   const [refreshing, setRefreshing] = useState(false);
   const periodToggleAnim = useRef(new Animated.Value(0)).current;
+  const calendarCellWidth = useMemo(() => {
+    const availableWidth = screenWidth - SCREEN_HORIZONTAL_PADDING * 2;
+    return Math.floor((availableWidth - CALENDAR_COLUMN_GAP * 6) / 7);
+  }, [screenWidth]);
+  const calendarCellHeight = screenHeight < 760 ? 56 : 62;
 
   const resolveMood = useCallback((
     dayMap: Record<string, number> | undefined,
@@ -671,18 +678,23 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
 
         {periodMode === 'week' ? (
           <View style={styles.weekMoodBoard}>
-            {weeklyMoodItems.map((item) => (
+            {weeklyMoodItems.map((item, index) => (
               <View
                 key={item.dateKey || item.date}
                 style={[
                   styles.weekMoodChip,
+                  {
+                    width: calendarCellWidth,
+                    height: calendarCellHeight,
+                    marginRight: (index + 1) % 7 === 0 ? 0 : CALENDAR_COLUMN_GAP
+                  },
                   {
                     backgroundColor: item.mood === MOOD_TYPES.EMPTY ? theme.panelEmpty : theme.panel,
                     borderColor: item.mood === MOOD_TYPES.EMPTY ? theme.border : COLORS.moods[item.mood].line
                   }
                 ]}
               >
-                <Text style={[styles.weekMoodLabel, { color: theme.subtext }]}>{item.label}</Text>
+                  <Text style={[styles.weekMoodLabel, { color: theme.subtext }]} maxFontSizeMultiplier={1.15}>{item.label}</Text>
                 <MoodFace type={item.mood} />
               </View>
             ))}
@@ -690,9 +702,19 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
         ) : (
           <>
             <View style={styles.daysOfWeekContainer}>
-              {DAYS_OF_WEEK.map((day) => (
-                <View key={day} style={[styles.dayPill, { backgroundColor: theme.dayPill }]}>
-                  <Text style={[styles.dayText, { color: theme.subtext }]}>{day}</Text>
+              {DAYS_OF_WEEK.map((day, index) => (
+                <View
+                  key={day}
+                  style={[
+                    styles.dayPill,
+                    {
+                      width: calendarCellWidth,
+                      marginRight: index === DAYS_OF_WEEK.length - 1 ? 0 : CALENDAR_COLUMN_GAP,
+                      backgroundColor: theme.dayPill
+                    }
+                  ]}
+                >
+                  <Text style={[styles.dayText, { color: theme.subtext }]} maxFontSizeMultiplier={1.15}>{day}</Text>
                 </View>
               ))}
             </View>
@@ -706,6 +728,11 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
                     onPress={() => item.dateKey && item.isCurrentMonth && setSelectedDay(item)}
                     style={[
                       styles.cellPill,
+                      {
+                        width: calendarCellWidth,
+                        height: calendarCellHeight,
+                        marginRight: (index + 1) % 7 === 0 ? 0 : CALENDAR_COLUMN_GAP
+                      },
                       { backgroundColor: theme.panel, borderColor: theme.border },
                       item.mood === MOOD_TYPES.EMPTY && styles.cellPillEmpty,
                       item.mood === MOOD_TYPES.EMPTY && { backgroundColor: theme.panelEmpty, borderColor: theme.border },
@@ -718,6 +745,7 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
                     ]}
                   >
                     <Text
+                      maxFontSizeMultiplier={1.15}
                       style={[
                         styles.dateText,
                         { color: theme.text },
@@ -799,8 +827,6 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
   );
 };
 
-const CELL_WIDTH = (width - 48 - 42) / 7;
-
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -810,9 +836,9 @@ const styles = StyleSheet.create({
     flex: 1
   },
   container: {
-    paddingHorizontal: 24,
+    paddingHorizontal: SCREEN_HORIZONTAL_PADDING,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 15 : 15,
-    paddingBottom: 176
+    paddingBottom: Platform.OS === 'android' ? 220 : 176
   },
   header: {
     flexDirection: 'row',
@@ -915,11 +941,9 @@ const styles = StyleSheet.create({
   },
   daysOfWeekContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     marginBottom: 12
   },
   dayPill: {
-    width: CELL_WIDTH,
     height: 24,
     borderRadius: 12,
     backgroundColor: COLORS.pillBg,
@@ -935,19 +959,17 @@ const styles = StyleSheet.create({
   gridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between'
+    justifyContent: 'flex-start'
   },
   weekMoodBoard: {
     minHeight: 92,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     marginTop: 10,
-    marginBottom: 18,
-    paddingHorizontal: 6
+    marginBottom: 18
   },
   weekMoodChip: {
-    width: CELL_WIDTH,
     height: 66,
     borderRadius: 18,
     borderWidth: 1,
@@ -1008,7 +1030,6 @@ const styles = StyleSheet.create({
     fontWeight: '500'
   },
   cellPill: {
-    width: CELL_WIDTH,
     height: 62,
     borderRadius: 20,
     backgroundColor: '#F8F8FA',

@@ -9,6 +9,7 @@ const FONT_SANS_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Ge
 const FONT_MONO = Platform.select({ ios: 'GeistMono-Regular', android: 'GeistMono-Regular', default: 'monospace' });
 const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
 const DATA_MINT = '#39D98A';
+const ANDROID_NAV_RESERVE = Platform.OS === 'android' ? 58 : 0;
 
 const IosSwitch = ({ enabled }: { enabled: boolean }) => {
   const isDark = useColorScheme() === 'dark';
@@ -281,7 +282,7 @@ const styles = StyleSheet.create({
     flex: 1
   },
   listContent: {
-    paddingBottom: 18
+    paddingBottom: Platform.OS === 'android' ? 58 : 18
   },
   item: {
     flexDirection: 'row',
@@ -348,7 +349,7 @@ const styles = StyleSheet.create({
     marginHorizontal: -24,
     paddingHorizontal: 24,
     paddingTop: 12,
-    paddingBottom: Platform.OS === 'android' ? 22 : 18,
+    paddingBottom: Platform.OS === 'android' ? ANDROID_NAV_RESERVE : 18,
     backgroundColor: 'transparent'
   },
   footerButton: {

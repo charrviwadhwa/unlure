@@ -336,6 +336,11 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
     ? ['#121418', '#14171A', '#171A16', '#121418']
     : ['#FFFFFF', '#FFFCF6', '#FFFFFF'];
   const heroCardColors = ['#171C24', '#191E24', '#242116'];
+  const statsCardColors = isDark ? ['#171C24', '#151A20'] : ['#FFFFFF', '#F7F4ED'];
+  const statsTextColor = isDark ? '#FFFFFF' : '#151515';
+  const statsLabelColor = isDark ? 'rgba(255,255,255,0.48)' : '#7A756B';
+  const statsUnitColor = isDark ? 'rgba(255,255,255,0.42)' : '#8B867C';
+  const statsBorderColor = isDark ? 'rgba(255,255,255,0.08)' : '#EEE8DC';
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
       <LinearGradient colors={screenGradientColors} style={styles.screenGradient}>
@@ -363,38 +368,45 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
         <View style={styles.heroStack}>
           <View style={[styles.heroBackplate, { backgroundColor: isDark ? 'rgba(255,255,255,0.045)' : '#F7F1E4' }]} />
           <LinearGradient
-            colors={heroCardColors}
-            start={{ x: 0, y: 0.15 }}
-            end={{ x: 1, y: 0.9 }}
-            style={[styles.heroCard, isDark && { borderColor: 'rgba(255,255,255,0.08)', borderWidth: 1 }]}
+            colors={isDark ? ['#3A414B', '#181D24', '#55523F'] : ['#F7F1E4', '#E8DDCB', '#F7F1E4']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroCardBorder}
           >
-            <View style={styles.heroTopRow}>
-              <Text style={styles.heroKicker}>{!hasActiveLimits ? 'No active limits' : isExceededToday ? 'Needs recovery' : 'On track today'}</Text>
-              <Text style={styles.heroMeta}>{`${streak} day streak`}</Text>
-            </View>
-            <View style={styles.heroBody}>
-              <View style={styles.heroCopy}>
-                <View style={styles.streakNumberWrap}>
-                  <AnimatedCount value={streak} style={styles.streakNumberEcho} />
-                  <AnimatedCount value={streak} style={styles.streakNumber} />
-                </View>
-                <Text style={styles.streakLabel}>{heroStreakLabel}</Text>
-                <Text style={styles.streakSubLabel}>{streakProgressLabel}</Text>
+            <LinearGradient
+              colors={heroCardColors}
+              start={{ x: 0, y: 0.15 }}
+              end={{ x: 1, y: 0.9 }}
+              style={styles.heroCard}
+            >
+              <View style={styles.heroTopRow}>
+                <Text style={styles.heroKicker}>{!hasActiveLimits ? 'No active limits' : isExceededToday ? 'Needs recovery' : 'On track today'}</Text>
+                <Text style={styles.heroMeta}>{`${streak} day streak`}</Text>
               </View>
-              <Image
-                source={isExceededToday ? require('../../assets/Sad.gif') : require('../../assets/Fire (1).gif')}
-                style={styles.heroGif}
-                resizeMode="contain"
-              />
-            </View>
+              <View style={styles.heroBody}>
+                <View style={styles.heroCopy}>
+                  <View style={styles.streakNumberWrap}>
+                    <AnimatedCount value={streak} style={styles.streakNumberEcho} />
+                    <AnimatedCount value={streak} style={styles.streakNumber} />
+                  </View>
+                  <Text style={styles.streakLabel}>{heroStreakLabel}</Text>
+                  <Text style={styles.streakSubLabel}>{streakProgressLabel}</Text>
+                </View>
+                <Image
+                  source={isExceededToday ? require('../../assets/Sad.gif') : require('../../assets/Fire (1).gif')}
+                  style={styles.heroGif}
+                  resizeMode="contain"
+                />
+              </View>
+            </LinearGradient>
           </LinearGradient>
         </View>
 
         <LinearGradient
-          colors={isDark ? ['#171C24', '#151A20'] : ['#171C24', '#202327']}
+          colors={statsCardColors}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.trophyStatsRow}
+          style={[styles.trophyStatsRow, { borderColor: statsBorderColor }]}
         >
           {[
             { label: 'Current Streak', value: streak, unit: 'days', delay: 0, accent: '#7ACB67' },
@@ -403,14 +415,18 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
           ].map((item, index) => (
             <View
               key={item.label}
-              style={[styles.trophyStat, index > 0 && styles.trophyStatDivider]}
+              style={[
+                styles.trophyStat,
+                index > 0 && styles.trophyStatDivider,
+                index > 0 && { borderLeftColor: statsBorderColor }
+              ]}
             >
               <View style={styles.trophyStatLabelRow}>
                 <View style={[styles.trophyAccent, { backgroundColor: item.accent }]} />
-                <Text style={styles.trophyStatLabel}>{item.label}</Text>
+                <Text style={[styles.trophyStatLabel, { color: statsLabelColor }]}>{item.label}</Text>
               </View>
-              <AnimatedCount value={item.value} delay={item.delay} style={[styles.trophyStatValue, { color: theme.text }]} />
-              <Text style={styles.trophyStatUnit}>{item.unit}</Text>
+              <AnimatedCount value={item.value} delay={item.delay} style={[styles.trophyStatValue, { color: statsTextColor }]} />
+              <Text style={[styles.trophyStatUnit, { color: statsUnitColor }]}>{item.unit}</Text>
             </View>
           ))}
         </LinearGradient>
@@ -506,7 +522,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 24,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 15 : 15,
-    paddingBottom: 176
+    paddingBottom: Platform.OS === 'android' ? 220 : 176
   },
   headerRow: {
     flexDirection: 'row',
@@ -598,16 +614,20 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     backgroundColor: '#F2F2F7'
   },
-  heroCard: {
-    minHeight: 156,
-    borderRadius: 30,
-    padding: 20,
-    backgroundColor: '#111111',
+  heroCardBorder: {
+    borderRadius: 31,
+    padding: 1,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 14 },
     shadowOpacity: 0.14,
     shadowRadius: 26,
     elevation: 9
+  },
+  heroCard: {
+    minHeight: 156,
+    borderRadius: 30,
+    padding: 20,
+    backgroundColor: '#111111'
   },
   heroTopRow: {
     flexDirection: 'row',

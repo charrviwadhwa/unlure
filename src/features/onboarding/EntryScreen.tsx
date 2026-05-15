@@ -1,17 +1,26 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Animated,
-  Easing,
   Image,
+  PanResponder,
   Platform,
   SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
-  TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import Svg, {
+  Circle,
+  Defs,
+  FeGaussianBlur,
+  Filter,
+  Path,
+  RadialGradient,
+  Rect,
+  Stop,
+} from 'react-native-svg';
 
 type EntryScreenProps = {
   onAnimationComplete: () => void;
@@ -22,28 +31,31 @@ const FONT_SCRIPT = Platform.select({
   android: 'PlaywriteDESAS-Light',
   default: 'System',
 });
-const FONT_REG = Platform.select({
+
+const FONT_REGULAR = Platform.select({
   ios: 'Geist-Regular',
   android: 'Geist-Regular',
   default: 'System',
 });
-const FONT_SEMI = Platform.select({
+
+const FONT_SEMIBOLD = Platform.select({
   ios: 'Geist-SemiBold',
   android: 'Geist-SemiBold',
   default: 'System',
 });
+
 const FONT_MONO = Platform.select({
   ios: 'GeistMono-Regular',
   android: 'GeistMono-Regular',
   default: 'monospace',
 });
 
-const ArrowUpRightIcon = ({ color }: { color: string }) => (
-  <Svg width={28} height={28} viewBox="0 0 24 24">
+const DoubleChevronIcon = ({ color }: { color: string }) => (
+  <Svg width={30} height={30} viewBox="0 0 24 24">
     <Path
-      d="M7 17L17 7M10 7h7v7"
+      d="m7 6 6 6-6 6M12 6l6 6-6 6"
       stroke={color}
-      strokeWidth={2.6}
+      strokeWidth={2.5}
       strokeLinecap="round"
       strokeLinejoin="round"
       fill="none"
@@ -51,161 +63,497 @@ const ArrowUpRightIcon = ({ color }: { color: string }) => (
   </Svg>
 );
 
-const EntryScreen: React.FC<EntryScreenProps> = ({ onAnimationComplete }) => {
-  const [pressed, setPressed] = useState(false);
-  const [isRevealing, setIsRevealing] = useState(false);
-  const pulse = useRef(new Animated.Value(1)).current;
-  const buttonReveal = useRef(new Animated.Value(0)).current;
-  const buttonRevealScale = buttonReveal.interpolate({
+const FeatureIcon = ({ type }: { type: 'shield' | 'lock' | 'leaf' }) => {
+  if (type === 'lock') {
+    return (
+      <Svg width={30} height={30} viewBox="0 0 24 24">
+        <Rect
+          x={5}
+          y={10}
+          width={14}
+          height={10}
+          rx={2.3}
+          fill="none"
+          stroke="#a7f277"
+          strokeWidth={1.8}
+        />
+        <Path
+          d="M8 10V7.6C8 5.1 9.7 3.5 12 3.5s4 1.6 4 4.1V10"
+          fill="none"
+          stroke="#a7f277"
+          strokeWidth={1.8}
+          strokeLinecap="round"
+        />
+        <Path
+          d="M12 14v2.3"
+          stroke="#a7f277"
+          strokeWidth={1.8}
+          strokeLinecap="round"
+        />
+      </Svg>
+    );
+  }
+
+  if (type === 'leaf') {
+    return (
+      <Svg width={30} height={30} viewBox="0 0 24 24">
+        <Path
+          d="M19.4 4.4C12.6 5.4 6.2 9 6.2 15.2c0 3 2.1 5 5 5 6.2 0 8.2-8.7 8.2-15.8z"
+          fill="none"
+          stroke="#a7f277"
+          strokeWidth={1.8}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <Path
+          d="M12.1 13.1c-1.6 1.5-2.7 3.6-3.1 6.1"
+          fill="none"
+          stroke="#a7f277"
+          strokeWidth={1.8}
+          strokeLinecap="round"
+        />
+      </Svg>
+    );
+  }
+
+  return (
+    <Svg width={30} height={30} viewBox="0 0 24 24">
+      <Path
+        d="M12 3.2 19 6v5.1c0 4.4-2.7 7.8-7 9.7-4.3-1.9-7-5.3-7-9.7V6l7-2.8z"
+        fill="none"
+        stroke="#a7f277"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+};
+
+const CalendarDoodleIcon = () => (
+  <Svg width={44} height={44} viewBox="0 0 44 44">
+    <Rect x={7} y={10} width={30} height={27} rx={2.6} fill="none" stroke="#d7dfec" strokeWidth={1.9} />
+    <Path d="M7 17h30M14 6v7M30 6v7" stroke="#d7dfec" strokeWidth={1.9} strokeLinecap="round" />
+    <Rect x={13} y={22} width={5} height={4.8} fill="none" stroke="#d7dfec" strokeWidth={1.5} />
+    <Rect x={22} y={22} width={5} height={4.8} fill="none" stroke="#d7dfec" strokeWidth={1.5} />
+    <Rect x={31} y={22} width={5} height={4.8} fill="none" stroke="#d7dfec" strokeWidth={1.5} />
+    <Rect x={13} y={30} width={5} height={4.8} fill="none" stroke="#d7dfec" strokeWidth={1.5} />
+    <Rect x={22} y={30} width={5} height={4.8} fill="none" stroke="#d7dfec" strokeWidth={1.5} />
+  </Svg>
+);
+
+const DustOrb = () => (
+  <Svg width={420} height={420} style={styles.dustOrb}>
+    <Defs>
+      <RadialGradient id="dustOrbGradient" cx="50%" cy="50%" r="50%">
+        <Stop offset="0%" stopColor="#2C3C20" stopOpacity={0.82} />
+        <Stop offset="58%" stopColor="#2C3C20" stopOpacity={0.68} />
+        <Stop offset="84%" stopColor="#2C3C20" stopOpacity={0.42} />
+        <Stop offset="100%" stopColor="#2C3C20" stopOpacity={0} />
+      </RadialGradient>
+
+      <RadialGradient id="dustOrbEdgeGlow" cx="50%" cy="50%" r="50%">
+        <Stop offset="0%" stopColor="#a7f277" stopOpacity={0} />
+        <Stop offset="68%" stopColor="#a7f277" stopOpacity={0} />
+        <Stop offset="88%" stopColor="#a7f277" stopOpacity={0.08} />
+        <Stop offset="100%" stopColor="#a7f277" stopOpacity={0} />
+      </RadialGradient>
+
+      <Filter id="dustOrbBlur">
+        <FeGaussianBlur stdDeviation="28" />
+      </Filter>
+
+      <Filter id="dustOrbSoftBlur">
+        <FeGaussianBlur stdDeviation="48" />
+      </Filter>
+    </Defs>
+
+    <Circle
+      cx={210}
+      cy={218}
+      r={122}
+      fill="url(#dustOrbGradient)"
+    />
+    <Circle
+      cx={210}
+      cy={218}
+      r={146}
+      fill="url(#dustOrbEdgeGlow)"
+      filter="url(#dustOrbBlur)"
+    />
+    <Circle
+      cx={176}
+      cy={184}
+      r={78}
+      fill="#2C3C20"
+      opacity={0.26}
+      filter="url(#dustOrbSoftBlur)"
+    />
+    <Circle
+      cx={250}
+      cy={252}
+      r={92}
+      fill="#2C3C20"
+      opacity={0.2}
+      filter="url(#dustOrbSoftBlur)"
+    />
+  </Svg>
+);
+
+const EntryScreen: React.FC<EntryScreenProps> = ({
+  onAnimationComplete,
+}) => {
+  const { width, height } = useWindowDimensions();
+  const isCompactHeight = height < 860;
+  const isVeryCompactHeight = height < 780;
+  const isNarrow = width < 390;
+  const contentScale = Math.min(1, Math.max(0.84, width / 430, height / 920));
+  const heroHeight = Math.round(
+    Math.min(height * 0.43, Math.max(300, width * (isCompactHeight ? 0.9 : 0.96)))
+  );
+  const heroImageWidth = Math.round(Math.min(500, width * (isNarrow ? 1.2 : 1.25)));
+  const heroImageHeight = Math.round(heroImageWidth * 0.81);
+  const titleSize = Math.round((isNarrow ? 41 : 44) * contentScale);
+  const titleLineHeight = Math.round(titleSize * 1.12);
+  const subSize = isNarrow || isCompactHeight ? 13 : 14;
+  const subLineHeight = isNarrow || isCompactHeight ? 21 : 23;
+  const rootPaddingTop = isVeryCompactHeight ? 14 : isCompactHeight ? 20 : 28;
+  const rootPaddingHorizontal = isNarrow ? 22 : 28;
+  const rootPaddingBottom = isVeryCompactHeight ? 16 : 24;
+  const androidNavReserve = Platform.OS === 'android'
+    ? isVeryCompactHeight ? 58 : isCompactHeight ? 54 : 48
+    : 0;
+  const copyLift = isCompactHeight ? -16 : -10;
+  const ctaHeight = isNarrow || isCompactHeight ? 52 : 58;
+  const thumbSize = isNarrow || isCompactHeight ? 44 : 48;
+  const featureTop = isVeryCompactHeight ? 10 : isCompactHeight ? 14 : 18;
+  const featureTextSize = isNarrow || isCompactHeight ? 11 : 12;
+  const featureIconScale = isNarrow || isCompactHeight ? 0.8 : 0.9;
+  const featureGap = isNarrow || isCompactHeight ? 4 : 6;
+  const featureDividerMargin = isNarrow ? 7 : 10;
+  const [ctaWidth, setCtaWidth] = useState(0);
+  const swipeX = useRef(new Animated.Value(0)).current;
+  const successProgress = useRef(new Animated.Value(0)).current;
+  const hasCompletedSwipe = useRef(false);
+  
+  // CTA dimensions updated for the new styling
+  const ctaHorizontalInset = 8;
+  const maxSwipe = Math.max(ctaWidth - thumbSize - ctaHorizontalInset * 2, 0);
+  const safeMaxSwipe = Math.max(maxSwipe, 1);
+  
+  const ctaLabelOpacity = swipeX.interpolate({
+    inputRange: [0, safeMaxSwipe * 0.7],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+  
+  const welcomeOpacity = successProgress.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.01, 2.5],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
   });
 
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 1.15,
-          duration: 900,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulse, {
-          toValue: 1,
-          duration: 900,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
+  // Updated handling to fade out at the very end of success
+  const handleOpacity = successProgress.interpolate({
+    inputRange: [0, 0.8, 1],
+    outputRange: [1, 1, 0],
+    extrapolate: 'clamp',
+  });
 
-    animation.start();
-    return () => animation.stop();
-  }, [pulse]);
+  // Updated to expand exponentially on success (The "pop")
+  const handleScale = successProgress.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [1, 1.2, 4],
+    extrapolate: 'clamp',
+  });
 
-  const startReveal = () => {
-    if (isRevealing) {
-      return;
-    }
+  // Green Fill grows from 0 to 1
+  const ctaFillScale = swipeX.interpolate({
+    inputRange: [0, safeMaxSwipe],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
 
-    setIsRevealing(true);
-    setPressed(true);
-    pulse.stopAnimation();
-    buttonReveal.setValue(0);
+  // Translate to ensure it grows from the left side of the track
+  const ctaFillTranslateX = swipeX.interpolate({
+    inputRange: [0, safeMaxSwipe],
+    outputRange: [-(Math.max(ctaWidth, 1) / 2), 0],
+    extrapolate: 'clamp',
+  });
 
-    Animated.timing(buttonReveal, {
-      toValue: 1,
-      duration: 850,
-      easing: Easing.bezier(0.4, 0, 0.2, 1),
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) {
-        onAnimationComplete();
-      }
+  const completeSwipe = useCallback(() => {
+    if (hasCompletedSwipe.current) return;
+    hasCompletedSwipe.current = true;
+    Animated.parallel([
+      Animated.spring(swipeX, {
+        toValue: maxSwipe,
+        useNativeDriver: true,
+        tension: 60,
+        friction: 10,
+      }),
+      Animated.timing(successProgress, {
+        toValue: 1,
+        duration: 260,
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      if (finished) onAnimationComplete();
     });
-  };
+  }, [maxSwipe, onAnimationComplete, successProgress, swipeX]);
+
+  const resetSwipe = useCallback(() => {
+    Animated.spring(swipeX, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 60,
+      friction: 10,
+    }).start();
+  }, [swipeX]);
+
+  const panResponder = useMemo(
+    () => PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        Math.abs(gesture.dx) > 6 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
+      onPanResponderGrant: () => {
+        swipeX.stopAnimation();
+      },
+      onPanResponderMove: (_, gesture) => {
+        const nextX = Math.min(Math.max(gesture.dx, 0), maxSwipe);
+        swipeX.setValue(nextX);
+      },
+      onPanResponderRelease: (_, gesture) => {
+        const shouldComplete = gesture.dx > maxSwipe * 0.8 || gesture.vx > 1.2;
+        if (shouldComplete) {
+          completeSwipe();
+        } else {
+          resetSwipe();
+        }
+      },
+      onPanResponderTerminate: resetSwipe,
+    }),
+    [completeSwipe, maxSwipe, resetSwipe, swipeX]
+  );
 
   return (
     <View style={styles.fullScreen}>
-      <StatusBar barStyle="light-content" backgroundColor="#070a10" />
+      <StatusBar
+        translucent
+        backgroundColor="transparent"
+        barStyle="light-content"
+      />
+
       <SafeAreaView style={styles.safe}>
-        <View style={styles.root}>
-        <View style={styles.gridLayer}>
-          {Array.from({ length: 13 }).map((_, index) => (
-            <View
-              key={`grid-slant-${index}`}
-              style={[styles.gridLineSlant, { left: -180 + index * 58 }]}
+        <View
+          style={[
+            styles.root,
+            {
+              paddingTop: rootPaddingTop,
+              paddingHorizontal: rootPaddingHorizontal,
+              paddingBottom: rootPaddingBottom,
+            },
+          ]}
+        >
+          <View style={styles.vignette} />
+
+          <View style={styles.gridLayer}>
+            {Array.from({ length: 9 }).map((_, index) => (
+              <View
+                key={`grid-horizontal-${index}`}
+                style={[
+                  styles.gridHorizontalLine,
+                  {
+                    top: 36 + index * 92,
+                  },
+                ]}
+              />
+            ))}
+            {Array.from({ length: 6 }).map((_, index) => (
+              <View
+                key={`grid-vertical-${index}`}
+                style={[
+                  styles.gridVerticalLine,
+                  {
+                    left: 20 + index * 86,
+                  },
+                ]}
+              />
+            ))}
+            {Array.from({ length: 12 }).map((_, index) => (
+              <View
+                key={`grid-diagonal-${index}`}
+                style={[
+                  styles.gridLine,
+                  {
+                    left: -160 + index * 58,
+                  },
+                ]}
+              />
+            ))}
+          </View>
+
+          <View pointerEvents="none" style={styles.screenDoodles}>
+            <Image
+              source={require('../../assets/app-icons/fire.png')}
+              style={[
+                styles.doodleImage,
+                styles.fireDoodle,
+                { top: heroHeight * 0.43, left: rootPaddingHorizontal - 2 },
+              ]}
+              resizeMode="contain"
             />
-          ))}
-          {Array.from({ length: 10 }).map((_, index) => (
-            <View
-              key={`grid-slant-soft-${index}`}
-              style={[styles.gridLineSoftSlant, { left: -120 + index * 70 }]}
+            <Image
+              source={require('../../assets/app-icons/phone.png')}
+              style={[
+                styles.doodleImage,
+                styles.phoneDoodle,
+                { top: heroHeight * 0.22, right: rootPaddingHorizontal + 4 },
+              ]}
+              resizeMode="contain"
             />
-          ))}
-        </View>
+            <View
+              style={[
+                styles.calendarDoodle,
+                { top: heroHeight * 0.72, left: rootPaddingHorizontal + 20 },
+              ]}
+            >
+              <CalendarDoodleIcon />
+            </View>
+            <Image
+              source={require('../../assets/app-icons/bar.png')}
+              style={[
+                styles.doodleImage,
+                styles.barDoodle,
+                { top: heroHeight * 0.8, right: rootPaddingHorizontal + 26 },
+              ]}
+              resizeMode="contain"
+            />
+          </View>
 
-        <View pointerEvents="none" style={styles.screenDoodles}>
-          <Image
-            source={require('../../assets/app-icons/fire.png')}
-            style={[styles.doodleImage, styles.doodleFireTop]}
-          />
-          <Image
-            source={require('../../assets/app-icons/phone.png')}
-            style={[styles.doodleImage, styles.doodlePhoneTop]}
-          />
-          <Image
-            source={require('../../assets/app-icons/image.png')}
-            style={[styles.doodleImage, styles.doodleImageMid]}
-          />
-          <Image
-            source={require('../../assets/app-icons/bar.png')}
-            style={[styles.doodleImage, styles.doodleBarBottom]}
-          />
-        </View>
-
-        <View style={styles.heroWrap}>
-          <View style={styles.glowCircle} />
-          <Image
-            source={require('../../assets/share-paper-plane.png')}
-            resizeMode="contain"
-            style={styles.heroImage}
-          />
-        </View>
-
-        <View style={styles.copyWrap}>
-          <Text style={styles.brand}>unlure</Text>
-          <Text style={styles.titleLine}>Digital Focus</Text>
-          <View style={styles.titleRow}>
-            <Text style={styles.titleLine}>Made for </Text>
-            <View style={styles.arrowChip}>
-              <Text style={styles.arrowChipText}>{'->'}</Text>
+          <View style={[styles.heroWrap, { height: heroHeight }]}>
+            <DustOrb />
+            <View style={styles.heroMask}>
+              <Image
+                source={require('../../assets/share-paper-plane.png')}
+                resizeMode="contain"
+                style={[
+                  styles.heroImage,
+                  { width: heroImageWidth, height: heroImageHeight },
+                ]}
+              />
             </View>
           </View>
-          <Text style={styles.titleLine}>Daily Users</Text>
-          <Text style={styles.sub}>Set limits, reduce noise, and reclaim your attention.</Text>
-        </View>
 
-        <View style={styles.bottomRow}>
-          <View style={styles.startWrap}>
-            <Text style={styles.startText}>Let's Start</Text>
-            <TouchableOpacity
-              activeOpacity={1}
-              onPressIn={() => setPressed(true)}
-              onPressOut={() => {
-                if (!isRevealing) {
-                  setPressed(false);
-                }
-              }}
-              onPress={startReveal}
-              disabled={isRevealing}
+          <View style={[styles.copyWrap, { marginTop: copyLift }]}>
+            <Text style={styles.brand}>unlure</Text>
+
+            <Text style={[styles.title, { fontSize: titleSize, lineHeight: titleLineHeight }]}>Digital Focus</Text>
+            <Text style={[styles.title, { fontSize: titleSize, lineHeight: titleLineHeight }]}>Made for</Text>
+
+            <Text style={[styles.title, styles.titleAccent, { fontSize: titleSize, lineHeight: titleLineHeight }]}>
+              Daily Users
+            </Text>
+
+            <Text style={[styles.sub, { fontSize: subSize, lineHeight: subLineHeight }]}>
+              Set limits, reduce noise,{'\n'}
+              and reclaim your attention.
+            </Text>
+          </View>
+
+          <View style={[styles.bottomSection, { paddingBottom: androidNavReserve }]}>
+            {/* --- UPDATED CTA SECTION --- */}
+            <View
+              style={[
+                styles.startBtn,
+                {
+                  height: ctaHeight,
+                  borderRadius: ctaHeight / 2,
+                },
+              ]}
+              onLayout={(event) => setCtaWidth(event.nativeEvent.layout.width)}
+              {...panResponder.panHandlers}
             >
+              {/* Green Fill Background */}
               <Animated.View
                 style={[
-                  styles.startBtn,
-                  pressed ? styles.startBtnPressed : null,
-                  { transform: [{ scale: isRevealing ? 1 : pulse }] },
+                  styles.startSwipeFill,
+                  {
+                    transform: [
+                      { translateX: ctaFillTranslateX },
+                      { scaleX: ctaFillScale },
+                    ],
+                  },
+                ]}
+              />
+
+              {/* Text Layers */}
+              <Animated.Text style={[styles.startText, { opacity: ctaLabelOpacity }]}>
+                Swipe to get started
+              </Animated.Text>
+              <Animated.Text style={[styles.welcomeText, { opacity: welcomeOpacity }]}>
+                Welcome!!
+              </Animated.Text>
+
+              {/* Animated White Handle */}
+              <Animated.View
+                style={[
+                  styles.startIcon,
+                  {
+                    width: thumbSize,
+                    height: thumbSize,
+                    borderRadius: thumbSize / 2,
+                    opacity: handleOpacity,
+                    transform: [
+                      { translateX: swipeX },
+                      { scale: handleScale },
+                    ],
+                  },
                 ]}
               >
-                <Animated.View
-                  style={[
-                    styles.buttonRevealFill,
-                    {
-                      transform: [
-                        { translateX: 16 },
-                        { translateY: 16 },
-                        { scale: buttonRevealScale },
-                      ],
-                    },
-                  ]}
-                />
-                <View style={styles.startIcon}>
-                  <ArrowUpRightIcon color={isRevealing ? '#071006' : '#b0f47e'} />
-                </View>
+                <DoubleChevronIcon color="#050806" />
               </Animated.View>
-            </TouchableOpacity>
+            </View>
+            {/* --- END OF CTA SECTION --- */}
+
+            <View style={[styles.featureRow, { marginTop: featureTop }]}>
+              <View style={styles.featureItem}>
+                <View style={{ transform: [{ scale: featureIconScale }] }}>
+                  <FeatureIcon type="shield" />
+                </View>
+
+                <View style={[styles.featureTextWrap, { marginLeft: featureGap }]}>
+                  <Text style={[styles.featureTitle, { fontSize: featureTextSize }]}>Private</Text>
+                  <Text style={[styles.featureSub, { fontSize: featureTextSize }]}>by design</Text>
+                </View>
+              </View>
+
+              <View style={[styles.featureDivider, { marginHorizontal: featureDividerMargin }]} />
+
+              <View style={styles.featureItem}>
+                <View style={{ transform: [{ scale: featureIconScale }] }}>
+                  <FeatureIcon type="lock" />
+                </View>
+
+                <View style={[styles.featureTextWrap, { marginLeft: featureGap }]}>
+                  <Text style={[styles.featureTitle, { fontSize: featureTextSize }]}>No Tracking</Text>
+                  <Text style={[styles.featureSub, { fontSize: featureTextSize }]}>no analytics</Text>
+                </View>
+              </View>
+
+              <View style={[styles.featureDivider, { marginHorizontal: featureDividerMargin }]} />
+
+              <View style={styles.featureItem}>
+                <View style={{ transform: [{ scale: featureIconScale }] }}>
+                  <FeatureIcon type="leaf" />
+                </View>
+
+                <View style={[styles.featureTextWrap, { marginLeft: featureGap }]}>
+                  <Text style={[styles.featureTitle, { fontSize: featureTextSize }]}>Lightweight</Text>
+                  <Text style={[styles.featureSub, { fontSize: featureTextSize }]}>built for focus</Text>
+                </View>
+              </View>
+            </View>
+
           </View>
-        </View>
         </View>
       </SafeAreaView>
     </View>
@@ -215,177 +563,256 @@ const EntryScreen: React.FC<EntryScreenProps> = ({ onAnimationComplete }) => {
 const styles = StyleSheet.create({
   fullScreen: {
     flex: 1,
-    backgroundColor: '#070a10',
+    backgroundColor: '#02070b',
   },
-  safe: { flex: 1, backgroundColor: '#070a10' },
+
+  safe: {
+    flex: 1,
+    backgroundColor: '#02070b',
+  },
+
   root: {
     flex: 1,
-    backgroundColor: '#070a10',
-    paddingHorizontal: 24,
-    paddingTop: 22,
-    paddingBottom: 12,
+    paddingHorizontal: 30,
+    paddingTop: 4,
+    paddingBottom: 40,
+    justifyContent: 'space-between',
+    backgroundColor: '#02070b',
   },
+
+  vignette: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.14)',
+  },
+
   gridLayer: {
     ...StyleSheet.absoluteFillObject,
-    opacity: 0.82,
+    opacity: 0.72,
   },
-  gridLineSlant: {
+
+  gridHorizontalLine: {
     position: 'absolute',
-    top: -180,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(167,242,119,0.025)',
+  },
+
+  gridVerticalLine: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
     width: 1,
-    height: 1080,
-    backgroundColor: 'rgba(176,244,126,0.11)',
+    backgroundColor: 'rgba(167,242,119,0.023)',
+  },
+
+  gridLine: {
+    position: 'absolute',
+    top: -160,
+    width: 1,
+    height: 1200,
+    backgroundColor: 'rgba(167,242,119,0.06)',
     transform: [{ rotate: '-15deg' }],
   },
-  gridLineSoftSlant: {
-    position: 'absolute',
-    top: -210,
-    width: 1,
-    height: 1120,
-    backgroundColor: 'rgba(215,223,236,0.055)',
-    transform: [{ rotate: '15deg' }],
-  },
+
   screenDoodles: {
     ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
   },
+
   doodleImage: {
     position: 'absolute',
-    resizeMode: 'contain',
-    opacity: 0.68,
-    tintColor: '#b0f47e',
+    tintColor: '#a7f277',
+    opacity: 0.9,
   },
-  doodleFireTop: {
-    width: 34,
-    height: 34,
-    top: 168,
-    left: 20,
-    transform: [{ rotate: '-12deg' }],
+
+  fireDoodle: {
+    width: 44,
+    height: 44,
+    top: 176,
+    left: 28,
   },
-  doodlePhoneTop: {
-    width: 38,
-    height: 38,
-    top: 104,
-    right: 20,
-    transform: [{ rotate: '12deg' }],
+
+  phoneDoodle: {
+    width: 44,
+    height: 44,
+    top: 96,
+    right: 34,
   },
-  doodleImageMid: {
-    width: 48,
-    height: 48,
-    bottom: 124,
-    left: 24,
-    tintColor: '#d7dfec',
-    opacity: 0.64,
-    transform: [{ rotate: '-10deg' }],
-  },
-  doodleBarBottom: {
-    width: 38,
-    height: 38,
-    bottom: 176,
-    right: 28,
-    shadowColor: '#b0f47e',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.28,
-    shadowRadius: 10,
-  },
-  heroWrap: {
-    marginTop: 24,
-    height: 382,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  glowCircle: {
+
+  calendarDoodle: {
     position: 'absolute',
-    width: 246,
-    height: 246,
-    borderRadius: 123,
-    backgroundColor: 'rgba(176,244,126,0.18)',
+    top: 304,
+    left: 52,
+    opacity: 0.9,
+    transform: [{ rotate: '-9deg' }],
   },
-  heroImage: {
-    width: '126%',
-    height: '122%',
+
+  barDoodle: {
+    width: 50,
+    height: 50,
+    top: 340,
+    right: 56,
   },
-  copyWrap: { marginTop: 4 },
-  brand: {
-    color: '#cfd4df',
-    fontSize: 22,
-    lineHeight: 28,
-    fontFamily: FONT_SCRIPT,
-    marginBottom: 6,
-  },
-  titleLine: {
-    color: '#f0f4fb',
-    fontSize: 42,
-    lineHeight: 51,
-    fontFamily: FONT_MONO,
-    letterSpacing: 0.8,
-  },
-  titleRow: { flexDirection: 'row', alignItems: 'center' },
-  arrowChip: {
-    marginTop: 2,
-    marginLeft: 6,
-    height: 38,
-    minWidth: 66,
-    borderRadius: 19,
-    paddingHorizontal: 12,
+
+  heroWrap: {
+    height: 370,
+    marginTop: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#b0f47e',
+    zIndex: 2,
   },
-  arrowChipText: {
-    color: '#0b1013',
-    fontSize: 24,
-    lineHeight: 26,
-    fontFamily: FONT_MONO,
+
+  dustOrb: {
+    position: 'absolute',
+    transform: [{ translateY: -22 }],
   },
+
+  heroMask: {
+    overflow: 'hidden',
+    borderRadius: 40,
+  },
+
+  heroImage: {
+    width: 520,
+    height: 420,
+  },
+
+  copyWrap: {
+    marginTop: -24,
+    zIndex: 3,
+  },
+
+  brand: {
+    color: '#d6dbe5',
+    fontSize: 22,
+    fontFamily: FONT_SCRIPT,
+    marginBottom: 10,
+  },
+
+  title: {
+    color: '#ffffff',
+    fontSize: 48,
+    lineHeight: 53,
+    letterSpacing: -0.7,
+    fontFamily: FONT_SEMIBOLD,
+  },
+
+  titleAccent: {
+    color: '#a7f277',
+  },
+
   sub: {
+    marginTop: 18,
+    color: '#929aa5',
+    fontSize: 15,
+    lineHeight: 24,
+    fontFamily: FONT_MONO,
+  },
+
+  bottomSection: {
     marginTop: 8,
-    color: '#8f98aa',
-    fontSize: 14,
-    lineHeight: 20,
-    fontFamily: FONT_MONO,
-    maxWidth: 320,
+    paddingBottom: 0,
   },
-  bottomRow: {
-    marginTop: 'auto',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    minHeight: 116,
-    paddingTop: 28,
-    paddingBottom: 6,
-  },
-  startWrap: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  startText: {
-    color: '#c5ccd9',
-    fontSize: 17,
-    lineHeight: 22,
-    fontFamily: FONT_MONO,
-    fontWeight: '700',
-  },
+
+  // --- UPDATED CTA STYLES --- 
   startBtn: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: '#b0f47e',
+    width: '100%',
+    height: 64, 
+    borderRadius: 32,
+    backgroundColor: '#111111', 
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    position: 'relative',
+    // 1. CHANGE THIS: Update shadow color to match your app's green
+    shadowColor: '#a7f277', 
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
   },
-  startBtnPressed: {
-    borderColor: '#b0f47e',
-  },
-  buttonRevealFill: {
+
+  startSwipeFill: {
     position: 'absolute',
-    width: 66,
-    height: 66,
-    borderRadius: 33,
-    backgroundColor: '#b0f47e',
+    left: 0,
+    width: '100%',
+    height: '100%',
+    // 2. CHANGE THIS: Update background fill to your app's green
+    backgroundColor: '#a7f277', 
+    borderRadius: 32,
   },
+
   startIcon: {
-    zIndex: 2,
+    position: 'absolute',
+    left: 8,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
   },
+
+  startText: {
+    color: '#929aa5',
+    fontSize: 14,
+    fontFamily: FONT_SEMIBOLD,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    zIndex: 5,
+  },
+
+  welcomeText: {
+    position: 'absolute',
+    color: '#000000',
+    fontSize: 18,
+    fontFamily: FONT_SEMIBOLD,
+    fontWeight: '800',
+    zIndex: 6,
+  },
+  // --- END CTA STYLES ---
+
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 28,
+    zIndex: 3,
+  },
+
+  featureItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  featureTextWrap: {
+    marginLeft: 8,
+  },
+
+  featureTitle: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontFamily: FONT_SEMIBOLD,
+  },
+
+  featureSub: {
+    color: '#8f97a3',
+    fontSize: 13,
+    marginTop: 2,
+    fontFamily: FONT_REGULAR,
+  },
+
+  featureDivider: {
+    width: 1,
+    height: 34,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    marginHorizontal: 10,
+  },
+
 });
 
 export default EntryScreen;

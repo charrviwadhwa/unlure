@@ -15,7 +15,6 @@ const hourData = Array.from({ length: 13 }, (_, i) => String(i));
 const minuteData = Array.from({ length: 60 }, (_, i) => String(i));
 const FONT_SANS = Platform.select({ ios: 'Geist-Regular', android: 'Geist-Regular', default: 'System' });
 const FONT_SANS_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Geist-SemiBold', default: 'System' });
-const DATA_MINT = '#39D98A';
 
 export const TimeLimitModal = ({ visible, appName, iconBase64, initialMinutes = 30, onConfirm, onCancel }: TimeLimitModalProps) => {
   const isDark = useColorScheme() === 'dark';
@@ -25,7 +24,10 @@ export const TimeLimitModal = ({ visible, appName, iconBase64, initialMinutes = 
     text: isDark ? '#F3F4F6' : '#111111',
     textSecondary: isDark ? '#A5ACB8' : '#6F737C',
     border: isDark ? 'transparent' : 'transparent',
-    pickerText: isDark ? '#8E96A6' : '#6F737C'
+    pickerText: isDark ? '#8E96A6' : '#6F737C',
+    confirmBg: isDark ? '#F3F4F6' : '#101319',
+    confirmText: isDark ? '#101319' : '#FFFFFF',
+    confirmShadow: isDark ? '#FFFFFF' : '#101319'
   };
   const [hours, setHours] = useState('0');
   const [minutes, setMinutes] = useState('30');
@@ -108,15 +110,21 @@ export const TimeLimitModal = ({ visible, appName, iconBase64, initialMinutes = 
             >
               <Text style={[styles.cancelText, { color: theme.textSecondary }]}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.confirmButton} 
+            <TouchableOpacity
+              style={[
+                styles.confirmButton,
+                {
+                  backgroundColor: theme.confirmBg,
+                  shadowColor: theme.confirmShadow
+                }
+              ]}
               onPress={() => {
                 settle();
                 const totalMinutes = (parseInt(hours, 10) * 60) + parseInt(minutes, 10);
                 onConfirm(totalMinutes);
                 }}
             >
-              <Text style={styles.confirmText}>Confirm</Text>
+              <Text style={[styles.confirmText, { color: theme.confirmText }]}>Confirm</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -184,15 +192,15 @@ const styles = StyleSheet.create({
   confirmButton: {
     flex: 1.18,
     minHeight: 58,
-    backgroundColor: DATA_MINT,
+    backgroundColor: '#101319',
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 20,
-    shadowColor: DATA_MINT,
+    shadowColor: '#101319',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.26,
     shadowRadius: 18,
     elevation: 5
   },
-  confirmText: { color: '#101319', fontFamily: FONT_SANS_SEMIBOLD, fontWeight: '700', fontSize: 16 }
+  confirmText: { color: '#FFFFFF', fontFamily: FONT_SANS_SEMIBOLD, fontWeight: '700', fontSize: 16 }
 });
