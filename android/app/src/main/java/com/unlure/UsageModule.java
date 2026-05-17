@@ -248,7 +248,6 @@ public void getDailyStats(Promise promise) {
         HashMap<String, Long> totals = new HashMap<>();
         HashMap<String, Integer> openCounts = new HashMap<>();
         HashMap<String, Long> activeStarts = new HashMap<>();
-        HashMap<String, Integer> openActivityCounts = new HashMap<>();
         HashMap<String, Boolean> foregroundForOpenCounts = new HashMap<>();
         HashMap<String, Long> lastOpenTimes = new HashMap<>();
         Set<String> countablePackages = getCountableLaunchablePackages(pm);
@@ -257,7 +256,6 @@ public void getDailyStats(Promise promise) {
 
         for (String pkg : activeAtStart.keySet()) {
             activeStarts.put(pkg, startTime);
-            openActivityCounts.put(pkg, 1);
             foregroundForOpenCounts.put(pkg, true);
         }
 
@@ -273,50 +271,26 @@ public void getDailyStats(Promise promise) {
             int type = event.getEventType();
             long eventTime = Math.min(Math.max(event.getTimeStamp(), startTime), endTime);
 
-            if (type == UsageEvents.Event.MOVE_TO_FOREGROUND || type == UsageEvents.Event.ACTIVITY_RESUMED) {
-                if (type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
-                    boolean alreadyForeground = foregroundForOpenCounts.getOrDefault(pkg, false);
-                    long lastOpenTime = lastOpenTimes.getOrDefault(pkg, startTime - OPEN_COUNT_DEBOUNCE_MS);
-                    if (!alreadyForeground && eventTime - lastOpenTime >= OPEN_COUNT_DEBOUNCE_MS) {
-                        openCounts.put(pkg, openCounts.getOrDefault(pkg, 0) + 1);
-                        lastOpenTimes.put(pkg, eventTime);
-                    }
-                    foregroundForOpenCounts.put(pkg, true);
+            if (type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                boolean alreadyForeground = foregroundForOpenCounts.getOrDefault(pkg, false);
+                long lastOpenTime = lastOpenTimes.getOrDefault(pkg, startTime - OPEN_COUNT_DEBOUNCE_MS);
+                if (!alreadyForeground && eventTime - lastOpenTime >= OPEN_COUNT_DEBOUNCE_MS) {
+                    openCounts.put(pkg, openCounts.getOrDefault(pkg, 0) + 1);
+                    lastOpenTimes.put(pkg, eventTime);
                 }
+                foregroundForOpenCounts.put(pkg, true);
 
-                int currentOpen = openActivityCounts.getOrDefault(pkg, 0);
-                if (currentOpen == 0) {
+                if (!activeStarts.containsKey(pkg)) {
                     activeStarts.put(pkg, eventTime);
                 }
-                openActivityCounts.put(pkg, currentOpen + 1);
-            } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND || type == UsageEvents.Event.ACTIVITY_PAUSED) {
-                int currentOpen = openActivityCounts.getOrDefault(pkg, 0);
-                if (currentOpen > 0) {
-                    currentOpen -= 1;
-                    openActivityCounts.put(pkg, currentOpen);
-                }
-
-                if (currentOpen == 0) {
-                    foregroundForOpenCounts.put(pkg, false);
-                    Long start = activeStarts.remove(pkg);
-                    if (start != null && eventTime > start) {
-                        long delta = Math.min(eventTime - start, maxWindow);
-                        if (delta > 0) {
-                            long nextTotal = totals.getOrDefault(pkg, 0L) + delta;
-                            totals.put(pkg, Math.min(nextTotal, maxWindow));
-                        }
-                    }
-                }
-            } else if (type == UsageEvents.Event.ACTIVITY_STOPPED) {
-                if (openActivityCounts.getOrDefault(pkg, 0) == 0) {
-                    foregroundForOpenCounts.put(pkg, false);
-                    Long start = activeStarts.remove(pkg);
-                    if (start != null && eventTime > start) {
-                        long delta = Math.min(eventTime - start, maxWindow);
-                        if (delta > 0) {
-                            long nextTotal = totals.getOrDefault(pkg, 0L) + delta;
-                            totals.put(pkg, Math.min(nextTotal, maxWindow));
-                        }
+            } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND) {
+                foregroundForOpenCounts.put(pkg, false);
+                Long start = activeStarts.remove(pkg);
+                if (start != null && eventTime > start) {
+                    long delta = Math.min(eventTime - start, maxWindow);
+                    if (delta > 0) {
+                        long nextTotal = totals.getOrDefault(pkg, 0L) + delta;
+                        totals.put(pkg, Math.min(nextTotal, maxWindow));
                     }
                 }
             } else if (type == UsageEvents.Event.DEVICE_SHUTDOWN || type == UsageEvents.Event.DEVICE_STARTUP) {
@@ -330,7 +304,6 @@ public void getDailyStats(Promise promise) {
                     }
                 }
                 activeStarts.clear();
-                openActivityCounts.clear();
                 foregroundForOpenCounts.clear();
             }
         }
@@ -376,10 +349,7 @@ public void getDailyStats(Promise promise) {
             int type = event.getEventType();
             if (
                 type == UsageEvents.Event.MOVE_TO_FOREGROUND ||
-                type == UsageEvents.Event.ACTIVITY_RESUMED ||
                 type == UsageEvents.Event.MOVE_TO_BACKGROUND ||
-                type == UsageEvents.Event.ACTIVITY_PAUSED ||
-                type == UsageEvents.Event.ACTIVITY_STOPPED ||
                 type == UsageEvents.Event.DEVICE_SHUTDOWN ||
                 type == UsageEvents.Event.DEVICE_STARTUP
             ) {
@@ -390,7 +360,7 @@ public void getDailyStats(Promise promise) {
         HashMap<String, Boolean> active = new HashMap<>();
         for (Map.Entry<String, Integer> entry : lastEvents.entrySet()) {
             int type = entry.getValue();
-            if (type == UsageEvents.Event.MOVE_TO_FOREGROUND || type == UsageEvents.Event.ACTIVITY_RESUMED) {
+            if (type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
                 active.put(entry.getKey(), true);
             }
         }

@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   Pressable,
   Modal,
+  AppState,
   Platform,
   InteractionManager,
   Animated,
@@ -239,6 +240,7 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
   const [limitSnapshotsCache, setLimitSnapshotsCache] = useState<DailyLimitSnapshots>({});
   const [savedMoodsCache, setSavedMoodsCache] = useState<DailyMoodSnapshots>({});
   const [focusDecisionsCache, setFocusDecisionsCache] = useState<FocusModeDecisions>(EMPTY_FOCUS_DECISIONS);
+  const [appNamesCache, setAppNamesCache] = useState<Record<string, string>>({});
   const [trackingStartDate, setTrackingStartDate] = useState(formatDateKey(new Date()));
   const [refreshing, setRefreshing] = useState(false);
   const periodToggleAnim = useRef(new Animated.Value(0)).current;
@@ -398,12 +400,13 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
 
   const load = useCallback(async (targetDate: Date, mode: PeriodMode = periodMode) => {
     await ScreenTimeService.storeTodayStats();
-    const [stats, limits, limitSnapshots, savedMoods, loadedTrackingStartDate] = await Promise.all([
+    const [stats, limits, limitSnapshots, savedMoods, loadedTrackingStartDate, installedApps] = await Promise.all([
       ScreenTimeService.getStoredDailyStats(),
       UserStore.getAllLimits(),
       UserStore.getDailyLimitSnapshots(),
       UserStore.getDailyMoods(),
-      UserStore.ensureTrackingStartDate()
+      UserStore.ensureTrackingStartDate(),
+      ScreenTimeService.getInstalledApps()
     ]);
     const focusDecisions = await ScreenTimeService.getTodayFocusModeDecisions();
     await UserStore.saveTodayLimitSnapshot(limits || {});
@@ -419,6 +422,12 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
     setLimitSnapshotsCache(nextLimitSnapshots);
     setSavedMoodsCache(nextSavedMoods);
     setFocusDecisionsCache(focusDecisions);
+    setAppNamesCache(
+      installedApps.reduce<Record<string, string>>((acc, app) => {
+        acc[app.packageName] = app.appName;
+        return acc;
+      }, {})
+    );
     setTrackingStartDate(loadedTrackingStartDate);
     buildCalendar(targetDate, nextStats, nextLimitSnapshots, nextLimits, nextSavedMoods, focusDecisions, loadedTrackingStartDate, mode);
   }, [buildCalendar, periodMode, resolveStoredMood]);
@@ -428,6 +437,22 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
     const task = InteractionManager.runAfterInteractions(() => load(new Date()));
     return () => task.cancel();
   }, [active, load]);
+
+  useEffect(() => {
+    if (!active) return;
+    const refresh = () => load(monthDate, periodMode);
+    const interval = setInterval(refresh, 30000);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        refresh();
+      }
+    });
+
+    return () => {
+      clearInterval(interval);
+      subscription.remove();
+    };
+  }, [active, load, monthDate, periodMode]);
 
   useEffect(() => {
     buildCalendar(monthDate, statsCache, limitSnapshotsCache, limitsCache, savedMoodsCache, focusDecisionsCache, trackingStartDate, periodMode);
@@ -597,14 +622,14 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
     return Object.entries(dayMap)
       .map(([pkg, ms]) => ({
         id: pkg,
-        name: labelFromPackage(pkg),
+        name: appNamesCache[pkg] || labelFromPackage(pkg),
         minutes: Math.floor(ms / 60000),
         limit: getLimitsForDate(selectedDay.dateKey || '', limitSnapshotsCache, limitsCache)[pkg] || 0
       }))
       .filter((app) => app.minutes > 0 && !isAndroidToolApp(app.id, app.name))
       .sort((a, b) => b.minutes - a.minutes)
       .slice(0, 8);
-  }, [getLimitsForDate, limitSnapshotsCache, limitsCache, selectedDay, statsCache]);
+  }, [appNamesCache, getLimitsForDate, limitSnapshotsCache, limitsCache, selectedDay, statsCache]);
 
   const selectedDayUnderLimit = selectedDayApps
     .filter((app) => app.limit > 0)
@@ -780,19 +805,6 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
           </Text>
         </View>
         <Text style={[styles.insightLine, { color: isDark ? '#8A93A6' : '#888888' }]}>{insightLine}</Text>
-        {periodMode === 'week' ? (
-          <View style={styles.weekBentoGrid}>
-            <View style={[styles.weekBentoCard, { backgroundColor: theme.panel, borderColor: theme.border }]}>
-              <Text style={[styles.weekBentoLabel, { color: theme.subtext }]}>Best decision</Text>
-              <Text style={[styles.weekBentoText, { color: theme.text }]}>{bestDecision}</Text>
-            </View>
-            <View style={[styles.weekBentoCard, { backgroundColor: theme.panel, borderColor: theme.border }]}>
-              <Text style={[styles.weekBentoLabel, { color: theme.subtext }]}>Biggest slip</Text>
-              <Text style={[styles.weekBentoText, { color: theme.text }]}>{biggestSlip}</Text>
-            </View>
-          </View>
-        ) : null}
-
         <View style={styles.legendRow}>
           {LEGEND_ITEMS.map((mood) => (
             <View key={mood} style={[styles.legendItem, { backgroundColor: theme.dayPill, borderColor: theme.border }]}>

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Image,
@@ -17,50 +17,28 @@ import Svg, {
   Defs,
   FeGaussianBlur,
   Filter,
+  LinearGradient as SvgLinearGradient,
   Path,
   RadialGradient,
   Rect,
   Stop,
 } from 'react-native-svg';
 
+// Create an animated component out of SVG's Rect so it updates efficiently
+const AnimatedRect = Animated.createAnimatedComponent(Rect);
+
 type EntryScreenProps = {
   onAnimationComplete: () => void;
 };
 
-const FONT_SCRIPT = Platform.select({
-  ios: 'PlaywriteDESAS-Light',
-  android: 'PlaywriteDESAS-Light',
-  default: 'System',
-});
-
-const FONT_REGULAR = Platform.select({
-  ios: 'Geist-Regular',
-  android: 'Geist-Regular',
-  default: 'System',
-});
-
-const FONT_SEMIBOLD = Platform.select({
-  ios: 'Geist-SemiBold',
-  android: 'Geist-SemiBold',
-  default: 'System',
-});
-
-const FONT_MONO = Platform.select({
-  ios: 'GeistMono-Regular',
-  android: 'GeistMono-Regular',
-  default: 'monospace',
-});
+const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
+const FONT_REGULAR = Platform.select({ ios: 'Geist-Regular', android: 'Geist-Regular', default: 'System' });
+const FONT_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Geist-SemiBold', default: 'System' });
+const FONT_MONO = Platform.select({ ios: 'GeistMono-Regular', android: 'GeistMono-Regular', default: 'monospace' });
 
 const DoubleChevronIcon = ({ color }: { color: string }) => (
   <Svg width={30} height={30} viewBox="0 0 24 24">
-    <Path
-      d="m7 6 6 6-6 6M12 6l6 6-6 6"
-      stroke={color}
-      strokeWidth={2.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      fill="none"
-    />
+    <Path d="m7 6 6 6-6 6M12 6l6 6-6 6" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" fill="none" />
   </Svg>
 );
 
@@ -68,65 +46,23 @@ const FeatureIcon = ({ type }: { type: 'shield' | 'lock' | 'leaf' }) => {
   if (type === 'lock') {
     return (
       <Svg width={30} height={30} viewBox="0 0 24 24">
-        <Rect
-          x={5}
-          y={10}
-          width={14}
-          height={10}
-          rx={2.3}
-          fill="none"
-          stroke="#a7f277"
-          strokeWidth={1.8}
-        />
-        <Path
-          d="M8 10V7.6C8 5.1 9.7 3.5 12 3.5s4 1.6 4 4.1V10"
-          fill="none"
-          stroke="#a7f277"
-          strokeWidth={1.8}
-          strokeLinecap="round"
-        />
-        <Path
-          d="M12 14v2.3"
-          stroke="#a7f277"
-          strokeWidth={1.8}
-          strokeLinecap="round"
-        />
+        <Rect x={5} y={10} width={14} height={10} rx={2.3} fill="none" stroke="#a7f277" strokeWidth={1.8} />
+        <Path d="M8 10V7.6C8 5.1 9.7 3.5 12 3.5s4 1.6 4 4.1V10" fill="none" stroke="#a7f277" strokeWidth={1.8} strokeLinecap="round" />
+        <Path d="M12 14v2.3" stroke="#a7f277" strokeWidth={1.8} strokeLinecap="round" />
       </Svg>
     );
   }
-
   if (type === 'leaf') {
     return (
       <Svg width={30} height={30} viewBox="0 0 24 24">
-        <Path
-          d="M19.4 4.4C12.6 5.4 6.2 9 6.2 15.2c0 3 2.1 5 5 5 6.2 0 8.2-8.7 8.2-15.8z"
-          fill="none"
-          stroke="#a7f277"
-          strokeWidth={1.8}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <Path
-          d="M12.1 13.1c-1.6 1.5-2.7 3.6-3.1 6.1"
-          fill="none"
-          stroke="#a7f277"
-          strokeWidth={1.8}
-          strokeLinecap="round"
-        />
+        <Path d="M19.4 4.4C12.6 5.4 6.2 9 6.2 15.2c0 3 2.1 5 5 5 6.2 0 8.2-8.7 8.2-15.8z" fill="none" stroke="#a7f277" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d="M12.1 13.1c-1.6 1.5-2.7 3.6-3.1 6.1" fill="none" stroke="#a7f277" strokeWidth={1.8} strokeLinecap="round" />
       </Svg>
     );
   }
-
   return (
     <Svg width={30} height={30} viewBox="0 0 24 24">
-      <Path
-        d="M12 3.2 19 6v5.1c0 4.4-2.7 7.8-7 9.7-4.3-1.9-7-5.3-7-9.7V6l7-2.8z"
-        fill="none"
-        stroke="#a7f277"
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <Path d="M12 3.2 19 6v5.1c0 4.4-2.7 7.8-7 9.7-4.3-1.9-7-5.3-7-9.7V6l7-2.8z" fill="none" stroke="#a7f277" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   );
 };
@@ -152,67 +88,30 @@ const DustOrb = () => (
         <Stop offset="84%" stopColor="#2C3C20" stopOpacity={0.42} />
         <Stop offset="100%" stopColor="#2C3C20" stopOpacity={0} />
       </RadialGradient>
-
       <RadialGradient id="dustOrbEdgeGlow" cx="50%" cy="50%" r="50%">
         <Stop offset="0%" stopColor="#a7f277" stopOpacity={0} />
         <Stop offset="68%" stopColor="#a7f277" stopOpacity={0} />
         <Stop offset="88%" stopColor="#a7f277" stopOpacity={0.08} />
         <Stop offset="100%" stopColor="#a7f277" stopOpacity={0} />
       </RadialGradient>
-
-      <Filter id="dustOrbBlur">
-        <FeGaussianBlur stdDeviation="28" />
-      </Filter>
-
-      <Filter id="dustOrbSoftBlur">
-        <FeGaussianBlur stdDeviation="48" />
-      </Filter>
+      <Filter id="dustOrbBlur"><FeGaussianBlur stdDeviation="28" /></Filter>
+      <Filter id="dustOrbSoftBlur"><FeGaussianBlur stdDeviation="48" /></Filter>
     </Defs>
-
-    <Circle
-      cx={210}
-      cy={218}
-      r={122}
-      fill="url(#dustOrbGradient)"
-    />
-    <Circle
-      cx={210}
-      cy={218}
-      r={146}
-      fill="url(#dustOrbEdgeGlow)"
-      filter="url(#dustOrbBlur)"
-    />
-    <Circle
-      cx={176}
-      cy={184}
-      r={78}
-      fill="#2C3C20"
-      opacity={0.26}
-      filter="url(#dustOrbSoftBlur)"
-    />
-    <Circle
-      cx={250}
-      cy={252}
-      r={92}
-      fill="#2C3C20"
-      opacity={0.2}
-      filter="url(#dustOrbSoftBlur)"
-    />
+    <Circle cx={210} cy={218} r={122} fill="url(#dustOrbGradient)" />
+    <Circle cx={210} cy={218} r={146} fill="url(#dustOrbEdgeGlow)" filter="url(#dustOrbBlur)" />
+    <Circle cx={176} cy={184} r={78} fill="#2C3C20" opacity={0.26} filter="url(#dustOrbSoftBlur)" />
+    <Circle cx={250} cy={252} r={92} fill="#2C3C20" opacity={0.2} filter="url(#dustOrbSoftBlur)" />
   </Svg>
 );
 
-const EntryScreen: React.FC<EntryScreenProps> = ({
-  onAnimationComplete,
-}) => {
+const EntryScreen: React.FC<EntryScreenProps> = ({ onAnimationComplete }) => {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isCompactHeight = height < 860;
   const isVeryCompactHeight = height < 780;
   const isNarrow = width < 390;
   const contentScale = Math.min(1, Math.max(0.84, width / 430, height / 920));
-  const heroHeight = Math.round(
-    Math.min(height * 0.43, Math.max(300, width * (isCompactHeight ? 0.9 : 0.96)))
-  );
+  const heroHeight = Math.round(Math.min(height * 0.43, Math.max(300, width * (isCompactHeight ? 0.9 : 0.96))));
   const heroImageWidth = Math.round(Math.min(500, width * (isNarrow ? 1.2 : 1.25)));
   const heroImageHeight = Math.round(heroImageWidth * 0.81);
   const titleSize = Math.round((isNarrow ? 41 : 44) * contentScale);
@@ -232,16 +131,50 @@ const EntryScreen: React.FC<EntryScreenProps> = ({
   const featureIconScale = isNarrow || isCompactHeight ? 0.8 : 0.9;
   const featureGap = isNarrow || isCompactHeight ? 4 : 6;
   const featureDividerMargin = isNarrow ? 7 : 10;
+  
   const [ctaWidth, setCtaWidth] = useState(0);
   const swipeX = useRef(new Animated.Value(0)).current;
   const successProgress = useRef(new Animated.Value(0)).current;
+  
+  // Single animated value running on UI thread for the continuous border glint
+  const borderLoopAnim = useRef(new Animated.Value(0)).current;
   const hasCompletedSwipe = useRef(false);
   
-  // CTA dimensions updated for the new styling
   const ctaHorizontalInset = 8;
   const maxSwipe = Math.max(ctaWidth - thumbSize - ctaHorizontalInset * 2, 0);
   const safeMaxSwipe = Math.max(maxSwipe, 1);
-  
+
+  // SVG Perimeter length calculation for precise stroke layout tracking
+  const ctaRadius = ctaHeight / 2;
+  const svgWidth = ctaWidth || 300;
+  const svgHeight = ctaHeight || 58;
+  const borderInset = 3;
+  const borderStrokeWidth = 2;
+  const borderRectWidth = Math.max(svgWidth - borderInset * 2, 1);
+  const borderRectHeight = Math.max(svgHeight - borderInset * 2, 1);
+  const borderRadius = Math.max(ctaRadius - borderInset, 1);
+  const perimeter = useMemo(() => {
+    return (borderRectWidth * 2) + (borderRectHeight * 2);
+  }, [borderRectHeight, borderRectWidth]);
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(borderLoopAnim, {
+        toValue: 1,
+        duration: 6800,
+        useNativeDriver: false,
+      })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [borderLoopAnim]);
+
+  // Interpolating the dash offset to shift along the perimeter natively
+  const borderStrokeOffset = borderLoopAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [perimeter, 0],
+  });
+
   const ctaLabelOpacity = swipeX.interpolate({
     inputRange: [0, safeMaxSwipe * 0.7],
     outputRange: [1, 0],
@@ -254,28 +187,24 @@ const EntryScreen: React.FC<EntryScreenProps> = ({
     extrapolate: 'clamp',
   });
 
-  // Updated handling to fade out at the very end of success
   const handleOpacity = successProgress.interpolate({
     inputRange: [0, 0.8, 1],
     outputRange: [1, 1, 0],
     extrapolate: 'clamp',
   });
 
-  // Updated to expand exponentially on success (The "pop")
   const handleScale = successProgress.interpolate({
     inputRange: [0, 0.5, 1],
-    outputRange: [1, 1.2, 4],
+    outputRange: [1, 1, 1],
     extrapolate: 'clamp',
   });
 
-  // Green Fill grows from 0 to 1
   const ctaFillScale = swipeX.interpolate({
     inputRange: [0, safeMaxSwipe],
     outputRange: [0, 1],
     extrapolate: 'clamp',
   });
 
-  // Translate to ensure it grows from the left side of the track
   const ctaFillTranslateX = swipeX.interpolate({
     inputRange: [0, safeMaxSwipe],
     outputRange: [-(Math.max(ctaWidth, 1) / 2), 0],
@@ -337,147 +266,62 @@ const EntryScreen: React.FC<EntryScreenProps> = ({
 
   return (
     <View style={styles.fullScreen}>
-      <StatusBar
-        translucent
-        backgroundColor="transparent"
-        barStyle="light-content"
-      />
-
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
       <SafeAreaView style={styles.safe}>
-        <View
-          style={[
-            styles.root,
-            {
-              paddingTop: rootPaddingTop,
-              paddingHorizontal: rootPaddingHorizontal,
-              paddingBottom: rootPaddingBottom,
-            },
-          ]}
-        >
+        <View style={[styles.root, { paddingTop: rootPaddingTop, paddingHorizontal: rootPaddingHorizontal, paddingBottom: rootPaddingBottom }]}>
           <View style={styles.vignette} />
 
+          {/* Grid Layer Background */}
           <View style={styles.gridLayer}>
             {Array.from({ length: 9 }).map((_, index) => (
-              <View
-                key={`grid-horizontal-${index}`}
-                style={[
-                  styles.gridHorizontalLine,
-                  {
-                    top: 36 + index * 92,
-                  },
-                ]}
-              />
+              <View key={`grid-horizontal-${index}`} style={[styles.gridHorizontalLine, { top: 36 + index * 92 }]} />
             ))}
             {Array.from({ length: 6 }).map((_, index) => (
-              <View
-                key={`grid-vertical-${index}`}
-                style={[
-                  styles.gridVerticalLine,
-                  {
-                    left: 20 + index * 86,
-                  },
-                ]}
-              />
+              <View key={`grid-vertical-${index}`} style={[styles.gridVerticalLine, { left: 20 + index * 86 }]} />
             ))}
             {Array.from({ length: 12 }).map((_, index) => (
-              <View
-                key={`grid-diagonal-${index}`}
-                style={[
-                  styles.gridLine,
-                  {
-                    left: -160 + index * 58,
-                  },
-                ]}
-              />
+              <View key={`grid-diagonal-${index}`} style={[styles.gridLine, { left: -160 + index * 58 }]} />
             ))}
           </View>
 
+          {/* Doodles Layout */}
           <View pointerEvents="none" style={styles.screenDoodles}>
-            <Image
-              source={require('../../assets/app-icons/fire.png')}
-              style={[
-                styles.doodleImage,
-                styles.fireDoodle,
-                { top: heroHeight * 0.52 + heroLift, left: rootPaddingHorizontal - 10 },
-              ]}
-              resizeMode="contain"
-            />
-            <Image
-              source={require('../../assets/app-icons/phone.png')}
-              style={[
-                styles.doodleImage,
-                styles.phoneDoodle,
-                { top: heroHeight * 0.28 + heroLift, right: rootPaddingHorizontal - 2 },
-              ]}
-              resizeMode="contain"
-            />
-            <View
-              style={[
-                styles.calendarDoodle,
-                { top: heroHeight * 0.84 + heroLift, left: rootPaddingHorizontal + 18 },
-              ]}
-            >
-              <CalendarDoodleIcon />
-            </View>
-            <Image
-              source={require('../../assets/app-icons/bar.png')}
-              style={[
-                styles.doodleImage,
-                styles.barDoodle,
-                { top: heroHeight * 0.88 + heroLift, right: rootPaddingHorizontal + 8 },
-              ]}
-              resizeMode="contain"
-            />
+            <Image source={require('../../assets/app-icons/fire.png')} style={[styles.doodleImage, styles.fireDoodle, { top: heroHeight * 0.52 + heroLift, left: rootPaddingHorizontal - 10 }]} resizeMode="contain" />
+            <Image source={require('../../assets/app-icons/phone.png')} style={[styles.doodleImage, styles.phoneDoodle, { top: heroHeight * 0.28 + heroLift, right: rootPaddingHorizontal - 2 }]} resizeMode="contain" />
+            <View style={[styles.calendarDoodle, { top: heroHeight * 0.84 + heroLift, left: rootPaddingHorizontal + 18 }]}><CalendarDoodleIcon /></View>
+            <Image source={require('../../assets/app-icons/bar.png')} style={[styles.doodleImage, styles.barDoodle, { top: heroHeight * 0.88 + heroLift, right: rootPaddingHorizontal + 8 }]} resizeMode="contain" />
           </View>
 
+          {/* Hero Section */}
           <View style={[styles.heroWrap, { height: heroHeight, marginTop: heroLift }]}>
             <DustOrb />
             <View style={styles.heroMask}>
-              <Image
-                source={require('../../assets/share-paper-plane.png')}
-                resizeMode="contain"
-                style={[
-                  styles.heroImage,
-                  { width: heroImageWidth, height: heroImageHeight },
-                ]}
-              />
+              <Image source={require('../../assets/share-paper-plane.png')} resizeMode="contain" style={[styles.heroImage, { width: heroImageWidth, height: heroImageHeight }]} />
             </View>
           </View>
 
+          {/* Core App Typography Copy */}
           <View style={[styles.copyWrap, { marginTop: copyLift }]}>
             <Text style={styles.brand}>unlure</Text>
-
             <Text style={[styles.title, { fontSize: titleSize, lineHeight: titleLineHeight }]}>Digital Focus</Text>
             <Text style={[styles.title, { fontSize: titleSize, lineHeight: titleLineHeight }]}>Made for</Text>
-
-            <Text style={[styles.title, styles.titleAccent, { fontSize: titleSize, lineHeight: titleLineHeight }]}>
-              Daily Users
-            </Text>
-
-            <Text style={[styles.sub, { fontSize: subSize, lineHeight: subLineHeight }]}>
-              Set limits, reduce noise,{'\n'}
-              and reclaim your attention.
-            </Text>
+            <Text style={[styles.title, styles.titleAccent, { fontSize: titleSize, lineHeight: titleLineHeight }]}>Daily Users</Text>
+            <Text style={[styles.sub, { fontSize: subSize, lineHeight: subLineHeight }]}>Set limits, reduce noise,{"\n"}and reclaim your attention.</Text>
           </View>
 
+          {/* Interactive Button Component */}
           <View style={[styles.bottomSection, { marginTop: bottomLift }]}>
-            {/* --- UPDATED CTA SECTION --- */}
             <View
-              style={[
-                styles.startBtn,
-                {
-                  height: ctaHeight,
-                  borderRadius: ctaHeight / 2,
-                },
-              ]}
+              style={[styles.startBtn, { height: ctaHeight, borderRadius: ctaRadius }]}
               onLayout={(event) => setCtaWidth(event.nativeEvent.layout.width)}
               {...panResponder.panHandlers}
             >
-              {/* Green Fill Background */}
+              {/* Green Fill Track Layer */}
               <Animated.View
                 style={[
                   styles.startSwipeFill,
                   {
+                    borderRadius: ctaRadius,
                     transform: [
                       { translateX: ctaFillTranslateX },
                       { scaleX: ctaFillScale },
@@ -486,15 +330,53 @@ const EntryScreen: React.FC<EntryScreenProps> = ({
                 ]}
               />
 
-              {/* Text Layers */}
-              <Animated.Text style={[styles.startText, { opacity: ctaLabelOpacity }]}>
-                Swipe to get started
-              </Animated.Text>
-              <Animated.Text style={[styles.welcomeText, { opacity: welcomeOpacity }]}>
-                Welcome
-              </Animated.Text>
+              {/* SMOOTH BORDER GLINT: SVG Single Path Loop Running Completely via Native Thread */}
+              {ctaWidth > 0 && (
+                <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                  <Svg width={svgWidth} height={svgHeight}>
+                    <Defs>
+                      <SvgLinearGradient id="ctaMovingBorderGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <Stop offset="0%" stopColor="#a7f277" stopOpacity={0.05} />
+                        <Stop offset="42%" stopColor="#a7f277" stopOpacity={0.95} />
+                        <Stop offset="100%" stopColor="#e8ffd8" stopOpacity={0.2} />
+                      </SvgLinearGradient>
+                    </Defs>
+                    <Rect
+                      x={borderInset}
+                      y={borderInset}
+                      width={borderRectWidth}
+                      height={borderRectHeight}
+                      rx={borderRadius}
+                      ry={borderRadius}
+                      fill="none"
+                      stroke="#a7f277"
+                      strokeWidth={1}
+                      opacity={0.18}
+                    />
+                    <AnimatedRect
+                      x={borderInset}
+                      y={borderInset}
+                      width={borderRectWidth}
+                      height={borderRectHeight}
+                      rx={borderRadius}
+                      ry={borderRadius}
+                      fill="none"
+                      stroke="url(#ctaMovingBorderGradient)"
+                      strokeWidth={borderStrokeWidth}
+                      opacity={0.95}
+                      strokeLinecap="round"
+                      strokeDasharray={[44, perimeter - 44]}
+                      strokeDashoffset={borderStrokeOffset}
+                    />
+                  </Svg>
+                </View>
+              )}
 
-              {/* Animated White Handle */}
+              {/* Text Indicators */}
+              <Animated.Text style={[styles.startText, { opacity: ctaLabelOpacity }]}>Swipe to get started</Animated.Text>
+              <Animated.Text style={[styles.welcomeText, { opacity: welcomeOpacity }]}>Welcome</Animated.Text>
+
+              {/* Interactive Handle Element */}
               <Animated.View
                 style={[
                   styles.startIcon,
@@ -513,40 +395,27 @@ const EntryScreen: React.FC<EntryScreenProps> = ({
                 <DoubleChevronIcon color="#050806" />
               </Animated.View>
             </View>
-            {/* --- END OF CTA SECTION --- */}
 
+            {/* Feature Metadata Row */}
             <View style={[styles.featureRow, { marginTop: featureTop }]}>
               <View style={styles.featureItem}>
-                <View style={{ transform: [{ scale: featureIconScale }] }}>
-                  <FeatureIcon type="shield" />
-                </View>
-
+                <View style={{ transform: [{ scale: featureIconScale }] }}><FeatureIcon type="shield" /></View>
                 <View style={[styles.featureTextWrap, { marginLeft: featureGap }]}>
                   <Text style={[styles.featureTitle, { fontSize: featureTextSize }]}>Private</Text>
                   <Text style={[styles.featureSub, { fontSize: featureTextSize }]}>by design</Text>
                 </View>
               </View>
-
               <View style={[styles.featureDivider, { marginHorizontal: featureDividerMargin }]} />
-
               <View style={styles.featureItem}>
-                <View style={{ transform: [{ scale: featureIconScale }] }}>
-                  <FeatureIcon type="lock" />
-                </View>
-
+                <View style={{ transform: [{ scale: featureIconScale }] }}><FeatureIcon type="lock" /></View>
                 <View style={[styles.featureTextWrap, { marginLeft: featureGap }]}>
                   <Text style={[styles.featureTitle, { fontSize: featureTextSize }]}>No Tracking</Text>
                   <Text style={[styles.featureSub, { fontSize: featureTextSize }]}>no analytics</Text>
                 </View>
               </View>
-
               <View style={[styles.featureDivider, { marginHorizontal: featureDividerMargin }]} />
-
               <View style={styles.featureItem}>
-                <View style={{ transform: [{ scale: featureIconScale }] }}>
-                  <FeatureIcon type="leaf" />
-                </View>
-
+                <View style={{ transform: [{ scale: featureIconScale }] }}><FeatureIcon type="leaf" /></View>
                 <View style={[styles.featureTextWrap, { marginLeft: featureGap }]}>
                   <Text style={[styles.featureTitle, { fontSize: featureTextSize }]}>Lightweight</Text>
                   <Text style={[styles.featureSub, { fontSize: featureTextSize }]}>built for focus</Text>
@@ -562,258 +431,52 @@ const EntryScreen: React.FC<EntryScreenProps> = ({
 };
 
 const styles = StyleSheet.create({
-  fullScreen: {
-    flex: 1,
-    backgroundColor: '#02070b',
-  },
-
-  safe: {
-    flex: 1,
-    backgroundColor: '#02070b',
-  },
-
-  root: {
-    flex: 1,
-    paddingHorizontal: 30,
-    paddingTop: 4,
-    paddingBottom: 40,
-    backgroundColor: '#02070b',
-  },
-
-  vignette: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.14)',
-  },
-
-  gridLayer: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.72,
-  },
-
-  gridHorizontalLine: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: 'rgba(167,242,119,0.025)',
-  },
-
-  gridVerticalLine: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: 1,
-    backgroundColor: 'rgba(167,242,119,0.023)',
-  },
-
-  gridLine: {
-    position: 'absolute',
-    top: -160,
-    width: 1,
-    height: 1200,
-    backgroundColor: 'rgba(167,242,119,0.06)',
-    transform: [{ rotate: '-15deg' }],
-  },
-
-  screenDoodles: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 1,
-  },
-
-  doodleImage: {
-    position: 'absolute',
-    tintColor: '#a7f277',
-    opacity: 0.9,
-  },
-
-  fireDoodle: {
-    width: 44,
-    height: 44,
-    top: 176,
-    left: 28,
-  },
-
-  phoneDoodle: {
-    width: 44,
-    height: 44,
-    top: 96,
-    right: 34,
-  },
-
-  calendarDoodle: {
-    position: 'absolute',
-    top: 304,
-    left: 52,
-    opacity: 0.9,
-    transform: [{ rotate: '-9deg' }],
-  },
-
-  barDoodle: {
-    width: 50,
-    height: 50,
-    top: 340,
-    right: 56,
-  },
-
-  heroWrap: {
-    height: 370,
-    marginTop: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
-  },
-
-  dustOrb: {
-    position: 'absolute',
-    transform: [{ translateY: -22 }],
-  },
-
-  heroMask: {
-    overflow: 'hidden',
-    borderRadius: 40,
-  },
-
-  heroImage: {
-    width: 520,
-    height: 420,
-  },
-
-  copyWrap: {
-    marginTop: -24,
-    zIndex: 3,
-  },
-
-  brand: {
-    color: '#d6dbe5',
-    fontSize: 22,
-    fontFamily: FONT_SCRIPT,
-    marginBottom: 10,
-  },
-
-  title: {
-    color: '#ffffff',
-    fontSize: 48,
-    lineHeight: 53,
-    letterSpacing: -0.7,
-    fontFamily: FONT_SEMIBOLD,
-  },
-
-  titleAccent: {
-    color: '#a7f277',
-  },
-
-  sub: {
-    marginTop: 18,
-    color: '#929aa5',
-    fontSize: 15,
-    lineHeight: 24,
-    fontFamily: FONT_MONO,
-  },
-
-  bottomSection: {
-    marginTop: 8,
-    paddingBottom: 0,
-  },
-
-  // --- UPDATED CTA STYLES --- 
+  fullScreen: { flex: 1, backgroundColor: '#02070b' },
+  safe: { flex: 1, backgroundColor: '#02070b' },
+  root: { flex: 1, paddingHorizontal: 30, paddingTop: 4, paddingBottom: 40, backgroundColor: '#02070b' },
+  vignette: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.14)' },
+  gridLayer: { ...StyleSheet.absoluteFillObject, opacity: 0.72 },
+  gridHorizontalLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: 'rgba(167,242,119,0.025)' },
+  gridVerticalLine: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: 'rgba(167,242,119,0.023)' },
+  gridLine: { position: 'absolute', top: -160, width: 1, height: 1200, backgroundColor: 'rgba(167,242,119,0.06)', transform: [{ rotate: '-15deg' }] },
+  screenDoodles: { ...StyleSheet.absoluteFillObject, zIndex: 1 },
+  doodleImage: { position: 'absolute', tintColor: '#a7f277', opacity: 0.9 },
+  fireDoodle: { width: 44, height: 44, top: 176, left: 28 },
+  phoneDoodle: { width: 44, height: 44, top: 96, right: 34 },
+  calendarDoodle: { position: 'absolute', top: 304, left: 52, opacity: 0.9, transform: [{ rotate: '-9deg' }] },
+  barDoodle: { width: 50, height: 50, top: 340, right: 56 },
+  heroWrap: { height: 370, marginTop: 10, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
+  dustOrb: { position: 'absolute', transform: [{ translateY: -22 }] },
+  heroMask: { overflow: 'hidden', borderRadius: 40 },
+  heroImage: { width: 520, height: 420 },
+  copyWrap: { marginTop: -24, zIndex: 3 },
+  brand: { color: '#d6dbe5', fontSize: 22, fontFamily: FONT_SCRIPT, marginBottom: 10 },
+  title: { color: '#ffffff', fontSize: 48, lineHeight: 53, letterSpacing: -0.7, fontFamily: FONT_SEMIBOLD },
+  titleAccent: { color: '#a7f277' },
+  sub: { marginTop: 18, color: '#929aa5', fontSize: 15, lineHeight: 24, fontFamily: FONT_MONO },
+  bottomSection: { marginTop: 8, paddingBottom: 0 },
   startBtn: {
     width: '100%',
-    height: 64, 
-    borderRadius: 32,
-    backgroundColor: '#111111', 
+    backgroundColor: '#111111',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
+    borderColor: 'rgba(167,242,119,0.14)',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
     position: 'relative',
-    // 1. CHANGE THIS: Update shadow color to match your app's green
-    shadowColor: '#a7f277', 
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
+    shadowOpacity: 0,
+    elevation: 0,
   },
-
-  startSwipeFill: {
-    position: 'absolute',
-    left: 0,
-    width: '100%',
-    height: '100%',
-    // 2. CHANGE THIS: Update background fill to your app's green
-    backgroundColor: '#a7f277', 
-    borderRadius: 32,
-  },
-
-  startIcon: {
-    position: 'absolute',
-    left: 8,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
-  },
-
-  startText: {
-    color: '#929aa5',
-    fontSize: 14,
-    fontFamily: FONT_SEMIBOLD,
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    zIndex: 5,
-  },
-
-  welcomeText: {
-    position: 'absolute',
-    color: '#071006',
-    fontSize: 20,
-    fontFamily: FONT_SEMIBOLD,
-    fontWeight: '900',
-    letterSpacing: 0,
-    zIndex: 6,
-  },
-  // --- END CTA STYLES ---
-
-  featureRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 28,
-    zIndex: 3,
-  },
-
-  featureItem: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  featureTextWrap: {
-    marginLeft: 8,
-  },
-
-  featureTitle: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontFamily: FONT_SEMIBOLD,
-  },
-
-  featureSub: {
-    color: '#8f97a3',
-    fontSize: 13,
-    marginTop: 2,
-    fontFamily: FONT_REGULAR,
-  },
-
-  featureDivider: {
-    width: 1,
-    height: 34,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    marginHorizontal: 10,
-  },
-
+  startSwipeFill: { position: 'absolute', left: 0, width: '100%', height: '100%', backgroundColor: '#a7f277' },
+  startIcon: { position: 'absolute', left: 8, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
+  startText: { color: '#929aa5', fontSize: 14, fontFamily: FONT_SEMIBOLD, textTransform: 'uppercase', letterSpacing: 1.2, zIndex: 5 },
+  welcomeText: { position: 'absolute', color: '#071006', fontSize: 20, fontFamily: FONT_SEMIBOLD, fontWeight: '900', letterSpacing: 0, zIndex: 6 },
+  featureRow: { flexDirection: 'row', alignItems: 'center', marginTop: 28, zIndex: 3 },
+  featureItem: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  featureTextWrap: { marginLeft: 8 },
+  featureTitle: { color: '#ffffff', fontSize: 13, fontFamily: FONT_SEMIBOLD },
+  featureSub: { color: '#8f97a3', fontSize: 13, marginTop: 2, fontFamily: FONT_REGULAR },
+  featureDivider: { width: 1, height: 34, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: 10 },
 });
 
 export default EntryScreen;

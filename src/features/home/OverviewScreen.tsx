@@ -172,7 +172,8 @@ const GLYPH_SIZE = 18;
 const WEEK_CHART_MIN_HEIGHT = 120;
 const WEEK_CHART_MAX_HEIGHT = 200;
 const WEEK_CHART_LABEL_HEIGHT = 24;
-const WEEK_AVG_LABEL_GUARD = 24;
+const WEEK_AXIS_LABEL_HEIGHT = 14;
+const WEEK_AXIS_LABEL_MIN_GAP = 22;
 const FONT_SANS = Platform.select({ ios: 'Geist-Regular', android: 'Geist-Regular', default: 'System' });
 const FONT_SANS_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Geist-SemiBold', default: 'System' });
 const FONT_MONO = Platform.select({ ios: 'GeistMono-Regular', android: 'GeistMono-Regular', default: 'monospace' });
@@ -669,9 +670,25 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
   const weekAxisTicks = [weekAxisMaxMinutes, Math.round(weekAxisMaxMinutes / 2), 0];
   const weekAverageLineBottom = WEEK_CHART_LABEL_HEIGHT + Math.min((weekAverageMinutes / weekAxisMaxMinutes) * weekBarMaxHeight, weekBarMaxHeight);
   const weekAverageAxisLabelBottom = Math.min(
-    Math.max(weekAverageLineBottom - 7, WEEK_CHART_LABEL_HEIGHT + WEEK_AVG_LABEL_GUARD),
-    WEEK_CHART_LABEL_HEIGHT + weekBarMaxHeight - WEEK_AVG_LABEL_GUARD
+    Math.max(weekAverageLineBottom - WEEK_AXIS_LABEL_HEIGHT / 2, WEEK_CHART_LABEL_HEIGHT),
+    WEEK_CHART_LABEL_HEIGHT + weekBarMaxHeight - WEEK_AXIS_LABEL_HEIGHT
   );
+  const weekAxisLabelItems = weekAxisTicks
+    .map((tick) => {
+      const rawBottom = Math.min((tick / weekAxisMaxMinutes) * weekBarMaxHeight, weekBarMaxHeight) - WEEK_AXIS_LABEL_HEIGHT / 2;
+      const bottom = Math.min(Math.max(rawBottom, 0), weekBarMaxHeight - WEEK_AXIS_LABEL_HEIGHT);
+      return {
+        key: `week-axis-${tick}`,
+        text: tick === 0 ? '0' : formatAxisTime(tick),
+        bottom,
+        chartBottom: WEEK_CHART_LABEL_HEIGHT + bottom
+      };
+    })
+    .filter((item, index, items) => items.findIndex((candidate) => candidate.text === item.text) === index)
+    .filter((item) => (
+      weekAverageMinutes <= 0
+      || Math.abs(item.chartBottom - weekAverageAxisLabelBottom) >= WEEK_AXIS_LABEL_MIN_GAP
+    ));
   const dayMaxMinutes = Math.max(...dayChartCategories.map((item) => item.minutes), 1);
   const maxTodayAppMinutes = Math.max(...visibleTodayApps.map((app) => app.minutes), 1);
   const maxWeekCategoryMinutes = Math.max(...weekChartCategories.map((category) => category.minutes), 1);
@@ -926,12 +943,20 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                   </Text>
                 )}
                 <View pointerEvents="none" style={styles.weekAxisLabels}>
-                  <Text style={[styles.weekAxisLabel, styles.weekAxisLabelTop, { color: ui.textSecondary }]}>
-                    {formatAxisTime(weekAxisMaxMinutes)}
-                  </Text>
-                  <Text style={[styles.weekAxisLabel, styles.weekAxisLabelBottom, { color: ui.textSecondary }]}>
-                    0
-                  </Text>
+                  {weekAxisLabelItems.map((item) => (
+                    <Text
+                      key={item.key}
+                      style={[
+                        styles.weekAxisLabel,
+                        {
+                          bottom: item.bottom,
+                          color: ui.textSecondary
+                        }
+                      ]}
+                    >
+                      {item.text}
+                    </Text>
+                  ))}
                 </View>
               </View>
 
@@ -1343,12 +1368,6 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     lineHeight: 14,
     textAlign: 'right'
-  },
-  weekAxisLabelTop: {
-    top: 0
-  },
-  weekAxisLabelBottom: {
-    bottom: 0
   },
   averageLine: {
     flex: 1,

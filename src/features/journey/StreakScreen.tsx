@@ -1,5 +1,5 @@
 ﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Image, InteractionManager, Platform, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, useColorScheme } from 'react-native';
+import { Animated, AppState, Image, InteractionManager, Platform, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, useColorScheme } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenTimeService, DailyUsageMap, FocusModeDecisions, WeeklyUsageInsights } from '../../services/ScreenTimeService';
@@ -303,6 +303,21 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
     if (!active) return;
     const task = InteractionManager.runAfterInteractions(load);
     return () => task.cancel();
+  }, [active, load]);
+
+  useEffect(() => {
+    if (!active) return;
+    const interval = setInterval(load, 30000);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        load();
+      }
+    });
+
+    return () => {
+      clearInterval(interval);
+      subscription.remove();
+    };
   }, [active, load]);
 
   useMidnightRefresh(load);

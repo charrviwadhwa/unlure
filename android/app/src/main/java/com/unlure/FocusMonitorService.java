@@ -70,6 +70,8 @@ public class FocusMonitorService extends Service {
 
     private SharedPreferences prefs;
 
+    private Typeface playwriteTypeface;
+
     private final Map<String, Long> usageCache =
             new HashMap<>();
 
@@ -125,6 +127,8 @@ public class FocusMonitorService extends Service {
                         FocusModePrefs.PREFS_NAME,
                         MODE_PRIVATE
                 );
+
+        playwriteTypeface = loadFont("fonts/PlaywriteDESAS-Light.ttf");
 
         registerScreenReceiver();
 
@@ -532,32 +536,63 @@ public class FocusMonitorService extends Service {
         );
 
         root.setPadding(
+                dp(24),
                 dp(22),
-                dp(14),
-                dp(22),
-                dp(28)
+                dp(24),
+                dp(24)
         );
 
         root.setBackground(
                 makeSheetBackground()
         );
 
+        root.setGravity(Gravity.START);
+
+        TextView brand =
+                new TextView(this);
+
+        brand.setText("unlure");
+
+        brand.setTextColor(
+                Color.rgb(194, 201, 207)
+        );
+
+        brand.setTextSize(20);
+
+        brand.setTypeface(
+                playwriteTypeface != null
+                        ? playwriteTypeface
+                        : Typeface.create(Typeface.SERIF, Typeface.ITALIC)
+        );
+
+        root.addView(brand);
+
         TextView title =
                 new TextView(this);
 
-        title.setText("Limit reached");
+        title.setText("Take a quiet pause");
 
         title.setTextColor(
                 Color.WHITE
         );
 
-        title.setTextSize(24);
+        title.setTextSize(25);
 
         title.setTypeface(
-                Typeface.DEFAULT_BOLD
+                Typeface.create(Typeface.SERIF, Typeface.BOLD)
         );
 
-        root.addView(title);
+        title.setGravity(Gravity.START);
+
+        LinearLayout.LayoutParams titleParams =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
+
+        titleParams.topMargin = dp(18);
+
+        root.addView(title, titleParams);
 
         TextView subtitle =
                 new TextView(this);
@@ -565,36 +600,74 @@ public class FocusMonitorService extends Service {
         subtitle.setText(appName);
 
         subtitle.setTextColor(
-                Color.rgb(180, 190, 210)
+                Color.rgb(198, 231, 183)
         );
+
+        subtitle.setTextSize(17);
+
+        subtitle.setTypeface(
+                Typeface.create(Typeface.SERIF, Typeface.BOLD)
+        );
+
+        subtitle.setGravity(Gravity.CENTER);
 
         subtitle.setPadding(
-                0,
-                dp(6),
-                0,
-                dp(12)
+                dp(14),
+                dp(7),
+                dp(14),
+                dp(7)
         );
 
-        root.addView(subtitle);
+        subtitle.setBackground(
+                makeStrokeDrawable(
+                        Color.argb(120, 39, 70, 41),
+                        Color.argb(120, 119, 146, 113),
+                        dp(20)
+                )
+        );
+
+        LinearLayout.LayoutParams subtitleParams =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
+
+        subtitleParams.topMargin = dp(16);
+
+        root.addView(subtitle, subtitleParams);
 
         TextView body =
                 new TextView(this);
 
         body.setText(
-                "You have hit your limit for "
+                "You reached today's limit for "
                         + appName
-                        + ". Step away to keep your streak protected, or pause briefly before choosing to continue."
+                        + ". Step away for a moment and let your attention settle."
         );
 
         body.setTextColor(
-                Color.rgb(220, 225, 235)
+                Color.rgb(210, 216, 224)
         );
 
-        body.setTextSize(15);
+        body.setTextSize(16);
+
+        body.setTypeface(
+                Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+        );
 
         body.setLineSpacing(dp(2), 1f);
 
-        root.addView(body);
+        body.setGravity(Gravity.START);
+
+        LinearLayout.LayoutParams bodyParams =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
+
+        bodyParams.topMargin = dp(18);
+
+        root.addView(body, bodyParams);
 
         TextView close =
                 new TextView(this);
@@ -603,24 +676,25 @@ public class FocusMonitorService extends Service {
 
         close.setGravity(Gravity.CENTER);
 
-        close.setTextColor(Color.BLACK);
+        close.setTextColor(
+                Color.rgb(7, 13, 9)
+        );
 
         close.setTextSize(16);
 
-        close.setTypeface(Typeface.DEFAULT_BOLD);
+        close.setTypeface(
+                Typeface.create(Typeface.SERIF, Typeface.BOLD)
+        );
 
         close.setPadding(
                 0,
-                dp(15),
+                dp(14),
                 0,
-                dp(15)
+                dp(14)
         );
 
         close.setBackground(
-                makeRoundedDrawable(
-                        Color.WHITE,
-                        dp(18)
-                )
+                makeAccentButtonBackground()
         );
 
         LinearLayout.LayoutParams closeParams =
@@ -629,7 +703,7 @@ public class FocusMonitorService extends Service {
                         LinearLayout.LayoutParams.WRAP_CONTENT
                 );
 
-        closeParams.topMargin = dp(20);
+        closeParams.topMargin = dp(22);
 
         root.addView(close, closeParams);
 
@@ -658,25 +732,27 @@ public class FocusMonitorService extends Service {
         bypass.setGravity(Gravity.CENTER);
 
         bypass.setTextColor(
-                Color.rgb(210, 220, 240)
+                Color.rgb(225, 231, 238)
         );
 
         bypass.setTypeface(
-                Typeface.DEFAULT_BOLD
+                Typeface.create(Typeface.SERIF, Typeface.BOLD)
         );
+
+        bypass.setTextSize(15);
 
         bypass.setPadding(
                 0,
-                dp(15),
+                dp(13),
                 0,
-                dp(15)
+                dp(13)
         );
 
         bypass.setBackground(
                 makeStrokeDrawable(
                         Color.TRANSPARENT,
-                        Color.argb(120, 120, 130, 160),
-                        dp(18)
+                        Color.argb(115, 109, 128, 115),
+                        dp(20)
                 )
         );
 
@@ -707,7 +783,7 @@ public class FocusMonitorService extends Service {
         container.setFocusableInTouchMode(true);
 
         container.setBackgroundColor(
-                Color.argb(230, 0, 0, 0)
+                Color.argb(232, 0, 8, 7)
         );
 
         FrameLayout.LayoutParams sheetParams =
@@ -716,6 +792,10 @@ public class FocusMonitorService extends Service {
                         FrameLayout.LayoutParams.WRAP_CONTENT,
                         Gravity.BOTTOM
                 );
+
+        sheetParams.leftMargin = dp(14);
+        sheetParams.rightMargin = dp(14);
+        sheetParams.bottomMargin = dp(18);
 
         container.addView(root, sheetParams);
 
@@ -895,6 +975,16 @@ public class FocusMonitorService extends Service {
         }
     }
 
+    private Typeface loadFont(String assetPath) {
+
+        try {
+            return Typeface.createFromAsset(getAssets(), assetPath);
+        } catch (Exception e) {
+            Log.w(TAG, "font load failed asset=" + assetPath, e);
+            return null;
+        }
+    }
+
     private boolean isSystemOrSelfPackage(String pkg) {
 
         if (pkg == null) return true;
@@ -1026,8 +1116,8 @@ public class FocusMonitorService extends Service {
                 new GradientDrawable(
                         GradientDrawable.Orientation.TOP_BOTTOM,
                         new int[]{
-                                Color.argb(248, 30, 38, 50),
-                                Color.argb(248, 18, 24, 34)
+                                Color.argb(252, 20, 30, 27),
+                                Color.argb(252, 9, 17, 15)
                         }
                 );
 
@@ -1035,15 +1125,31 @@ public class FocusMonitorService extends Service {
                 new float[]{
                         dp(28), dp(28),
                         dp(28), dp(28),
-                        0, 0,
-                        0, 0
+                        dp(28), dp(28),
+                        dp(28), dp(28)
                 }
         );
 
         d.setStroke(
                 dp(1),
-                Color.argb(100, 90, 100, 120)
+                Color.argb(105, 103, 124, 108)
         );
+
+        return d;
+    }
+
+    private GradientDrawable makeAccentButtonBackground() {
+
+        GradientDrawable d =
+                new GradientDrawable(
+                        GradientDrawable.Orientation.LEFT_RIGHT,
+                        new int[]{
+                                Color.rgb(191, 225, 177),
+                                Color.rgb(164, 211, 151)
+                        }
+                );
+
+        d.setCornerRadius(dp(20));
 
         return d;
     }
