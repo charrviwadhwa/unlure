@@ -169,7 +169,10 @@ const CATEGORY_ICONS: Record<CategoryKey | 'otherSummary', string> = {
 };
 
 const GLYPH_SIZE = 18;
-const WEEK_BAR_MAX_HEIGHT = 118;
+const WEEK_CHART_MIN_HEIGHT = 120;
+const WEEK_CHART_MAX_HEIGHT = 200;
+const WEEK_CHART_LABEL_HEIGHT = 24;
+const WEEK_AVG_LABEL_GUARD = 24;
 const FONT_SANS = Platform.select({ ios: 'Geist-Regular', android: 'Geist-Regular', default: 'System' });
 const FONT_SANS_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Geist-SemiBold', default: 'System' });
 const FONT_MONO = Platform.select({ ios: 'GeistMono-Regular', android: 'GeistMono-Regular', default: 'monospace' });
@@ -250,6 +253,14 @@ const getSavedMinutesForDay = (
   baselineMinutes: number
 ) => Math.max(baselineMinutes - getTotalMinutesForDay(dayMap), 0);
 
+const getRoundedWeekAxisMax = (minutes: number) => {
+  if (minutes <= 10) return Math.ceil(minutes / 5) * 5;
+  if (minutes <= 60) return Math.ceil(minutes / 20) * 20;
+  if (minutes <= 180) return Math.ceil(minutes / 30) * 30;
+  if (minutes <= 720) return Math.ceil(minutes / 60) * 60;
+  return Math.ceil(minutes / 120) * 120;
+};
+
 const getPacingFace = (usageMinutes: number, limitMinutes: number) => {
   if (limitMinutes <= 0) return ':)';
   const ratio = usageMinutes / limitMinutes;
@@ -273,16 +284,6 @@ const hexToRgba = (hex: string, alpha: number) => {
   const g = parseInt(full.slice(2, 4), 16);
   const b = parseInt(full.slice(4, 6), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-};
-
-const getWeekAxisScale = (maxMinutes: number) => {
-  const padded = Math.max(maxMinutes * 1.2, 8);
-  const roughStep = padded / 4;
-  const niceSteps = [2, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240];
-  const step = niceSteps.find((value) => value >= roughStep) || Math.ceil(roughStep / 60) * 60;
-  const max = step * 4;
-  const ticks = [max, max - step, max - step * 2, max - step * 3, 0];
-  return { max, ticks };
 };
 
 const CategoryGlyph = ({ category, color }: { category: CategoryKey | 'otherSummary'; color: string }) => {
@@ -621,11 +622,6 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
     });
     return Object.values(totals).sort((a, b) => b.minutes - a.minutes)[0] || null;
   }, [appIcons, appNames, storedStats, weekDays]);
-
-  const weekTotalMinutes = useMemo(
-    () => weekData.reduce((acc, d) => acc + CATEGORY_KEYS.reduce((sum, key) => sum + d.totals[key], 0), 0),
-    [weekData]
-  );
   const weekCategoryMinutes = useMemo(
     () => weekData.reduce((acc, d) => {
       CATEGORY_KEYS.forEach((key) => {
@@ -635,7 +631,14 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
     }, createEmptyCategoryTotals()),
     [weekData]
   );
-  const weekChartCategories = useMemo(() => buildChartCategories(weekCategoryMinutes, categoryPalette, 3), [categoryPalette, weekCategoryMinutes]);
+  const weekChartCategories = useMemo(
+    () => buildChartCategories(weekCategoryMinutes, categoryPalette, 3),
+    [categoryPalette, weekCategoryMinutes]
+  );
+  const weekTotalMinutes = useMemo(
+    () => weekData.reduce((acc, d) => acc + CATEGORY_KEYS.reduce((sum, key) => sum + d.totals[key], 0), 0),
+    [weekData]
+  );
   const dayChartCategories = useMemo(() => buildChartCategories(categoryMinutes, categoryPalette, 2), [categoryMinutes, categoryPalette]);
   const weekAverageMinutes = Math.floor(weekTotalMinutes / 7);
   const dayTotalMinutes = Math.floor(todayApps.reduce((acc, app) => acc + app.totalMs, 0) / 60000);
@@ -659,10 +662,15 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
   );
   const shouldShowSavedTime = canShowSavedTime;
   const weekMaxMinutes = Math.max(...weekData.map((d) => CATEGORY_KEYS.reduce((acc, key) => acc + d.totals[key], 0)), 1);
-  const weekAxisScale = getWeekAxisScale(weekMaxMinutes);
-  const weekAxisMaxMinutes = weekAxisScale.max;
-  const weekAxisTicks = weekAxisScale.ticks;
-  const weekAverageLineBottom = 24 + Math.min((weekAverageMinutes / weekAxisMaxMinutes) * WEEK_BAR_MAX_HEIGHT, WEEK_BAR_MAX_HEIGHT);
+  const weekChartHeight = Math.max(WEEK_CHART_MIN_HEIGHT, Math.min(WEEK_CHART_MAX_HEIGHT, weekMaxMinutes * 20));
+  const weekBarMaxHeight = weekChartHeight - WEEK_CHART_LABEL_HEIGHT;
+  const weekAxisMaxMinutes = getRoundedWeekAxisMax(Math.max(weekMaxMinutes / 0.85, 1));
+  const weekAxisTicks = [weekAxisMaxMinutes, Math.round(weekAxisMaxMinutes / 2), 0];
+  const weekAverageLineBottom = WEEK_CHART_LABEL_HEIGHT + Math.min((weekAverageMinutes / weekAxisMaxMinutes) * weekBarMaxHeight, weekBarMaxHeight);
+  const weekAverageAxisLabelBottom = Math.min(
+    Math.max(weekAverageLineBottom - 7, WEEK_CHART_LABEL_HEIGHT + WEEK_AVG_LABEL_GUARD),
+    WEEK_CHART_LABEL_HEIGHT + weekBarMaxHeight - WEEK_AVG_LABEL_GUARD
+  );
   const dayMaxMinutes = Math.max(...dayChartCategories.map((item) => item.minutes), 1);
   const maxTodayAppMinutes = Math.max(...visibleTodayApps.map((app) => app.minutes), 1);
   const maxWeekCategoryMinutes = Math.max(...weekChartCategories.map((category) => category.minutes), 1);
@@ -768,7 +776,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
               <Text style={[styles.title, { color: ui.text }]}>Screen time</Text>
             </View>
             
-            <View style={[styles.toggleContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F4F1EA', borderColor: isDark ? 'rgba(255,255,255,0.09)' : '#EEE8DC' }]}>
+            <View style={[styles.toggleContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F2F2F7', borderColor: isDark ? 'rgba(255,255,255,0.09)' : '#ECECF2' }]}>
               <Animated.View
                 style={[
                   styles.activeSegment,
@@ -781,7 +789,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                 onPress={() => handleToggleMode('week')}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.toggleText, { color: isDark ? '#AAB0BD' : '#6F737C' }, isWeek && styles.toggleTextActive, isWeek && { color: isDark ? '#F3F4F6' : '#111111' }]}>
+                <Text style={[styles.toggleText, { color: isDark ? '#AAB0BD' : '#6F737C' }, isWeek && { color: isDark ? '#F3F4F6' : '#111111' }]}>
                   week
                 </Text>
               </TouchableOpacity>
@@ -791,7 +799,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                 onPress={() => handleToggleMode('day')}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.toggleText, { color: isDark ? '#AAB0BD' : '#6F737C' }, !isWeek && styles.toggleTextActive, !isWeek && { color: isDark ? '#F3F4F6' : '#111111' }]}>
+                <Text style={[styles.toggleText, { color: isDark ? '#AAB0BD' : '#6F737C' }, !isWeek && { color: isDark ? '#F3F4F6' : '#111111' }]}>
                   day
                 </Text>
               </TouchableOpacity>
@@ -833,12 +841,10 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                 <Text style={[styles.weekInsightTime, { color: ui.text }]}>{weekTopApp ? formatTime(weekTopApp.minutes) : '0m'}</Text>
               </View>
 
-              <View style={styles.weekChartContainer}>
+              <View style={[styles.weekChartContainer, { height: weekChartHeight }]}>
                 <View style={styles.gridLineContainer}>
                   {weekAxisTicks.map((tick) => (
-                    <View style={[styles.gridLine, { borderBottomColor: ui.border }]} key={tick}>
-                      <Text style={[styles.gridText, { color: ui.textSecondary }]}>{formatAxisTime(tick)}</Text>
-                    </View>
+                    <View style={[styles.gridLine, { borderBottomColor: ui.border }]} key={tick} />
                   ))}
                 </View>
 
@@ -849,16 +855,19 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                       return {
                         ...category,
                         minutes,
-                        height: minutes > 0 ? Math.max((minutes / weekAxisMaxMinutes) * WEEK_BAR_MAX_HEIGHT, 6) : 0
+                        height: minutes > 0 ? Math.max((minutes / weekAxisMaxMinutes) * weekBarMaxHeight, 6) : 0
                       };
                     }).filter((segment) => segment.height > 0);
                     return (
                       <Pressable
                         key={item.key}
-                        style={({ pressed }) => [styles.barColumn, pressed && styles.barColumnPressed]}
+                        style={({ pressed }) => [
+                          styles.barColumn,
+                          pressed && styles.barColumnPressed
+                        ]}
                         onPress={() => setSelectedDay({ key: item.key, label: item.day })}
                       >
-                        <View style={styles.weekBarStack}>
+                        <View style={[styles.weekBarStack, { height: weekBarMaxHeight }]}>
                           {segments.map((segment, segmentIndex) => (
                             <LinearGradient
                               key={segment.key}
@@ -892,10 +901,31 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
 
                 {weekAverageMinutes > 0 && (
                   <View pointerEvents="none" style={[styles.averageLineWrap, { bottom: weekAverageLineBottom }]}>
-                    <Text style={[styles.averageLineLabel, { color: ui.textSecondary }]}>avg {formatAxisTime(weekAverageMinutes)}</Text>
                     <View style={[styles.averageLine, { borderColor: ui.textSecondary }]} />
                   </View>
                 )}
+                {weekAverageMinutes > 0 && (
+                  <Text
+                    pointerEvents="none"
+                    style={[
+                      styles.averageAxisLabel,
+                      {
+                        bottom: weekAverageAxisLabelBottom,
+                        color: ui.textSecondary
+                      }
+                    ]}
+                  >
+                    avg
+                  </Text>
+                )}
+                <View pointerEvents="none" style={styles.weekAxisLabels}>
+                  <Text style={[styles.weekAxisLabel, styles.weekAxisLabelTop, { color: ui.textSecondary }]}>
+                    {formatAxisTime(weekAxisMaxMinutes)}
+                  </Text>
+                  <Text style={[styles.weekAxisLabel, styles.weekAxisLabelBottom, { color: ui.textSecondary }]}>
+                    0
+                  </Text>
+                </View>
               </View>
 
               <View style={styles.legendContainer}>
@@ -1166,31 +1196,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#F2F2F7',
     borderRadius: 22,
     borderWidth: 1,
-    paddingHorizontal: 6,
-    paddingVertical: 6,
+    padding: 5,
     position: 'relative',
     width: 150,
     height: 44,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1
+    alignItems: 'center'
   },
   toggleButton: {
-    width: 69,
+    flex: 1,
     height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1
   },
   activeSegment: {
     position: 'absolute',
-    top: 6,
-    left: 6,
+    top: 5,
+    left: 5,
     width: 69,
     height: 32,
     borderRadius: 16,
+    borderWidth: 1,
     backgroundColor: '#FFFFFF',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
@@ -1199,16 +1226,11 @@ const styles = StyleSheet.create({
     elevation: 2
   },
   toggleText: {
-    fontFamily: FONT_SANS,
+    fontFamily: FONT_SANS_SEMIBOLD,
     fontSize: 13,
     color: COLORS.textSecondary,
-    fontWeight: '500',
-    textAlign: 'center'
-  },
-  toggleTextActive: {
-    color: COLORS.textMain,
-    fontFamily: FONT_SANS_SEMIBOLD,
     fontWeight: '600',
+    textAlign: 'center'
   },
   dateHeader: {
     flexDirection: 'row',
@@ -1262,7 +1284,6 @@ const styles = StyleSheet.create({
     marginBottom: 8
   },
   weekChartContainer: {
-    height: 222,
     marginTop: 24,
     marginBottom: 30,
     flexDirection: 'row',
@@ -1270,7 +1291,7 @@ const styles = StyleSheet.create({
   gridLineContainer: {
     position: 'absolute',
     top: 0,
-    bottom: 24, // ALIGNMENT FIX: Matched to label height (16) + margin (8)
+    bottom: WEEK_CHART_LABEL_HEIGHT,
     left: 0,
     right: 0,
     justifyContent: 'space-between',
@@ -1279,32 +1300,50 @@ const styles = StyleSheet.create({
   gridLine: {
     borderBottomWidth: 1,
     borderBottomColor: '#EAEAEA',
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'flex-end',
-    paddingBottom: 4,
-  },
-  gridText: {
-    fontFamily: FONT_MONO,
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    width: 58,
-    textAlign: 'right',
   },
   averageLineWrap: {
     position: 'absolute',
     left: 10,
-    right: 62,
+    right: 64,
     flexDirection: 'row',
     alignItems: 'center',
     zIndex: 2
   },
-  averageLineLabel: {
+  averageAxisLabel: {
+    position: 'absolute',
+    right: 0,
+    width: 58,
     color: '#6E6E73',
     fontFamily: FONT_MONO,
     fontSize: 12,
     fontWeight: '400',
-    marginRight: 6
+    lineHeight: 14,
+    textAlign: 'right',
+    zIndex: 3
+  },
+  weekAxisLabels: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: WEEK_CHART_LABEL_HEIGHT,
+    width: 58,
+    zIndex: 3
+  },
+  weekAxisLabel: {
+    position: 'absolute',
+    right: 0,
+    width: 58,
+    fontFamily: FONT_MONO,
+    fontSize: 12,
+    fontWeight: '400',
+    lineHeight: 14,
+    textAlign: 'right'
+  },
+  weekAxisLabelTop: {
+    top: 0
+  },
+  weekAxisLabelBottom: {
+    bottom: 0
   },
   averageLine: {
     flex: 1,
@@ -1324,6 +1363,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     height: '100%',
+    borderRadius: 8,
+    paddingHorizontal: 4
   },
   barColumnPressed: {
     opacity: 0.72,
@@ -1332,7 +1373,7 @@ const styles = StyleSheet.create({
   weekBarStack: {
     width: 20,
     justifyContent: 'flex-end',
-    marginBottom: 8, // ALIGNMENT FIX: Space between bar and text
+    marginBottom: 8,
   },
   weekBarSegment: {
     width: '100%',
