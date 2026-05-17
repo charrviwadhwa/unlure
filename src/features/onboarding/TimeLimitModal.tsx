@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, Platform, Vibration, useColorScheme } from 'react-native';
 import { Picker } from 'react-native-wheel-pick';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface TimeLimitModalProps {
   visible: boolean;
@@ -18,6 +19,7 @@ const FONT_SANS_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Ge
 
 export const TimeLimitModal = ({ visible, appName, iconBase64, initialMinutes = 30, onConfirm, onCancel }: TimeLimitModalProps) => {
   const isDark = useColorScheme() === 'dark';
+  const insets = useSafeAreaInsets();
   const theme = {
     surface: isDark ? '#171C24' : '#FFFFFF',
     panel: isDark ? 'rgba(255,255,255,0.045)' : '#FFFFFF',
@@ -49,7 +51,7 @@ export const TimeLimitModal = ({ visible, appName, iconBase64, initialMinutes = 
   return (
     <Modal visible={visible} transparent animationType="slide" statusBarTranslucent navigationBarTranslucent>
       <View style={styles.overlay}>
-        <View style={[styles.content, { backgroundColor: theme.surface }]}>
+        <View style={[styles.content, { backgroundColor: theme.surface, paddingBottom: Math.max(insets.bottom, 40) }]}>
           <Text style={[styles.label, { color: theme.textSecondary }]}>Set Limit</Text>
           <View style={styles.appHeader}>
             {iconBase64 ? (
@@ -139,8 +141,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     borderTopLeftRadius: 35,
     borderTopRightRadius: 35,
-    padding: 30,
-    paddingBottom: Platform.OS === 'android' ? 58 : 40
+    padding: 30
   },
   label: { fontSize: 12, color: '#666', fontFamily: FONT_SANS_SEMIBOLD, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0 },
   appHeader: { flexDirection: 'row', alignItems: 'center', marginTop: 8, marginBottom: 25 },

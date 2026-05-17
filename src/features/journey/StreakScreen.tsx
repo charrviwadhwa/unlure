@@ -1,6 +1,7 @@
 ﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Image, InteractionManager, Platform, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View, useColorScheme } from 'react-native';
+import { Animated, Image, InteractionManager, Platform, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, useColorScheme } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenTimeService, DailyUsageMap, FocusModeDecisions, WeeklyUsageInsights } from '../../services/ScreenTimeService';
 import { DailyLimitSnapshots, DailyMoodSnapshots, UserStore } from '../../services/storage';
 import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
@@ -65,6 +66,7 @@ interface StreakScreenProps {
 
 const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, onOpenFocusSetup }) => {
   const isDark = useColorScheme() === 'dark';
+  const insets = useSafeAreaInsets();
   const theme = {
     bg: isDark ? '#121418' : '#FFFFFF',
     surface: isDark ? 'rgba(255,255,255,0.055)' : '#FFFFFF',
@@ -346,7 +348,13 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
       <LinearGradient colors={screenGradientColors} style={styles.screenGradient}>
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[
+            styles.content,
+            {
+              paddingTop: insets.top + 15,
+              paddingBottom: Math.max(insets.bottom, 0) + 176
+            }
+          ]}
           showsVerticalScrollIndicator={false}
           overScrollMode="never"
           bounces={false}
@@ -521,8 +529,6 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 15 : 15,
-    paddingBottom: Platform.OS === 'android' ? 220 : 176
   },
   headerRow: {
     flexDirection: 'row',

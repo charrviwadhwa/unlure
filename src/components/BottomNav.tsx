@@ -1,6 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Pressable, StyleSheet, Animated, Image, ImageSourcePropType, Platform } from 'react-native';
+import {
+  View,
+  Pressable,
+  StyleSheet,
+  Animated,
+  Image,
+  ImageSourcePropType
+} from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type TabKey = 'home' | 'streak' | 'analytics';
 
@@ -18,10 +26,23 @@ const tabs: Array<{ key: TabKey; icon: ImageSourcePropType }> = [
 const ITEM_SIZE = 52;
 const BAR_PADDING = 6;
 const BUBBLE_SIZE = 48;
+const HORIZONTAL_PADDING = 20;
+const GESTURE_BOTTOM_GAP = 8;
+
+const useBottomNavPadding = () => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 0);
+
+  return {
+    paddingHorizontal: HORIZONTAL_PADDING,
+    paddingBottom: Math.max(bottomInset, GESTURE_BOTTOM_GAP)
+  };
+};
 
 const BottomNavComponent: React.FC<BottomNavProps> = ({ active, onChange }) => {
   const translateX = useRef(new Animated.Value(0)).current;
   const [localActive, setLocalActive] = useState<TabKey>(active);
+  const wrapperPadding = useBottomNavPadding();
 
   const moveBubble = useCallback((tab: TabKey) => {
     const index = tabs.findIndex(t => t.key === tab);
@@ -40,7 +61,7 @@ const BottomNavComponent: React.FC<BottomNavProps> = ({ active, onChange }) => {
   }, [active, moveBubble]);
 
   return (
-    <View style={styles.wrapper}>
+    <View style={[styles.wrapper, wrapperPadding]}>
       <LinearGradient
         colors={['rgba(28, 33, 42, 0.96)', 'rgba(18, 22, 29, 0.98)']}
         start={{ x: 0.1, y: 0 }}
@@ -82,8 +103,6 @@ export const BottomNav = React.memo(BottomNavComponent);
 
 const styles = StyleSheet.create({
   wrapper: {
-    paddingHorizontal: 20,
-    paddingBottom: Platform.OS === 'android' ? 0 : 28,
     alignItems: 'center',
     backgroundColor: 'transparent'
   },

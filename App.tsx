@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { BackHandler, Platform, StyleSheet, View, StatusBar, useColorScheme } from 'react-native';
+import { BackHandler, StyleSheet, View, StatusBar, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import EntryScreen from './src/features/onboarding/EntryScreen';
 import { PermissionSetupScreen } from './src/features/onboarding/PermissionSetupScreen';
@@ -20,8 +21,6 @@ import { ScreenTimeService } from './src/services/ScreenTimeService';
 type AppStep = 'entry' | 'permissions' | 'settings' | 'selection' | 'main';
 type MainTab = 'home' | 'streak' | 'analytics';
 type Route = { step: AppStep; tab: MainTab };
-
-const ANDROID_NAV_GAP = Platform.OS === 'android' ? 34 : 0;
 
 const syncFocusConfig = async () => {
   try {
@@ -133,7 +132,7 @@ const App = () => {
         barStyle={isDark ? 'light-content' : 'dark-content'}
         backgroundColor={appBg}
       />
-      <View style={[styles.container, { backgroundColor: appBg }]}>
+      <SafeAreaProvider style={[styles.container, { backgroundColor: appBg }]}>
 
         {currentStep === 'entry' && (
           <EntryScreen
@@ -212,7 +211,7 @@ const App = () => {
             </View>
           </View>
         )}
-      </View>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 };
@@ -225,7 +224,7 @@ const styles = StyleSheet.create({
   tabHidden:  { opacity: 0 },
   bottomNavWrap: {
     position: 'absolute',
-    left: 0, right: 0, bottom: ANDROID_NAV_GAP,
+    left: 0, right: 0, bottom: 0,
     zIndex: 10,
   },
 });

@@ -10,13 +10,13 @@ import {
   Pressable,
   Modal,
   Platform,
-  StatusBar,
   InteractionManager,
   Animated,
   useWindowDimensions
 } from 'react-native';
 import { useColorScheme } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { ScreenTimeService, DailyUsageMap, FocusModeDecisions } from '../../services/ScreenTimeService';
 import { DailyLimitSnapshots, DailyMoodSnapshots, StoredMood, UserStore } from '../../services/storage';
@@ -214,6 +214,7 @@ const isAndroidToolApp = (pkg: string, name: string) => {
 export const HomeScreen = ({ active = true }: { active?: boolean }) => {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const isDark = useColorScheme() === 'dark';
+  const insets = useSafeAreaInsets();
   const theme = {
     bg: isDark ? '#121418' : COLORS.bg,
     panel: isDark ? 'rgba(255,255,255,0.055)' : 'rgba(255,255,255,0.74)',
@@ -625,7 +626,13 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <LinearGradient colors={screenGradientColors} style={styles.screenGradient}>
         <ScrollView
-          contentContainerStyle={styles.container}
+          contentContainerStyle={[
+            styles.container,
+            {
+              paddingTop: insets.top + 15,
+              paddingBottom: Math.max(insets.bottom, 0) + 176
+            }
+          ]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.textMain} />}
           showsVerticalScrollIndicator={false}
           overScrollMode="never"
@@ -837,8 +844,6 @@ const styles = StyleSheet.create({
   },
   container: {
     paddingHorizontal: SCREEN_HORIZONTAL_PADDING,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 15 : 15,
-    paddingBottom: Platform.OS === 'android' ? 220 : 176
   },
   header: {
     flexDirection: 'row',

@@ -11,6 +11,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, {
   Circle,
   Defs,
@@ -204,6 +205,7 @@ const EntryScreen: React.FC<EntryScreenProps> = ({
   onAnimationComplete,
 }) => {
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const isCompactHeight = height < 860;
   const isVeryCompactHeight = height < 780;
   const isNarrow = width < 390;
@@ -217,16 +219,15 @@ const EntryScreen: React.FC<EntryScreenProps> = ({
   const titleLineHeight = Math.round(titleSize * 1.12);
   const subSize = isNarrow || isCompactHeight ? 13 : 14;
   const subLineHeight = isNarrow || isCompactHeight ? 21 : 23;
-  const rootPaddingTop = isVeryCompactHeight ? 14 : isCompactHeight ? 20 : 28;
+  const rootPaddingTop = insets.top + (isVeryCompactHeight ? 14 : isCompactHeight ? 20 : 28);
   const rootPaddingHorizontal = isNarrow ? 22 : 28;
-  const rootPaddingBottom = isVeryCompactHeight ? 16 : 24;
-  const androidNavReserve = Platform.OS === 'android'
-    ? isVeryCompactHeight ? 58 : isCompactHeight ? 54 : 48
-    : 0;
-  const copyLift = isCompactHeight ? -16 : -10;
+  const rootPaddingBottom = Math.max(insets.bottom, isVeryCompactHeight ? 16 : 24);
+  const heroLift = isVeryCompactHeight ? -14 : isCompactHeight ? -18 : -22;
+  const copyLift = heroLift + (isVeryCompactHeight ? 8 : isCompactHeight ? 10 : 12);
+  const bottomLift = isVeryCompactHeight ? 25 : isCompactHeight ? 31 : 35;
   const ctaHeight = isNarrow || isCompactHeight ? 52 : 58;
   const thumbSize = isNarrow || isCompactHeight ? 44 : 48;
-  const featureTop = isVeryCompactHeight ? 10 : isCompactHeight ? 14 : 18;
+  const featureTop = isVeryCompactHeight ? 20 : isCompactHeight ? 26 : 30;
   const featureTextSize = isNarrow || isCompactHeight ? 11 : 12;
   const featureIconScale = isNarrow || isCompactHeight ? 0.8 : 0.9;
   const featureGap = isNarrow || isCompactHeight ? 4 : 6;
@@ -247,8 +248,8 @@ const EntryScreen: React.FC<EntryScreenProps> = ({
     extrapolate: 'clamp',
   });
   
-  const welcomeOpacity = successProgress.interpolate({
-    inputRange: [0, 1],
+  const welcomeOpacity = swipeX.interpolate({
+    inputRange: [safeMaxSwipe * 0.35, safeMaxSwipe * 0.82],
     outputRange: [0, 1],
     extrapolate: 'clamp',
   });
@@ -397,7 +398,7 @@ const EntryScreen: React.FC<EntryScreenProps> = ({
               style={[
                 styles.doodleImage,
                 styles.fireDoodle,
-                { top: heroHeight * 0.43, left: rootPaddingHorizontal - 2 },
+                { top: heroHeight * 0.52 + heroLift, left: rootPaddingHorizontal - 10 },
               ]}
               resizeMode="contain"
             />
@@ -406,14 +407,14 @@ const EntryScreen: React.FC<EntryScreenProps> = ({
               style={[
                 styles.doodleImage,
                 styles.phoneDoodle,
-                { top: heroHeight * 0.22, right: rootPaddingHorizontal + 4 },
+                { top: heroHeight * 0.28 + heroLift, right: rootPaddingHorizontal - 2 },
               ]}
               resizeMode="contain"
             />
             <View
               style={[
                 styles.calendarDoodle,
-                { top: heroHeight * 0.72, left: rootPaddingHorizontal + 20 },
+                { top: heroHeight * 0.84 + heroLift, left: rootPaddingHorizontal + 18 },
               ]}
             >
               <CalendarDoodleIcon />
@@ -423,13 +424,13 @@ const EntryScreen: React.FC<EntryScreenProps> = ({
               style={[
                 styles.doodleImage,
                 styles.barDoodle,
-                { top: heroHeight * 0.8, right: rootPaddingHorizontal + 26 },
+                { top: heroHeight * 0.88 + heroLift, right: rootPaddingHorizontal + 8 },
               ]}
               resizeMode="contain"
             />
           </View>
 
-          <View style={[styles.heroWrap, { height: heroHeight }]}>
+          <View style={[styles.heroWrap, { height: heroHeight, marginTop: heroLift }]}>
             <DustOrb />
             <View style={styles.heroMask}>
               <Image
@@ -459,7 +460,7 @@ const EntryScreen: React.FC<EntryScreenProps> = ({
             </Text>
           </View>
 
-          <View style={[styles.bottomSection, { paddingBottom: androidNavReserve }]}>
+          <View style={[styles.bottomSection, { marginTop: bottomLift }]}>
             {/* --- UPDATED CTA SECTION --- */}
             <View
               style={[
@@ -490,7 +491,7 @@ const EntryScreen: React.FC<EntryScreenProps> = ({
                 Swipe to get started
               </Animated.Text>
               <Animated.Text style={[styles.welcomeText, { opacity: welcomeOpacity }]}>
-                Welcome!!
+                Welcome
               </Animated.Text>
 
               {/* Animated White Handle */}
@@ -576,7 +577,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
     paddingTop: 4,
     paddingBottom: 40,
-    justifyContent: 'space-between',
     backgroundColor: '#02070b',
   },
 
@@ -657,7 +657,7 @@ const styles = StyleSheet.create({
 
   heroWrap: {
     height: 370,
-    marginTop: 0,
+    marginTop: 10,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
@@ -768,10 +768,11 @@ const styles = StyleSheet.create({
 
   welcomeText: {
     position: 'absolute',
-    color: '#000000',
-    fontSize: 18,
+    color: '#071006',
+    fontSize: 20,
     fontFamily: FONT_SEMIBOLD,
-    fontWeight: '800',
+    fontWeight: '900',
+    letterSpacing: 0,
     zIndex: 6,
   },
   // --- END CTA STYLES ---

@@ -1,6 +1,7 @@
 package com.unlure
 
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -13,8 +14,12 @@ class MainActivity : ReactActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    WindowCompat.setDecorFitsSystemWindows(window, true)
-    window.navigationBarColor = Color.parseColor("#02070B")
+    WindowCompat.setDecorFitsSystemWindows(window, false)
+    window.statusBarColor = Color.TRANSPARENT
+    window.navigationBarColor = Color.TRANSPARENT
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      window.isNavigationBarContrastEnforced = false
+    }
     WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightNavigationBars = false
   }
 

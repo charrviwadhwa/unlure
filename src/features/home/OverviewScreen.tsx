@@ -13,13 +13,13 @@ import {
   RefreshControl,
   Dimensions,
   Platform,
-  StatusBar,
   AppState,
   InteractionManager,
   useColorScheme,
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import LinearGradient from 'react-native-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenTimeService, DailyUsageMap } from '../../services/ScreenTimeService';
 import { UserStore } from '../../services/storage';
 import { useMidnightRefresh } from '../../hooks/useMidnightRefresh';
@@ -398,6 +398,7 @@ const CategoryGlyph = ({ category, color }: { category: CategoryKey | 'otherSumm
 
 export default function ScreenTimeDashboard({ active = true }: { active?: boolean }) {
   const isDark = useColorScheme() === 'dark';
+  const insets = useSafeAreaInsets();
   const ui = {
     bg: isDark ? '#121418' : COLORS.bg,
     text: isDark ? '#FFFFFF' : COLORS.textMain,
@@ -761,7 +762,13 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
     <SafeAreaView style={[styles.safeArea, { backgroundColor: ui.bg }]}>
       <LinearGradient colors={screenGradientColors} style={styles.container}>
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingTop: insets.top + 15,
+              paddingBottom: Math.max(insets.bottom, 0) + 176
+            }
+          ]}
           showsVerticalScrollIndicator={false}
           overScrollMode="never"
           bounces={false}
@@ -1161,8 +1168,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 15 : 15,
-    paddingBottom: Platform.OS === 'android' ? 220 : 176,
   },
   header: {
     flexDirection: 'row',

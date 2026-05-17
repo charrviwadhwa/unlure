@@ -13,12 +13,12 @@ import {
   useColorScheme
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenTimeService } from '../../services/ScreenTimeService';
 
 type PermissionKey = 'usage' | 'overlay';
 const ENABLED_GREEN = '#2F8F6B';
 const ENABLED_GREEN_SURFACE = 'rgba(47,143,107,0.22)';
-const ANDROID_NAV_RESERVE = Platform.OS === 'android' ? 58 : 0;
 const FONT_SANS = Platform.select({ ios: 'Geist-Regular', android: 'Geist-Regular', default: 'System' });
 const FONT_SANS_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Geist-SemiBold', default: 'System' });
 const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
@@ -39,6 +39,7 @@ export const PermissionSetupScreen = ({
   actionLabel?: string;
 }) => {
   const isDark = useColorScheme() === 'dark';
+  const insets = useSafeAreaInsets();
   const theme = {
     bg: isDark ? '#121418' : '#FFFFFF',
     surface: isDark ? 'rgba(255,255,255,0.055)' : 'rgba(255,255,255,0.74)',
@@ -91,7 +92,13 @@ export const PermissionSetupScreen = ({
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.bg} />
       <LinearGradient colors={screenGradientColors} style={styles.screenGradient}>
         <ScrollView
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[
+            styles.content,
+            {
+              paddingTop: insets.top + 18,
+              paddingBottom: Math.max(insets.bottom, 0) + 136
+            }
+          ]}
           showsVerticalScrollIndicator={false}
           overScrollMode="never"
           bounces={false}
@@ -134,7 +141,7 @@ export const PermissionSetupScreen = ({
           </View>
         </ScrollView>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 18) }]}>
           <TouchableOpacity style={[styles.continueButton, isDark && { backgroundColor: '#FFFFFF' }]} onPress={onComplete} activeOpacity={0.88}>
             <Text style={[styles.continueText, isDark && { color: '#101319' }]}>{actionLabel}</Text>
           </TouchableOpacity>
@@ -154,8 +161,6 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'android' ? Math.max((StatusBar.currentHeight ?? 0) + 20, 44) : 18,
-    paddingBottom: Platform.OS === 'android' ? 172 : 136
   },
   heroImage: {
     width: 142,
@@ -280,7 +285,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     paddingHorizontal: 24,
     paddingTop: 12,
-    paddingBottom: Platform.OS === 'android' ? ANDROID_NAV_RESERVE : 18,
     backgroundColor: 'transparent'
   },
   continueButton: {

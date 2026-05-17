@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, StatusBar, Image, Animated, useColorScheme, DeviceEventEmitter } from 'react-native';
+import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, Image, Animated, useColorScheme, DeviceEventEmitter } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenTimeService, AppInfo } from '../../services/ScreenTimeService';
 import { UserStore } from '../../services/storage';
 import { TimeLimitModal } from './TimeLimitModal';
@@ -9,7 +10,6 @@ const FONT_SANS_SEMIBOLD = Platform.select({ ios: 'Geist-SemiBold', android: 'Ge
 const FONT_MONO = Platform.select({ ios: 'GeistMono-Regular', android: 'GeistMono-Regular', default: 'monospace' });
 const FONT_SCRIPT = Platform.select({ ios: 'PlaywriteDESAS-Light', android: 'PlaywriteDESAS-Light', default: 'System' });
 const DATA_MINT = '#39D98A';
-const ANDROID_NAV_RESERVE = Platform.OS === 'android' ? 58 : 0;
 
 const IosSwitch = ({ enabled }: { enabled: boolean }) => {
   const isDark = useColorScheme() === 'dark';
@@ -46,6 +46,7 @@ const IosSwitch = ({ enabled }: { enabled: boolean }) => {
 
 export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) => {
   const isDark = useColorScheme() === 'dark';
+  const insets = useSafeAreaInsets();
   const theme = {
     bg: isDark ? '#121418' : '#FFFFFF',
     surface: isDark ? 'rgba(255,255,255,0.055)' : '#F2F2F7',
@@ -153,7 +154,13 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
   if (loading) return <ActivityIndicator size="large" color={isDark ? '#F3F4F6' : '#111111'} style={[styles.loading, { backgroundColor: theme.bg }]} />;
 
   return (
-    <LinearGradient colors={screenGradientColors} style={styles.container}>
+    <LinearGradient
+      colors={screenGradientColors}
+      style={[
+        styles.container,
+        { paddingTop: insets.top + 18 }
+      ]}
+    >
       <View style={styles.headerWrap}>
         <Text style={[styles.brandMark, { color: isDark ? '#AAB0BD' : '#6E6E73' }]}>unlure</Text>
         <Text style={[styles.header, { color: theme.text }]}>Choose Apps</Text>
@@ -175,7 +182,10 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
         refreshing={refreshing}
         onRefresh={onRefresh}
         style={styles.list}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: Math.max(insets.bottom, 18) }
+        ]}
         showsVerticalScrollIndicator={false}
         renderItem={({ item }) => {
           const limit = selectedLimits[item.packageName];
@@ -220,7 +230,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
       />
 
       <View
-        style={styles.footerWrap}
+        style={[styles.footerWrap, { paddingBottom: Math.max(insets.bottom, 18) }]}
       >
         <TouchableOpacity
           style={[styles.footerButton, isDark && { backgroundColor: '#FFFFFF' }]}
@@ -252,8 +262,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'android' ? Math.max((StatusBar.currentHeight ?? 0) + 34, 58) : 18
+    paddingHorizontal: 24
   },
   headerWrap: { marginBottom: 16, paddingRight: 18 },
   brandMark: {
@@ -282,7 +291,6 @@ const styles = StyleSheet.create({
     flex: 1
   },
   listContent: {
-    paddingBottom: Platform.OS === 'android' ? 58 : 18
   },
   item: {
     flexDirection: 'row',
@@ -349,7 +357,6 @@ const styles = StyleSheet.create({
     marginHorizontal: -24,
     paddingHorizontal: 24,
     paddingTop: 12,
-    paddingBottom: Platform.OS === 'android' ? ANDROID_NAV_RESERVE : 18,
     backgroundColor: 'transparent'
   },
   footerButton: {
