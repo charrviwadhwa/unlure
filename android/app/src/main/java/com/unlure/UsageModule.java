@@ -658,7 +658,7 @@ public void getDailyStats(Promise promise) {
     }
 
     @ReactMethod
-    public void syncFocusModeConfig(ReadableMap limits, ReadableMap names, Promise promise) {
+    public void syncFocusModeConfig(ReadableMap limits, ReadableMap names, String focusGoal, Promise promise) {
         try {
             JSONObject limitsJson = new JSONObject();
             ReadableMapKeySetIterator limitKeys = limits.keySetIterator();
@@ -683,7 +683,8 @@ public void getDailyStats(Promise promise) {
             );
             SharedPreferences.Editor editor = prefs.edit()
                 .putString(FocusModePrefs.KEY_LIMITS_JSON, limitsJson.toString())
-                .putString(FocusModePrefs.KEY_NAMES_JSON, namesJson.toString());
+                .putString(FocusModePrefs.KEY_NAMES_JSON, namesJson.toString())
+                .putString(FocusModePrefs.KEY_FOCUS_GOAL, focusGoal == null ? "" : focusGoal.trim());
 
             SimpleDateFormat sdf = new SimpleDateFormat(DATE_FORMAT, Locale.US);
             sdf.setTimeZone(TimeZone.getDefault());

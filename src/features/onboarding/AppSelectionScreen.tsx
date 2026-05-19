@@ -66,9 +66,10 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
   const [activeApp, setActiveApp] = useState<AppInfo | null>(null);
 
   const loadData = useCallback(async (forceRefresh = false) => {
-    const [allApps, storedLimits] = await Promise.all([
+    const [allApps, storedLimits, savedFocusGoal] = await Promise.all([
       ScreenTimeService.getInstalledApps(forceRefresh),
-      UserStore.getAllLimits()
+      UserStore.getAllLimits(),
+      UserStore.getFocusGoal()
     ]);
     const installedPackages = new Set(allApps.map(app => app.packageName));
     const visibleLimits = Object.entries(storedLimits || {}).reduce<Record<string, number>>((acc, [packageName, minutes]) => {
@@ -81,7 +82,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
         return acc;
       }, {});
       await UserStore.saveAllLimits(visibleLimits);
-      await ScreenTimeService.syncFocusModeConfig(visibleLimits, appNames);
+      await ScreenTimeService.syncFocusModeConfig(visibleLimits, appNames, savedFocusGoal);
     }
     setApps(allApps);
     setSelectedLimits(visibleLimits);
@@ -117,7 +118,7 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
       acc[app.packageName] = app.appName;
       return acc;
     }, {});
-    await ScreenTimeService.syncFocusModeConfig(limits, appNames);
+    await ScreenTimeService.syncFocusModeConfig(limits, appNames, UserStore.getFocusGoal());
   }, [apps]);
 
   const handleConfirmLimit = async (minutes: number) => {
@@ -173,7 +174,6 @@ export const AppSelectionScreen = ({ onComplete }: { onComplete: () => void }) =
         onChangeText={setSearch}
         placeholderTextColor={theme.textSecondary}
       />
-
       <FlatList
         data={filteredApps}
         keyExtractor={(item) => item.packageName}

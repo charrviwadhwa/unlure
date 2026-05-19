@@ -108,11 +108,12 @@ export const ScreenTimeService = {
 
   async syncFocusModeConfig(
     limits: Record<string, number>,
-    appNames: Record<string, string> = {}
+    appNames: Record<string, string> = {},
+    focusGoal = ''
   ): Promise<boolean> {
     if (Platform.OS !== 'android') return false;
     try {
-      return Boolean(await UsageModule.syncFocusModeConfig(limits, appNames));
+      return Boolean(await UsageModule.syncFocusModeConfig(limits, appNames, focusGoal));
     } catch {
       return false;
     }

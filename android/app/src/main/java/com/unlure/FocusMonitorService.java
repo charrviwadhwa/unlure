@@ -25,6 +25,9 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.StyleSpan;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
@@ -579,7 +582,7 @@ public class FocusMonitorService extends Service {
         title.setTextSize(25);
 
         title.setTypeface(
-                Typeface.create(Typeface.SERIF, Typeface.BOLD)
+                Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
         );
 
         title.setGravity(Gravity.START);
@@ -606,7 +609,7 @@ public class FocusMonitorService extends Service {
         subtitle.setTextSize(17);
 
         subtitle.setTypeface(
-                Typeface.create(Typeface.SERIF, Typeface.BOLD)
+                Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
         );
 
         subtitle.setGravity(Gravity.CENTER);
@@ -639,6 +642,8 @@ public class FocusMonitorService extends Service {
         TextView body =
                 new TextView(this);
 
+        String focusGoal = readFocusGoal();
+
         body.setText(
                 "You reached today's limit for "
                         + appName
@@ -652,7 +657,7 @@ public class FocusMonitorService extends Service {
         body.setTextSize(16);
 
         body.setTypeface(
-                Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+                Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
         );
 
         body.setLineSpacing(dp(2), 1f);
@@ -669,6 +674,45 @@ public class FocusMonitorService extends Service {
 
         root.addView(body, bodyParams);
 
+        if (!focusGoal.isEmpty()) {
+            TextView goal =
+                    new TextView(this);
+
+            String goalText = "Goal: " + focusGoal;
+            SpannableString goalSpan = new SpannableString(goalText);
+            goalSpan.setSpan(
+                    new StyleSpan(Typeface.ITALIC),
+                    "Goal: ".length(),
+                    goalText.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            );
+            goal.setText(goalSpan);
+
+            goal.setTextColor(
+                    Color.rgb(210, 216, 224)
+            );
+
+            goal.setTextSize(16);
+
+            goal.setTypeface(
+                    Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+            );
+
+            goal.setLineSpacing(dp(2), 1f);
+
+            goal.setGravity(Gravity.START);
+
+            LinearLayout.LayoutParams goalParams =
+                    new LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT
+                    );
+
+            goalParams.topMargin = dp(16);
+
+            root.addView(goal, goalParams);
+        }
+
         TextView close =
                 new TextView(this);
 
@@ -683,7 +727,7 @@ public class FocusMonitorService extends Service {
         close.setTextSize(16);
 
         close.setTypeface(
-                Typeface.create(Typeface.SERIF, Typeface.BOLD)
+                Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
         );
 
         close.setPadding(
@@ -736,7 +780,7 @@ public class FocusMonitorService extends Service {
         );
 
         bypass.setTypeface(
-                Typeface.create(Typeface.SERIF, Typeface.BOLD)
+                Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
         );
 
         bypass.setTextSize(15);
@@ -865,6 +909,21 @@ public class FocusMonitorService extends Service {
                     .setDuration(220)
                     .start();
         });
+    }
+
+    private String readFocusGoal() {
+        try {
+            SharedPreferences prefs =
+                    getSharedPreferences(
+                            FocusModePrefs.PREFS_NAME,
+                            Context.MODE_PRIVATE
+                    );
+            String goal = prefs.getString(FocusModePrefs.KEY_FOCUS_GOAL, "");
+            if (goal == null) return "";
+            return goal.trim();
+        } catch (Exception ignored) {
+            return "";
+        }
     }
 
     private void hideOverlay() {

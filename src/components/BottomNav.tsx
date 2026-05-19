@@ -103,14 +103,6 @@ const BottomNavComponent: React.FC<BottomNavProps> = ({ active, onChange }) => {
     inputRange: [0, 1],
     outputRange: [1, 0.94]
   });
-  const glowOpacity = activePulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.16, 0.36]
-  });
-  const glowScale = activePulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.24]
-  });
 
   return (
     <View style={[styles.wrapper, wrapperPadding]}>
@@ -120,18 +112,6 @@ const BottomNavComponent: React.FC<BottomNavProps> = ({ active, onChange }) => {
         end={{ x: 0.9, y: 1 }}
         style={styles.bar}
       >
-        <Animated.View
-          style={[
-            styles.activeGlow,
-            {
-              opacity: glowOpacity,
-              transform: [
-                { translateX },
-                { scale: glowScale }
-              ]
-            }
-          ]}
-        />
         <Animated.View
           style={[
             styles.activeBubble,
@@ -225,20 +205,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.16,
     shadowRadius: 10
-  },
-  activeGlow: {
-    position: 'absolute',
-    left: BAR_PADDING,
-    top: BAR_PADDING,
-    width: BUBBLE_SIZE + 4,
-    height: BUBBLE_SIZE + 4,
-    borderRadius: (BUBBLE_SIZE + 4) / 2,
-    backgroundColor: 'rgba(167,242,119,0.42)',
-    zIndex: 0,
-    shadowColor: '#A7F277',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.42,
-    shadowRadius: 16
   },
   item: {
     width: ITEM_SIZE,

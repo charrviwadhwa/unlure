@@ -28,18 +28,18 @@ const { width, height: windowHeight } = Dimensions.get('window');
 const CATEGORY_SHEET_HEIGHT = Math.min(430, Math.max(340, windowHeight * 0.48));
 
 const COLORS = {
-  social: { solid: '#2F8F6B', light: '#DDF4EA', border: '#2F8F6B' },
-  games: { solid: '#E05A47', light: '#FFE5DF', border: '#D85A48' },
-  entertainment: { solid: '#C18A16', light: '#FFF0C9', border: '#B98513' },
-  creativity: { solid: '#C85C8E', light: '#FBE3EF', border: '#BE5A89' },
-  productivityFinance: { solid: '#287DCC', light: '#E1F0FF', border: '#287DCC' },
-  education: { solid: '#6F9D2F', light: '#EAF4D6', border: '#6B9730' },
-  informationReading: { solid: '#8B5CF6', light: '#EFE7FF', border: '#8456E8' },
-  healthFitness: { solid: '#D96F2C', light: '#FFE8D8', border: '#CB6A2C' },
-  utilities: { solid: '#64748B', light: '#E8EEF6', border: '#5B6B82' },
-  shoppingFood: { solid: '#F05D7E', light: '#FFE4EB', border: '#E15878' },
-  travel: { solid: '#14B8A6', light: '#D8F8F2', border: '#0F9F90' },
-  others: { solid: '#7C3AED', light: '#EDE7FF', border: '#6D35D6' },
+  social: { solid: '#2563EB', light: '#EAF2FF', border: '#2563EB' },
+  games: { solid: '#EF4444', light: '#FFEDEA', border: '#EF4444' },
+  entertainment: { solid: '#F59E0B', light: '#FFF5D6', border: '#C47A00' },
+  creativity: { solid: '#D946EF', light: '#FCEBFF', border: '#B92ED1' },
+  productivityFinance: { solid: '#0D9488', light: '#E0F7F4', border: '#0D9488' },
+  education: { solid: '#16A34A', light: '#EAF8EC', border: '#15803D' },
+  informationReading: { solid: '#7C3AED', light: '#F1EAFF', border: '#7C3AED' },
+  healthFitness: { solid: '#F97316', light: '#FFF0E2', border: '#EA580C' },
+  utilities: { solid: '#64748B', light: '#EEF2F7', border: '#475569' },
+  shoppingFood: { solid: '#DB2777', light: '#FCE7F3', border: '#BE185D' },
+  travel: { solid: '#06B6D4', light: '#E2F8FC', border: '#0891B2' },
+  others: { solid: '#111827', light: '#F1F5F9', border: '#111827' },
   textMain: '#000000',
   textSecondary: '#6F737C',
   bg: '#FFFFFF',
@@ -71,18 +71,18 @@ type CategoryKey =
 type CategoryPalette = Record<CategoryKey, { light: string; border: string }>;
 
 const DARK_CATEGORY_COLORS: Record<CategoryKey, { solid: string; light: string; border: string }> = {
-  social: { solid: '#5FE6AF', light: '#173B31', border: '#5FE6AF' },
-  games: { solid: '#FF7A66', light: '#43211E', border: '#FF7A66' },
-  entertainment: { solid: '#FFD166', light: '#3C311A', border: '#FFD166' },
-  creativity: { solid: '#FF75B8', light: '#411F33', border: '#FF75B8' },
-  productivityFinance: { solid: '#61B7FF', light: '#19334C', border: '#61B7FF' },
-  education: { solid: '#B8F25C', light: '#2F3D18', border: '#B8F25C' },
-  informationReading: { solid: '#C084FC', light: '#33214B', border: '#C084FC' },
-  healthFitness: { solid: '#FF9F43', light: '#3F2A18', border: '#FF9F43' },
-  utilities: { solid: '#9AA8BC', light: '#26303D', border: '#9AA8BC' },
-  shoppingFood: { solid: '#FF5FA2', light: '#431D31', border: '#FF5FA2' },
-  travel: { solid: '#45F0D0', light: '#113F39', border: '#45F0D0' },
-  others: { solid: '#A78BFA', light: '#2E2547', border: '#A78BFA' },
+  social: { solid: '#60A5FA', light: '#142D4E', border: '#60A5FA' },
+  games: { solid: '#F87171', light: '#421C1C', border: '#F87171' },
+  entertainment: { solid: '#FBBF24', light: '#3D2C12', border: '#FBBF24' },
+  creativity: { solid: '#E879F9', light: '#3B1645', border: '#E879F9' },
+  productivityFinance: { solid: '#2DD4BF', light: '#103B38', border: '#2DD4BF' },
+  education: { solid: '#4ADE80', light: '#15351F', border: '#4ADE80' },
+  informationReading: { solid: '#A78BFA', light: '#2A2145', border: '#A78BFA' },
+  healthFitness: { solid: '#FB923C', light: '#3F2615', border: '#FB923C' },
+  utilities: { solid: '#CBD5E1', light: '#26303D', border: '#CBD5E1' },
+  shoppingFood: { solid: '#F472B6', light: '#42172D', border: '#F472B6' },
+  travel: { solid: '#22D3EE', light: '#123A42', border: '#22D3EE' },
+  others: { solid: '#E5E7EB', light: '#202633', border: '#E5E7EB' },
 };
 
 type ChartCategory = {
@@ -417,6 +417,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
   const [storedStats, setStoredStats] = useState<DailyUsageMap>({});
   const [trackingStartDate, setTrackingStartDate] = useState<string | null>(null);
   const [limits, setLimits] = useState<Record<string, number>>({});
+  const [focusGoal, setFocusGoal] = useState('');
   const [appNames, setAppNames] = useState<Record<string, string>>({});
   const [appIcons, setAppIcons] = useState<Record<string, string | undefined>>({});
   const [selectedCategory, setSelectedCategory] = useState<ChartCategory | null>(null);
@@ -433,11 +434,12 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
 
   const load = useCallback(async () => {
     await ScreenTimeService.storeTodayStats();
-    const [dailyStats, installedApps, savedTrackingStartDate, savedLimits] = await Promise.all([
+    const [dailyStats, installedApps, savedTrackingStartDate, savedLimits, savedFocusGoal] = await Promise.all([
       ScreenTimeService.getStoredDailyStats(),
       ScreenTimeService.getInstalledApps(),
       UserStore.getTrackingStartDate(),
-      UserStore.getAllLimits()
+      UserStore.getAllLimits(),
+      UserStore.getFocusGoal()
     ]);
 
     const nameMap = installedApps.reduce<Record<string, string>>((acc, app) => {
@@ -458,6 +460,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
     setStoredStats(dailyStats);
     setTrackingStartDate(savedTrackingStartDate);
     setLimits(savedLimits || {});
+    setFocusGoal(savedFocusGoal);
   }, []);
 
   useEffect(() => {
@@ -1033,8 +1036,16 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
               ]}>
                 {dayChartCategories.length === 0 ? (
                   <View style={styles.quietDayState}>
-                    <Text style={[styles.quietDayTitle, { color: ui.textSecondary }]}>"The day is quiet." </Text>
-                    <Text style={[styles.quietDayCaption, { color: ui.textSecondary }]}>No tracked app time yet.</Text>
+                    <Text style={[styles.quietDayTitle, { color: ui.text }]}>The day is quiet.</Text>
+                    {focusGoal ? (
+                      <>
+                        <Text style={[styles.quietDayCaption, { color: ui.textSecondary }]}>Current Focus:</Text>
+                        <Text style={[styles.quietDayGoal, { color: ui.text }]} numberOfLines={3}>{focusGoal}</Text>
+                        <Text style={[styles.quietDayCaption, { color: ui.textSecondary }]}>Quiet choices compound.</Text>
+                      </>
+                    ) : (
+                      <Text style={[styles.quietDayCaption, { color: ui.textSecondary }]}>No tracked app time yet.</Text>
+                    )}
                   </View>
                 ) : dayChartCategories.map((category) => (
                   <View style={styles.dayBarColumn} key={category.key}>
@@ -1677,6 +1688,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: FONT_SANS,
     fontWeight: '500',
+    textAlign: 'center'
+  },
+  quietDayGoal: {
+    marginTop: 8,
+    maxWidth: 280,
+    fontSize: 22,
+    lineHeight: 28,
+    fontFamily: FONT_SANS_SEMIBOLD,
+    fontWeight: '600',
     textAlign: 'center'
   },
   emptySerif: {

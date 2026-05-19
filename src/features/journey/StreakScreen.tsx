@@ -1,5 +1,5 @@
 ﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, AppState, Image, InteractionManager, Platform, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, useColorScheme } from 'react-native';
+import { Animated, AppState, Image, InteractionManager, Platform, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useColorScheme } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenTimeService, DailyUsageMap, FocusModeDecisions, WeeklyUsageInsights } from '../../services/ScreenTimeService';
@@ -84,6 +84,10 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
   const [hasActiveLimits, setHasActiveLimits] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [weeklyInsights, setWeeklyInsights] = useState<WeeklyUsageInsights>(EMPTY_WEEKLY_INSIGHTS);
+  const [activeLimits, setActiveLimits] = useState<Record<string, number>>({});
+  const [focusGoal, setFocusGoal] = useState('');
+  const [draftFocusGoal, setDraftFocusGoal] = useState('');
+  const [editingFocusGoal, setEditingFocusGoal] = useState(false);
 
   const formatDateKey = (date: Date) => {
     const y = date.getFullYear();
@@ -233,39 +237,43 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
       return acc;
     }, {});
     const installedPackages = new Set(installedApps.map((app) => app.packageName));
-    const activeLimits = Object.entries(limits || {}).reduce<Record<string, number>>((acc, [pkg, minutes]) => {
+    const nextActiveLimits = Object.entries(limits || {}).reduce<Record<string, number>>((acc, [pkg, minutes]) => {
       if (installedPackages.has(pkg)) acc[pkg] = minutes;
       return acc;
     }, {});
-    if (Object.keys(activeLimits).length !== Object.keys(limits || {}).length) {
-      await UserStore.saveAllLimits(activeLimits);
-      await ScreenTimeService.syncFocusModeConfig(activeLimits, nameMap);
+    if (Object.keys(nextActiveLimits).length !== Object.keys(limits || {}).length) {
+      await UserStore.saveAllLimits(nextActiveLimits);
+      await ScreenTimeService.syncFocusModeConfig(nextActiveLimits, nameMap, UserStore.getFocusGoal());
     } else {
-      await UserStore.saveTodayLimitSnapshot(activeLimits);
+      await UserStore.saveTodayLimitSnapshot(nextActiveLimits);
     }
-    setHasActiveLimits(Object.values(activeLimits).some((limit) => limit > 0));
+    setActiveLimits(nextActiveLimits);
+    const savedFocusGoal = UserStore.getFocusGoal();
+    setFocusGoal(savedFocusGoal);
+    setDraftFocusGoal(savedFocusGoal);
+    setHasActiveLimits(Object.values(nextActiveLimits).some((limit) => limit > 0));
 
     const todayKey = formatDateKey(new Date());
     const todayMap = (storedStats as DailyUsageMap)[todayKey] || {};
     const todayOpenMap = storedOpenCounts[todayKey] || {};
-    const todayMood = resolveMood(todayMap, activeLimits, focusDecisions);
+    const todayMood = resolveMood(todayMap, nextActiveLimits, focusDecisions);
     await UserStore.saveDailyMood(todayKey, todayMood);
     const moodsWithToday = { ...(savedMoods || {}), [todayKey]: todayMood };
 
-    const derivedStreak = calculateStreakFromStats(storedStats as DailyUsageMap, limitSnapshots || {}, activeLimits, moodsWithToday, focusDecisions, trackingStartDate);
-    const milestones = calculateStreakMilestones(storedStats as DailyUsageMap, limitSnapshots || {}, activeLimits, moodsWithToday, focusDecisions, trackingStartDate);
+    const derivedStreak = calculateStreakFromStats(storedStats as DailyUsageMap, limitSnapshots || {}, nextActiveLimits, moodsWithToday, focusDecisions, trackingStartDate);
+    const milestones = calculateStreakMilestones(storedStats as DailyUsageMap, limitSnapshots || {}, nextActiveLimits, moodsWithToday, focusDecisions, trackingStartDate);
     setStreak(derivedStreak);
     setBestStreak(milestones.best);
     setMonthCleanDays(milestones.monthClean);
     setWeeklyInsights(loadedInsights);
 
-    const rows = Object.keys(activeLimits)
-      .filter((pkg) => (activeLimits[pkg] || 0) > 0)
+    const rows = Object.keys(nextActiveLimits)
+      .filter((pkg) => (nextActiveLimits[pkg] || 0) > 0)
       .map((pkg) => ({
         id: pkg,
         name: nameMap[pkg] || labelFromPackage(pkg),
         minutes: Math.floor((todayMap[pkg] || 0) / 60000),
-        limitMinutes: activeLimits[pkg] || 0,
+        limitMinutes: nextActiveLimits[pkg] || 0,
         opens: todayOpenMap[pkg] || 0,
         iconBase64: iconMap[pkg],
         protectedToday: Boolean(focusDecisions.protectedApps[pkg]),
@@ -284,6 +292,15 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
       (focusDecisions.bypassedApps[app.id] || !focusDecisions.protectedApps[app.id])
     )));
   }, [calculateStreakFromStats, calculateStreakMilestones, resolveMood]);
+
+  const saveFocusGoal = useCallback(async () => {
+    const nextGoal = draftFocusGoal.trim();
+    await UserStore.saveFocusGoal(nextGoal);
+    await ScreenTimeService.syncFocusModeConfig(activeLimits, appNameMap, nextGoal);
+    setFocusGoal(nextGoal);
+    setDraftFocusGoal(nextGoal);
+    setEditingFocusGoal(false);
+  }, [activeLimits, appNameMap, draftFocusGoal]);
 
   const formatTime = (mins: number) => {
     const h = Math.floor(mins / 60);
@@ -340,24 +357,15 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
         : streak === 1
           ? 'Momentum started.'
           : 'Your streak is alive.';
-  const streakProgressLabel = !hasActiveLimits
-    ? 'No streak is counted until a limit is active'
-    : isExceededToday
-      ? 'Bring today back under limit'
-      : streak > 0
-        ? streak === 1
-          ? 'One focused day. Keep protecting it.'
-          : 'Discipline compounds daily.'
-        : 'Choose one app limit and protect today.';
   const screenGradientColors = isDark
     ? ['#121418', '#14171A', '#171A16', '#121418']
     : ['#FFFFFF', '#FFFCF6', '#FFFFFF'];
   const heroCardColors = ['#171C24', '#191E24', '#242116'];
-  const statsCardColors = isDark ? ['#171C24', '#151A20'] : ['#FFFFFF', '#F7F4ED'];
-  const statsTextColor = isDark ? '#FFFFFF' : '#151515';
-  const statsLabelColor = isDark ? 'rgba(255,255,255,0.48)' : '#7A756B';
-  const statsUnitColor = isDark ? 'rgba(255,255,255,0.42)' : '#8B867C';
-  const statsBorderColor = isDark ? 'rgba(255,255,255,0.08)' : '#EEE8DC';
+  const heroStats = [
+    { label: 'Current', value: `${streak}d`, accent: '#7ACB67' },
+    { label: 'Best', value: `${bestStreak}d`, accent: '#E4A62A' },
+    { label: 'Clean', value: `${monthCleanDays}`, accent: '#6EA8FF' }
+  ];
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
       <LinearGradient colors={screenGradientColors} style={styles.screenGradient}>
@@ -413,7 +421,6 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
                     <AnimatedCount value={streak} style={styles.streakNumber} />
                   </View>
                   <Text style={styles.streakLabel}>{heroStreakLabel}</Text>
-                  <Text style={styles.streakSubLabel}>{streakProgressLabel}</Text>
                 </View>
                 <Image
                   source={isExceededToday ? require('../../assets/Sad.gif') : require('../../assets/Fire (1).gif')}
@@ -421,42 +428,62 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
                   resizeMode="contain"
                 />
               </View>
+              <View style={styles.heroDivider} />
+              <View style={styles.heroStatsRow}>
+                {heroStats.map((item) => (
+                  <View key={item.label} style={styles.heroStatItem}>
+                    <View style={[styles.heroStatDot, { backgroundColor: item.accent }]} />
+                    <Text style={styles.heroStatLabel}>{item.label}</Text>
+                    <Text style={styles.heroStatValue}>{item.value}</Text>
+                  </View>
+                ))}
+              </View>
             </LinearGradient>
           </LinearGradient>
         </View>
 
-        <LinearGradient
-          colors={statsCardColors}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.trophyStatsRow, { borderColor: statsBorderColor }]}
-        >
-          {[
-            { label: 'Current Streak', value: streak, unit: 'days', delay: 0, accent: '#7ACB67' },
-            { label: 'Best Streak', value: bestStreak, unit: 'days', delay: 100, accent: '#E4A62A' },
-            { label: 'Clean Days', value: monthCleanDays, unit: 'this month', delay: 200, accent: '#6EA8FF' }
-          ].map((item, index) => (
-            <View
-              key={item.label}
-              style={[
-                styles.trophyStat,
-                index > 0 && styles.trophyStatDivider,
-                index > 0 && { borderLeftColor: statsBorderColor }
-              ]}
-            >
-              <View style={styles.trophyStatLabelRow}>
-                <View style={[styles.trophyAccent, { backgroundColor: item.accent }]} />
-                <Text style={[styles.trophyStatLabel, { color: statsLabelColor }]}>{item.label}</Text>
-              </View>
-              <AnimatedCount value={item.value} delay={item.delay} style={[styles.trophyStatValue, { color: statsTextColor }]} />
-              <Text style={[styles.trophyStatUnit, { color: statsUnitColor }]}>{item.unit}</Text>
-            </View>
-          ))}
-        </LinearGradient>
-
         {firstOpenInsight ? (
           <Text style={[styles.behaviorInsight, { color: theme.textSecondary }]}>{firstOpenInsight}</Text>
         ) : null}
+
+        <View style={[styles.focusGoalCard, { backgroundColor: theme.mutedSurface, borderColor: theme.border }]}>
+          <View style={styles.focusGoalTopRow}>
+            <View style={styles.focusGoalCopy}>
+              <Text style={[styles.focusGoalLabel, { color: theme.textSecondary }]}>Active Goal</Text>
+              {editingFocusGoal ? (
+                <TextInput
+                  style={[styles.focusGoalInput, { color: theme.text }]}
+                  value={draftFocusGoal}
+                  onChangeText={setDraftFocusGoal}
+                  placeholder="What are you protecting today?"
+                  placeholderTextColor={theme.textSecondary}
+                  maxLength={90}
+                  multiline
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={saveFocusGoal}
+                  onBlur={saveFocusGoal}
+                />
+              ) : (
+                <Text style={[styles.focusGoalText, { color: focusGoal ? theme.text : theme.textSecondary }]}>
+                  {focusGoal || 'Set Active Goal'}
+                </Text>
+              )}
+            </View>
+            {!editingFocusGoal ? (
+              <TouchableOpacity
+                style={[styles.focusGoalAction, { borderColor: theme.border }]}
+                onPress={() => {
+                  setDraftFocusGoal(focusGoal);
+                  setEditingFocusGoal(true);
+                }}
+                activeOpacity={0.76}
+              >
+                <Text style={[styles.focusGoalActionText, { color: theme.text }]}>{focusGoal ? 'Edit' : 'Add'}</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
 
         <View style={styles.sectionBlock}>
           <View style={styles.titleRow}>
@@ -622,8 +649,8 @@ const styles = StyleSheet.create({
     fontWeight: '600'
   },
   heroStack: {
-    minHeight: 174,
-    marginBottom: 30,
+    minHeight: 196,
+    marginBottom: 22,
     position: 'relative'
   },
   heroBackplate: {
@@ -645,7 +672,7 @@ const styles = StyleSheet.create({
     elevation: 9
   },
   heroCard: {
-    minHeight: 156,
+    minHeight: 178,
     borderRadius: 30,
     padding: 20,
     backgroundColor: '#111111'
@@ -671,15 +698,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 12
+    marginTop: 10
   },
   heroCopy: {
     flex: 1,
     paddingRight: 14
   },
   heroGif: {
-    width: 118,
-    height: 118,
+    width: 106,
+    height: 106,
     zIndex: 1
   },
   streakNumberWrap: {
@@ -710,83 +737,106 @@ const styles = StyleSheet.create({
     fontFamily: FONT_REGULAR,
     fontWeight: '500'
   },
-  streakSubLabel: {
-    marginTop: 5,
+  heroDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    marginTop: 10,
+    marginBottom: 12
+  },
+  heroStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  heroStatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 0
+  },
+  heroStatDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    marginRight: 6
+  },
+  heroStatLabel: {
+    color: 'rgba(255,255,255,0.46)',
+    fontFamily: FONT_MONO,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '500',
+    marginRight: 5
+  },
+  heroStatValue: {
+    color: '#FFFFFF',
+    fontFamily: FONT_MONO,
     fontSize: 12,
-    color: 'rgba(255,255,255,0.48)',
-    fontFamily: FONT_REGULAR,
-    fontWeight: '600'
+    lineHeight: 15,
+    fontWeight: '700'
   },
   sectionBlock: {
     marginBottom: 30
   },
-  trophyStatsRow: {
-    flexDirection: 'row',
-    marginTop: -2,
-    marginBottom: 22,
-    minHeight: 58,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 20,
-    overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.065,
-    shadowRadius: 20,
-    elevation: 3
-  },
   behaviorInsight: {
-    marginTop: -16,
-    marginBottom: 30,
+    marginBottom: 20,
     fontFamily: FONT_REGULAR,
     fontSize: 13,
     lineHeight: 18,
     fontWeight: '500'
   },
-  trophyStat: {
-    flex: 1,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 11
+  focusGoalCard: {
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    marginBottom: 24
   },
-  trophyStatDivider: {
-    borderLeftWidth: 1,
-    borderLeftColor: 'rgba(255,255,255,0.08)'
-  },
-  trophyStatLabelRow: {
+  focusGoalTopRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 2
+    alignItems: 'center'
   },
-  trophyAccent: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    marginRight: 5
+  focusGoalCopy: {
+    flex: 1,
+    marginRight: 12
   },
-  trophyStatValue: {
-    fontFamily: FONT_MONO,
-    fontSize: 20,
-    lineHeight: 23,
-    fontWeight: '500'
-  },
-  trophyStatLabel: {
-    fontFamily: FONT_REGULAR,
-    fontSize: 8,
-    lineHeight: 10,
-    fontWeight: '500',
-    textTransform: 'uppercase',
-    letterSpacing: 0.45,
-    color: 'rgba(255,255,255,0.48)'
-  },
-  trophyStatUnit: {
+  focusGoalLabel: {
     fontFamily: FONT_REGULAR,
     fontSize: 9,
-    lineHeight: 11,
-    fontWeight: '500',
-    marginTop: 1,
-    color: 'rgba(255,255,255,0.42)'
+    lineHeight: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 5
+  },
+  focusGoalText: {
+    fontFamily: FONT_SEMIBOLD,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '600'
+  },
+  focusGoalInput: {
+    minHeight: 40,
+    maxHeight: 78,
+    padding: 0,
+    textAlignVertical: 'top',
+    fontFamily: FONT_SEMIBOLD,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '600'
+  },
+  focusGoalAction: {
+    minWidth: 54,
+    height: 34,
+    borderWidth: 1,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 13
+  },
+  focusGoalActionText: {
+    fontFamily: FONT_REGULAR,
+    fontSize: 12,
+    fontWeight: '600'
   },
   titleRow: {
     flexDirection: 'row',

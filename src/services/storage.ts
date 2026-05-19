@@ -56,6 +56,12 @@ export const initDB = (): void => {
     )
   `);
 
+  try {
+    db.executeSync(`ALTER TABLE user ADD COLUMN focus_goal TEXT DEFAULT ''`);
+  } catch {
+    // Column already exists on upgraded installs.
+  }
+
   db.executeSync(`
     CREATE TABLE IF NOT EXISTS daily_log (
       date TEXT PRIMARY KEY,
@@ -296,6 +302,15 @@ export const UserStore = {
 
   saveName(name: string): void {
     db.executeSync('UPDATE user SET name = ? WHERE id = 1', [name]);
+  },
+
+  getFocusGoal(): string {
+    const result = db.executeSync('SELECT focus_goal FROM user WHERE id = 1');
+    return ((result.rows?.[0] as DbRow | undefined)?.focus_goal as string | undefined) ?? '';
+  },
+
+  saveFocusGoal(goal: string): void {
+    db.executeSync('UPDATE user SET focus_goal = ? WHERE id = 1', [goal.trim()]);
   },
 
   hasCompletedOnboarding(): boolean {

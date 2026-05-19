@@ -30,7 +30,7 @@ const syncFocusConfig = async () => {
       acc[app.packageName] = app.appName;
       return acc;
     }, {});
-    await ScreenTimeService.syncFocusModeConfig(savedLimits, appNames);
+    await ScreenTimeService.syncFocusModeConfig(savedLimits, appNames, UserStore.getFocusGoal());
   } catch {
     console.warn('Focus config sync failed.');
   }
