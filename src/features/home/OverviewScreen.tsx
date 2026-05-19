@@ -417,7 +417,6 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
   const [storedStats, setStoredStats] = useState<DailyUsageMap>({});
   const [trackingStartDate, setTrackingStartDate] = useState<string | null>(null);
   const [limits, setLimits] = useState<Record<string, number>>({});
-  const [focusGoal, setFocusGoal] = useState('');
   const [appNames, setAppNames] = useState<Record<string, string>>({});
   const [appIcons, setAppIcons] = useState<Record<string, string | undefined>>({});
   const [selectedCategory, setSelectedCategory] = useState<ChartCategory | null>(null);
@@ -434,12 +433,11 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
 
   const load = useCallback(async () => {
     await ScreenTimeService.storeTodayStats();
-    const [dailyStats, installedApps, savedTrackingStartDate, savedLimits, savedFocusGoal] = await Promise.all([
+    const [dailyStats, installedApps, savedTrackingStartDate, savedLimits] = await Promise.all([
       ScreenTimeService.getStoredDailyStats(),
       ScreenTimeService.getInstalledApps(),
       UserStore.getTrackingStartDate(),
-      UserStore.getAllLimits(),
-      UserStore.getFocusGoal()
+      UserStore.getAllLimits()
     ]);
 
     const nameMap = installedApps.reduce<Record<string, string>>((acc, app) => {
@@ -460,7 +458,6 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
     setStoredStats(dailyStats);
     setTrackingStartDate(savedTrackingStartDate);
     setLimits(savedLimits || {});
-    setFocusGoal(savedFocusGoal);
   }, []);
 
   useEffect(() => {
@@ -1037,15 +1034,7 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
                 {dayChartCategories.length === 0 ? (
                   <View style={styles.quietDayState}>
                     <Text style={[styles.quietDayTitle, { color: ui.text }]}>The day is quiet.</Text>
-                    {focusGoal ? (
-                      <>
-                        <Text style={[styles.quietDayCaption, { color: ui.textSecondary }]}>Current Focus:</Text>
-                        <Text style={[styles.quietDayGoal, { color: ui.text }]} numberOfLines={3}>{focusGoal}</Text>
-                        <Text style={[styles.quietDayCaption, { color: ui.textSecondary }]}>Quiet choices compound.</Text>
-                      </>
-                    ) : (
-                      <Text style={[styles.quietDayCaption, { color: ui.textSecondary }]}>No tracked app time yet.</Text>
-                    )}
+                    <Text style={[styles.quietDayCaption, { color: ui.textSecondary }]}>No tracked app time yet.</Text>
                   </View>
                 ) : dayChartCategories.map((category) => (
                   <View style={styles.dayBarColumn} key={category.key}>
@@ -1688,15 +1677,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: FONT_SANS,
     fontWeight: '500',
-    textAlign: 'center'
-  },
-  quietDayGoal: {
-    marginTop: 8,
-    maxWidth: 280,
-    fontSize: 22,
-    lineHeight: 28,
-    fontFamily: FONT_SANS_SEMIBOLD,
-    fontWeight: '600',
     textAlign: 'center'
   },
   emptySerif: {
