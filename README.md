@@ -1,97 +1,34 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Unlure
 
-# Getting Started
+> Use your phone with pure intention.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+unlure is a minimalist, privacy-first digital wellbeing application built with React Native. Instead of acting like a restrictive app blocker, it replaces intrusive digital noise with gentle usage bounds, conscious focus goals, and a gamified streak system designed to build better long-term phone habits.
 
-## Step 1: Start Metro
+[Get it on Google Play (Coming Soon)](#)
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+---
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+## Core Pillars
 
-```sh
-# Using npm
-npm start
+* **Streak Momentum Engine:** Track continuous habit progress with a primary streak counter, historical personal bests, and a calendar view of clean days built directly into a unified dashboard card.
+* **Conscious Focus Goals:** Set a targeted daily or session-based intention directly on your dashboard to replace mindless scrolling with active task clarity.
+* **Ambient Focus Overlays:** Native accessibility and window overlays gently interrupt usage when app limits are reached, displaying your self-imposed goals back to you as an intentional pattern-interrupter.
+* **Private by Design:** Zero tracking analytics. All device usage logs and stats remain strictly on local storage, respecting your digital privacy completely silently.
 
-# OR using Yarn
-yarn start
-```
+---
 
-## Step 2: Build and run your app
+## Tech Stack
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+* **Framework:** React Native (TypeScript)
+* **Native Integration:** Android Accessibility Services & Native Window Overlay Management
+* **Design System:** High-contrast minimalist OLED dark mode featuring vibrant neon-lime highlights and low information density layouts.
 
-### Android
+---
 
-```sh
-# Using npm
-npm run android
+## UI Architecture & Layout
 
-# OR using Yarn
-yarn android
-```
+The dashboard layout is engineered to promote cognitive calm and structural balance:
+1. **The Hero Streak Card:** Consolidates your current streak numbers, a minimalist flame graphic, and compressed inline historical sub-stats to keep data dense but out of the way.
+2. **Actionable Focus Container:** Houses the active session target with an accessible inline edit toggle.
+3. **Progress Guardrails:** Displays an elegant, low-opacity empty state illustration when daily app limits are clear of infractions.
 
-### iOS
-
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
-```
-
-Then, and every time you update your native dependencies, run:
-
-```sh
-bundle exec pod install
-```
-
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
-
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
-```
-
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
-
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
