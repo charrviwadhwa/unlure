@@ -395,8 +395,68 @@ public void getDailyStats(Promise promise) {
         return pruned;
     }
 
+    private void putUsageSnapshot(JSONObject usageRoot, JSONObject openRoot, String dateKey, UsageSnapshot snapshot) throws JSONException {
+        JSONObject day = new JSONObject();
+        JSONObject openDay = new JSONObject();
+        for (Map.Entry<String, Long> entry : snapshot.totals.entrySet()) {
+            day.put(entry.getKey(), entry.getValue());
+        }
+        for (Map.Entry<String, Integer> entry : snapshot.openCounts.entrySet()) {
+            openDay.put(entry.getKey(), entry.getValue());
+        }
+        usageRoot.put(dateKey, day);
+        openRoot.put(dateKey, openDay);
+    }
+
+    private Calendar getBackfillStart(Calendar startOfToday, SimpleDateFormat sdf, String lastStoredDate, String earliestDateKey) {
+        Calendar earliest = (Calendar) startOfToday.clone();
+        earliest.add(Calendar.DATE, -(DAILY_USAGE_RETENTION_DAYS - 1));
+
+        if (earliestDateKey != null && !earliestDateKey.trim().isEmpty()) {
+            try {
+                Calendar requested = Calendar.getInstance();
+                requested.setTime(sdf.parse(earliestDateKey));
+                requested.set(Calendar.HOUR_OF_DAY, 0);
+                requested.set(Calendar.MINUTE, 0);
+                requested.set(Calendar.SECOND, 0);
+                requested.set(Calendar.MILLISECOND, 0);
+                if (requested.getTimeInMillis() > earliest.getTimeInMillis()) {
+                    earliest = requested;
+                }
+            } catch (Exception ignored) {}
+        }
+
+        if (earliestDateKey != null && !earliestDateKey.trim().isEmpty()) {
+            return earliest;
+        }
+
+        if (lastStoredDate == null) return earliest;
+
+        try {
+            Calendar parsed = Calendar.getInstance();
+            parsed.setTime(sdf.parse(lastStoredDate));
+            parsed.set(Calendar.HOUR_OF_DAY, 0);
+            parsed.set(Calendar.MINUTE, 0);
+            parsed.set(Calendar.SECOND, 0);
+            parsed.set(Calendar.MILLISECOND, 0);
+            parsed.add(Calendar.DATE, 1);
+            return parsed.getTimeInMillis() > earliest.getTimeInMillis() ? parsed : earliest;
+        } catch (Exception ignored) {
+            return earliest;
+        }
+    }
+
     @ReactMethod
     public void storeTodayStats(Promise promise) {
+        storeDailyStats(null, promise);
+    }
+
+    @ReactMethod
+    public void storeDailyStatsSince(String earliestDateKey, Promise promise) {
+        storeDailyStats(earliestDateKey, promise);
+    }
+
+    private void storeDailyStats(String earliestDateKey, Promise promise) {
         UsageStatsManager usm = (UsageStatsManager) getReactApplicationContext().getSystemService(Context.USAGE_STATS_SERVICE);
         PackageManager pm = getReactApplicationContext().getPackageManager();
 
@@ -424,24 +484,16 @@ public void getDailyStats(Promise promise) {
             root = pruneOldDailyStats(root, startOfToday, sdf);
             openRoot = pruneOldDailyStats(openRoot, startOfToday, sdf);
 
-            if (lastStoredDate == null || !lastStoredDate.equals(todayKey)) {
-                Calendar startOfYesterday = (Calendar) startOfToday.clone();
-                startOfYesterday.add(Calendar.DATE, -1);
-                long yStart = startOfYesterday.getTimeInMillis();
-                long yEnd = startTime;
-                String yesterdayKey = sdf.format(startOfYesterday.getTime());
-
-                UsageSnapshot yesterdaySnapshot = queryUsageSnapshot(usm, pm, yStart, yEnd);
-                JSONObject yDay = new JSONObject();
-                JSONObject yOpenDay = new JSONObject();
-                for (Map.Entry<String, Long> entry : yesterdaySnapshot.totals.entrySet()) {
-                    yDay.put(entry.getKey(), entry.getValue());
+            Calendar backfillDay = getBackfillStart(startOfToday, sdf, lastStoredDate, earliestDateKey);
+            while (backfillDay.getTimeInMillis() < startTime) {
+                Calendar nextDay = (Calendar) backfillDay.clone();
+                nextDay.add(Calendar.DATE, 1);
+                String dateKey = sdf.format(backfillDay.getTime());
+                if (!root.has(dateKey) || !openRoot.has(dateKey)) {
+                    UsageSnapshot snapshot = queryUsageSnapshot(usm, pm, backfillDay.getTimeInMillis(), nextDay.getTimeInMillis());
+                    putUsageSnapshot(root, openRoot, dateKey, snapshot);
                 }
-                for (Map.Entry<String, Integer> entry : yesterdaySnapshot.openCounts.entrySet()) {
-                    yOpenDay.put(entry.getKey(), entry.getValue());
-                }
-                root.put(yesterdayKey, yDay);
-                openRoot.put(yesterdayKey, yOpenDay);
+                backfillDay = nextDay;
             }
 
             long checkpoint = prefs.getLong(PREFS_TODAY_CHECKPOINT_KEY, startTime);

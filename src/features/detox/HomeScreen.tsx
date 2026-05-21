@@ -304,9 +304,8 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
     snapshots: DailyLimitSnapshots,
     currentLimits: Record<string, number>
   ) => {
-    const todayKey = formatDateKey(new Date());
     if (snapshots[dateKey]) return snapshots[dateKey];
-    return dateKey === todayKey ? currentLimits : {};
+    return currentLimits;
   }, []);
 
   const lightenHex = (hex: string, amount = 0.48) => {
@@ -399,13 +398,13 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
   }, [getLimitsForDate, moodFromStored, resolveMood]);
 
   const load = useCallback(async (targetDate: Date, mode: PeriodMode = periodMode) => {
-    await ScreenTimeService.storeTodayStats();
-    const [stats, limits, limitSnapshots, savedMoods, loadedTrackingStartDate, installedApps] = await Promise.all([
+    const loadedTrackingStartDate = UserStore.ensureTrackingStartDate();
+    await ScreenTimeService.storeTodayStats(false, loadedTrackingStartDate);
+    const [stats, limits, limitSnapshots, savedMoods, installedApps] = await Promise.all([
       ScreenTimeService.getStoredDailyStats(),
       UserStore.getAllLimits(),
       UserStore.getDailyLimitSnapshots(),
       UserStore.getDailyMoods(),
-      UserStore.ensureTrackingStartDate(),
       ScreenTimeService.getInstalledApps()
     ]);
     const focusDecisions = await ScreenTimeService.getTodayFocusModeDecisions();

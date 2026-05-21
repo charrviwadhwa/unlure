@@ -119,7 +119,7 @@ export const ScreenTimeService = {
     }
   },
 
-  async storeTodayStats(forceRefresh = false): Promise<boolean> {
+  async storeTodayStats(forceRefresh = false, earliestDateKey?: string | null): Promise<boolean> {
     if (Platform.OS !== 'android') return false;
     const now = Date.now();
     if (!forceRefresh && storedDailyStatsPromise && now - lastStoreTodayStatsAt < STORE_TODAY_STATS_TTL_MS) {
@@ -127,7 +127,9 @@ export const ScreenTimeService = {
     }
     if (storeTodayStatsPromise) return storeTodayStatsPromise;
     try {
-      const promise = UsageModule.storeTodayStats()
+      const promise = (earliestDateKey
+        ? UsageModule.storeDailyStatsSince(earliestDateKey)
+        : UsageModule.storeTodayStats())
         .then((result: boolean) => {
           lastStoreTodayStatsAt = Date.now();
           storedDailyStatsPromise = null;

@@ -134,9 +134,8 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
     snapshots: DailyLimitSnapshots,
     currentLimits: Record<string, number>
   ) => {
-    const todayKey = formatDateKey(new Date());
     if (snapshots[dateKey]) return snapshots[dateKey];
-    return dateKey === todayKey ? currentLimits : {};
+    return currentLimits;
   }, []);
 
   const getMoodForDate = useCallback((
@@ -214,15 +213,15 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
   }, [getMoodForDate]);
 
   const load = useCallback(async () => {
-    await ScreenTimeService.storeTodayStats();
-    const [storedStats, storedOpenCounts, installedApps, limits, limitSnapshots, savedMoods, trackingStartDate, loadedInsights] = await Promise.all([
+    const trackingStartDate = UserStore.ensureTrackingStartDate();
+    await ScreenTimeService.storeTodayStats(false, trackingStartDate);
+    const [storedStats, storedOpenCounts, installedApps, limits, limitSnapshots, savedMoods, loadedInsights] = await Promise.all([
       ScreenTimeService.getStoredDailyStats(),
       ScreenTimeService.getStoredDailyOpenCounts(),
       ScreenTimeService.getInstalledApps(),
       UserStore.getAllLimits(),
       UserStore.getDailyLimitSnapshots(),
       UserStore.getDailyMoods(),
-      UserStore.ensureTrackingStartDate(),
       ScreenTimeService.getWeeklyUsageInsights()
     ]);
     const focusDecisions = await ScreenTimeService.getTodayFocusModeDecisions();

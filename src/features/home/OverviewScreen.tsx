@@ -432,11 +432,11 @@ export default function ScreenTimeDashboard({ active = true }: { active?: boolea
   const isWeek = viewMode === 'week';
 
   const load = useCallback(async () => {
-    await ScreenTimeService.storeTodayStats();
-    const [dailyStats, installedApps, savedTrackingStartDate, savedLimits] = await Promise.all([
+    const savedTrackingStartDate = UserStore.ensureTrackingStartDate();
+    await ScreenTimeService.storeTodayStats(false, savedTrackingStartDate);
+    const [dailyStats, installedApps, savedLimits] = await Promise.all([
       ScreenTimeService.getStoredDailyStats(),
       ScreenTimeService.getInstalledApps(),
-      UserStore.getTrackingStartDate(),
       UserStore.getAllLimits()
     ]);
 
