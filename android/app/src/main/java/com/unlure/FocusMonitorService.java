@@ -7,7 +7,6 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.app.usage.UsageEvents;
-import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -42,11 +41,13 @@ import org.json.JSONObject;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class FocusMonitorService extends Service {
 
@@ -54,104 +55,70 @@ public class FocusMonitorService extends Service {
     private static final String CHANNEL_ID = "unlure_focus";
     private static final int NOTIFICATION_ID = 3101;
 
-    private static final long POLL_MS = 1200L;
-    private static final long SCREEN_OFF_POLL_MS = 10000L;
+    private static final long POLL_MS = 3000L;
+    private static final long SCREEN_OFF_POLL_MS = 30000L;
+    private static final long CACHE_REFRESH_MS = 30000L;
+    private static final long LIMITS_CACHE_TTL_MS = 5000L;
     private static final long ACTIVE_AT_START_LOOKBACK_MS = 2L * 60L * 60L * 1000L;
 
-    private final Handler handler =
-            new Handler(Looper.getMainLooper());
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Object cacheLock = new Object();
 
     private WindowManager windowManager;
-
     private View overlayView;
-
     private String overlayPackage = "";
-
     private String lastForegroundPackage = "";
-
     private Runnable pollRunnable;
-
     private SharedPreferences prefs;
-
     private Typeface playwriteTypeface;
 
-    private final Map<String, Long> usageCache =
-            new HashMap<>();
+    private final Map<String, Long> usageCache = new HashMap<>();
+    private Map<String, Integer> cachedLimits = new HashMap<>();
+    private long limitsLastLoaded = 0L;
+    private volatile long lastCacheRefreshTime = 0L;
+    private volatile long lastCacheCompletedTime = 0L;
+    private volatile boolean cacheRefreshRunning = false;
 
-    private final Map<String, Long> activeStarts =
-            new HashMap<>();
+    private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent == null) return;
 
-    private String liveUsagePackage = "";
-
-    private long liveUsageStartMs = 0L;
-
-    private long liveStatsBaseMs = 0L;
-
-    private final BroadcastReceiver screenReceiver =
-            new BroadcastReceiver() {
-                @Override
-                public void onReceive(
-                        Context context,
-                        Intent intent
-                ) {
-
-                    if (intent == null) return;
-
-                    String action = intent.getAction();
-
-                    if (Intent.ACTION_SCREEN_OFF.equals(action)) {
-
-                        handler.removeCallbacks(pollRunnable);
-
-                        hideOverlay();
-
-                    } else if (
-                            Intent.ACTION_SCREEN_ON.equals(action)
-                    ) {
-
-                        handler.removeCallbacks(pollRunnable);
-
-                        handler.post(pollRunnable);
-                    }
+            String action = intent.getAction();
+            if (Intent.ACTION_SCREEN_OFF.equals(action)) {
+                handler.removeCallbacks(pollRunnable);
+                clearUsageCache();
+                lastCacheRefreshTime = 0L;
+                lastCacheCompletedTime = 0L;
+                limitsLastLoaded = 0L;
+                hideOverlay();
+            } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
+                handler.removeCallbacks(pollRunnable);
+                if (pollRunnable != null) {
+                    handler.post(pollRunnable);
                 }
-            };
+            }
+        }
+    };
 
     @Override
     public void onCreate() {
-
         super.onCreate();
         Log.d(TAG, "service onCreate");
 
-        windowManager =
-                (WindowManager) getSystemService(WINDOW_SERVICE);
-
-        prefs =
-                getSharedPreferences(
-                        FocusModePrefs.PREFS_NAME,
-                        MODE_PRIVATE
-                );
-
+        windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
+        prefs = getSharedPreferences(FocusModePrefs.PREFS_NAME, MODE_PRIVATE);
         playwriteTypeface = loadFont("fonts/PlaywriteDESAS-Light.ttf");
 
         registerScreenReceiver();
-
         createNotificationChannel();
-
-        startForeground(
-                NOTIFICATION_ID,
-                buildNotification()
-        );
-
+        startForeground(NOTIFICATION_ID, buildNotification());
         startPolling();
     }
 
     @Override
-    public int onStartCommand(
-            Intent intent,
-            int flags,
-            int startId
-    ) {
-
+    public int onStartCommand(Intent intent, int flags, int startId) {
         Log.d(TAG, "service onStartCommand");
         startPolling();
         return START_STICKY;
@@ -159,16 +126,15 @@ public class FocusMonitorService extends Service {
 
     @Override
     public void onDestroy() {
-
         Log.d(TAG, "service onDestroy");
         handler.removeCallbacksAndMessages(null);
+        executor.shutdownNow();
 
         try {
             unregisterReceiver(screenReceiver);
         } catch (Exception ignored) {}
 
         hideOverlay();
-
         super.onDestroy();
     }
 
@@ -177,29 +143,18 @@ public class FocusMonitorService extends Service {
         return null;
     }
 
-    // =========================================================
-    // POLLING
-    // =========================================================
-
     private void startPolling() {
-
         if (pollRunnable != null) {
             handler.removeCallbacks(pollRunnable);
         }
 
-        Log.d(TAG, "startPolling");
-
         pollRunnable = new Runnable() {
             @Override
             public void run() {
-
                 checkForegroundApp();
-
                 handler.postDelayed(
                         this,
-                        isScreenInteractive()
-                                ? POLL_MS
-                                : SCREEN_OFF_POLL_MS
+                        isScreenInteractive() ? POLL_MS : SCREEN_OFF_POLL_MS
                 );
             }
         };
@@ -208,34 +163,20 @@ public class FocusMonitorService extends Service {
     }
 
     private void registerScreenReceiver() {
-
         IntentFilter filter = new IntentFilter();
-
         filter.addAction(Intent.ACTION_SCREEN_ON);
-
         filter.addAction(Intent.ACTION_SCREEN_OFF);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-
-            registerReceiver(
-                    screenReceiver,
-                    filter,
-                    Context.RECEIVER_NOT_EXPORTED
-            );
-
+            registerReceiver(screenReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         } else {
-
             registerReceiver(screenReceiver, filter);
         }
     }
 
     private boolean isScreenInteractive() {
-
         try {
-
-            PowerManager pm =
-                    (PowerManager) getSystemService(POWER_SERVICE);
-
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
             if (pm == null) return true;
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
@@ -243,384 +184,362 @@ public class FocusMonitorService extends Service {
             }
 
             return pm.isScreenOn();
-
         } catch (Exception ignored) {
-
             return true;
         }
     }
 
-    // =========================================================
-    // FOREGROUND CHECK
-    // =========================================================
-
     private void checkForegroundApp() {
-
-        Map<String, Integer> limits = readLimits();
-        Log.d(TAG, "check limitsCount=" + limits.size());
+        Map<String, Integer> limits = getLimits();
 
         if (limits.isEmpty()) {
-            Log.d(TAG, "hide: no limits");
             hideOverlay();
+            stopSelf();
             return;
         }
 
-        String foreground =
-                getForegroundApp();
-        Log.d(TAG, "foreground=" + foreground);
+        maybeRefreshCacheAsync(new HashSet<>(limits.keySet()));
 
+        String foreground = getForegroundApp();
         if (foreground == null
                 || foreground.isEmpty()
                 || isSystemOrSelfPackage(foreground)) {
-
-            Log.d(TAG, "hide: invalid foreground=" + foreground);
-            resetLiveUsageTopUp();
             hideOverlay();
             return;
         }
 
         lastForegroundPackage = foreground;
 
-        Integer limitMinutes =
-                limits.get(foreground);
-
-        if (limitMinutes == null
-                || limitMinutes <= 0) {
-
-            Log.d(TAG, "hide: no limit for foreground=" + foreground);
-            resetLiveUsageTopUp();
+        Integer limitMinutes = limits.get(foreground);
+        if (limitMinutes == null || limitMinutes <= 0) {
             hideOverlay();
             return;
         }
 
         if (isBypassedToday(foreground)) {
-
-            Log.d(TAG, "hide: bypassed today foreground=" + foreground);
             hideOverlay();
             return;
         }
 
-        long used =
-                getTodayUsageMs(foreground);
-
-        long limit =
-                limitMinutes * 60L * 1000L;
-
-        Log.d(TAG, "check foreground=" + foreground + " usedMs=" + used + " limitMs=" + limit);
+        long used = getCachedUsage(foreground);
+        long limit = limitMinutes * 60L * 1000L;
 
         if (used >= limit) {
-
-            showLimitOverlay(
-                    foreground,
-                    getAppName(foreground)
-            );
-
+            showLimitOverlay(foreground, getAppName(foreground));
         } else {
-
             hideOverlay();
         }
     }
 
-    // =========================================================
-    // FOREGROUND DETECTION
-    // =========================================================
-
     private String getForegroundApp() {
-
         try {
-
             UsageStatsManager usm =
-                    (UsageStatsManager)
-                            getSystemService(
-                                    Context.USAGE_STATS_SERVICE
-                            );
+                    (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
 
-            long now =
-                    System.currentTimeMillis();
+            if (usm == null) return lastForegroundPackage;
 
-            UsageEvents events =
-                    usm.queryEvents(now - 5000, now);
+            long now = System.currentTimeMillis();
+            UsageEvents events = usm.queryEvents(now - 5000L, now);
 
             if (events == null) {
                 return lastForegroundPackage;
             }
 
-            UsageEvents.Event event =
-                    new UsageEvents.Event();
-
-            String latest =
-                    lastForegroundPackage;
-
-            long latestTime = 0;
+            UsageEvents.Event event = new UsageEvents.Event();
+            String latest = lastForegroundPackage;
+            long latestTime = 0L;
 
             while (events.hasNextEvent()) {
-
                 events.getNextEvent(event);
+                int type = event.getEventType();
 
-                int type =
-                        event.getEventType();
-
-                if (type ==
-                        UsageEvents.Event.MOVE_TO_FOREGROUND
-                        || type ==
-                        UsageEvents.Event.ACTIVITY_RESUMED) {
-
-                    String pkg =
-                            event.getPackageName();
-
+                if (type == UsageEvents.Event.MOVE_TO_FOREGROUND
+                        || type == UsageEvents.Event.ACTIVITY_RESUMED) {
+                    String pkg = event.getPackageName();
                     if (pkg == null) continue;
 
                     if (event.getTimeStamp() > latestTime) {
-
                         latest = pkg;
-
-                        latestTime =
-                                event.getTimeStamp();
+                        latestTime = event.getTimeStamp();
                     }
                 }
             }
 
             return latest;
-
         } catch (Exception e) {
-
             return lastForegroundPackage;
         }
     }
 
-    // =========================================================
-    // USAGE TIME
-    // =========================================================
+    private Map<String, Integer> getLimits() {
+        long now = System.currentTimeMillis();
+        if (now - limitsLastLoaded > LIMITS_CACHE_TTL_MS) {
+            cachedLimits = readLimits();
+            limitsLastLoaded = now;
+        }
 
-    private long getTodayUsageMs(String packageName) {
+        return cachedLimits;
+    }
+
+    private Map<String, Integer> readLimits() {
+        HashMap<String, Integer> limits = new HashMap<>();
+        String raw = prefs.getString(FocusModePrefs.KEY_LIMITS_JSON, "{}");
+
         try {
-            UsageStatsManager usm =
-                    (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
+            JSONObject json = new JSONObject(raw);
+            Iterator<String> keys = json.keys();
 
-            Calendar calendar = Calendar.getInstance();
-            long endTime = calendar.getTimeInMillis();
-            calendar.set(Calendar.HOUR_OF_DAY, 0);
-            calendar.set(Calendar.MINUTE, 0);
-            calendar.set(Calendar.SECOND, 0);
-            calendar.set(Calendar.MILLISECOND, 0);
-            long startTime = calendar.getTimeInMillis();
-            long maxWindow = Math.max(endTime - startTime, 0L);
+            while (keys.hasNext()) {
+                String key = keys.next();
+                int minutes = json.optInt(key, 0);
 
-            long total = 0L;
-            Long activeStart = isPackageActiveAtStart(usm, packageName, startTime)
-                    ? startTime
-                    : null;
-            int openActivityCount = activeStart != null ? 1 : 0;
-
-            UsageEvents events = usm.queryEvents(startTime, endTime);
-            if (events != null) {
-                UsageEvents.Event event = new UsageEvents.Event();
-
-                while (events.hasNextEvent()) {
-                    events.getNextEvent(event);
-                    if (!packageName.equals(event.getPackageName())) continue;
-
-                    int type = event.getEventType();
-                    long eventTime = Math.min(Math.max(event.getTimeStamp(), startTime), endTime);
-
-                    if (type == UsageEvents.Event.MOVE_TO_FOREGROUND ||
-                            type == UsageEvents.Event.ACTIVITY_RESUMED) {
-                        if (openActivityCount == 0) {
-                            activeStart = eventTime;
-                        }
-                        openActivityCount++;
-                    } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND ||
-                            type == UsageEvents.Event.ACTIVITY_PAUSED) {
-                        if (openActivityCount > 0) {
-                            openActivityCount--;
-                        }
-
-                        if (openActivityCount == 0 && activeStart != null && eventTime > activeStart) {
-                            total = addUsageDelta(total, eventTime - activeStart, maxWindow);
-                            activeStart = null;
-                        }
-                    } else if (type == UsageEvents.Event.ACTIVITY_STOPPED) {
-                        if (openActivityCount == 0 && activeStart != null && eventTime > activeStart) {
-                            total = addUsageDelta(total, eventTime - activeStart, maxWindow);
-                            activeStart = null;
-                        }
-                    } else if (type == UsageEvents.Event.DEVICE_SHUTDOWN ||
-                            type == UsageEvents.Event.DEVICE_STARTUP) {
-                        if (activeStart != null && eventTime > activeStart) {
-                            total = addUsageDelta(total, eventTime - activeStart, maxWindow);
-                        }
-                        activeStart = null;
-                        openActivityCount = 0;
-                    }
+                if (minutes > 0) {
+                    limits.put(key, minutes);
                 }
             }
+        } catch (Exception ignored) {}
 
-            if (activeStart != null && endTime > activeStart) {
-                total = addUsageDelta(total, endTime - activeStart, maxWindow);
-            }
+        return limits;
+    }
 
-            Log.d(TAG, "usage-ui-algo package=" + packageName + " totalMs=" + total);
-            return total;
-        } catch (Exception e) {
-            Log.e(TAG, "usage calculation failed package=" + packageName, e);
-            return 0L;
+    private long getCachedUsage(String packageName) {
+        long cached;
+        synchronized (cacheLock) {
+            cached = usageCache.getOrDefault(packageName, 0L);
+        }
+
+        if (packageName.equals(lastForegroundPackage) && lastCacheCompletedTime > 0L) {
+            cached += Math.max(System.currentTimeMillis() - lastCacheCompletedTime, 0L);
+        }
+
+        return cached;
+    }
+
+    private void clearUsageCache() {
+        synchronized (cacheLock) {
+            usageCache.clear();
         }
     }
 
-    private long addUsageDelta(long currentTotal, long delta, long maxWindow) {
-        long safeDelta = Math.min(Math.max(delta, 0L), maxWindow);
-        return Math.min(currentTotal + safeDelta, maxWindow);
+    private void maybeRefreshCacheAsync(Set<String> limitedPackages) {
+        long now = System.currentTimeMillis();
+        if (now - lastCacheRefreshTime < CACHE_REFRESH_MS) return;
+        if (cacheRefreshRunning) return;
+
+        cacheRefreshRunning = true;
+        lastCacheRefreshTime = now;
+
+        executor.execute(() -> {
+            try {
+                Map<String, Long> fresh = doFullEventScan(limitedPackages);
+                synchronized (cacheLock) {
+                    usageCache.clear();
+                    usageCache.putAll(fresh);
+                }
+                lastCacheCompletedTime = System.currentTimeMillis();
+            } catch (Exception e) {
+                Log.e(TAG, "cache refresh failed", e);
+            } finally {
+                cacheRefreshRunning = false;
+            }
+        });
     }
 
-    private boolean isPackageActiveAtStart(
+    private Map<String, Long> doFullEventScan(Set<String> limitedPackages) {
+        HashMap<String, Long> totals = new HashMap<>();
+        HashMap<String, Long> activeStarts = new HashMap<>();
+        HashMap<String, Integer> openActivityCounts = new HashMap<>();
+
+        UsageStatsManager usm =
+                (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
+
+        if (usm == null || limitedPackages.isEmpty()) return totals;
+
+        Calendar calendar = Calendar.getInstance();
+        long endTime = calendar.getTimeInMillis();
+        calendar.set(Calendar.HOUR_OF_DAY, 0);
+        calendar.set(Calendar.MINUTE, 0);
+        calendar.set(Calendar.SECOND, 0);
+        calendar.set(Calendar.MILLISECOND, 0);
+        long startTime = calendar.getTimeInMillis();
+        long maxWindow = Math.max(endTime - startTime, 0L);
+
+        for (String packageName : getActivePackagesAtStart(usm, limitedPackages, startTime)) {
+            activeStarts.put(packageName, startTime);
+            openActivityCounts.put(packageName, 1);
+        }
+
+        UsageEvents events = usm.queryEvents(startTime, endTime);
+        if (events == null) return totals;
+
+        UsageEvents.Event event = new UsageEvents.Event();
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event);
+
+            String packageName = event.getPackageName();
+            if (packageName == null || !limitedPackages.contains(packageName)) continue;
+
+            int type = event.getEventType();
+            long eventTime = Math.min(Math.max(event.getTimeStamp(), startTime), endTime);
+
+            if (type == UsageEvents.Event.MOVE_TO_FOREGROUND
+                    || type == UsageEvents.Event.ACTIVITY_RESUMED) {
+                int count = openActivityCounts.getOrDefault(packageName, 0);
+                if (count == 0) {
+                    activeStarts.put(packageName, eventTime);
+                }
+                openActivityCounts.put(packageName, count + 1);
+            } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND
+                    || type == UsageEvents.Event.ACTIVITY_PAUSED) {
+                int count = openActivityCounts.getOrDefault(packageName, 0);
+                if (count > 0) {
+                    count--;
+                }
+                openActivityCounts.put(packageName, count);
+
+                if (count == 0) {
+                    Long start = activeStarts.remove(packageName);
+                    if (start != null && eventTime > start) {
+                        addUsageDelta(totals, packageName, eventTime - start, maxWindow);
+                    }
+                }
+            } else if (type == UsageEvents.Event.ACTIVITY_STOPPED) {
+                if (openActivityCounts.getOrDefault(packageName, 0) == 0) {
+                    Long start = activeStarts.remove(packageName);
+                    if (start != null && eventTime > start) {
+                        addUsageDelta(totals, packageName, eventTime - start, maxWindow);
+                    }
+                }
+            } else if (type == UsageEvents.Event.DEVICE_SHUTDOWN
+                    || type == UsageEvents.Event.DEVICE_STARTUP) {
+                for (Map.Entry<String, Long> entry : activeStarts.entrySet()) {
+                    if (eventTime > entry.getValue()) {
+                        addUsageDelta(
+                                totals,
+                                entry.getKey(),
+                                eventTime - entry.getValue(),
+                                maxWindow
+                        );
+                    }
+                }
+                activeStarts.clear();
+                openActivityCounts.clear();
+            }
+        }
+
+        for (Map.Entry<String, Long> entry : activeStarts.entrySet()) {
+            if (endTime > entry.getValue()) {
+                addUsageDelta(totals, entry.getKey(), endTime - entry.getValue(), maxWindow);
+            }
+        }
+
+        return totals;
+    }
+
+    private Set<String> getActivePackagesAtStart(
             UsageStatsManager usm,
-            String packageName,
+            Set<String> limitedPackages,
             long startTime
     ) {
+        HashMap<String, Integer> lastTypes = new HashMap<>();
         long lookbackStart = startTime - ACTIVE_AT_START_LOOKBACK_MS;
         UsageEvents previousEvents = usm.queryEvents(lookbackStart, startTime);
-        if (previousEvents == null) return false;
 
-        int lastType = -1;
+        if (previousEvents == null) return new HashSet<>();
+
         UsageEvents.Event event = new UsageEvents.Event();
         while (previousEvents.hasNextEvent()) {
             previousEvents.getNextEvent(event);
-            if (!packageName.equals(event.getPackageName())) continue;
+
+            String packageName = event.getPackageName();
+            if (packageName == null || !limitedPackages.contains(packageName)) continue;
 
             int type = event.getEventType();
-            if (type == UsageEvents.Event.MOVE_TO_FOREGROUND ||
-                    type == UsageEvents.Event.ACTIVITY_RESUMED ||
-                    type == UsageEvents.Event.MOVE_TO_BACKGROUND ||
-                    type == UsageEvents.Event.ACTIVITY_PAUSED ||
-                    type == UsageEvents.Event.ACTIVITY_STOPPED ||
-                    type == UsageEvents.Event.DEVICE_SHUTDOWN ||
-                    type == UsageEvents.Event.DEVICE_STARTUP) {
-                lastType = type;
+            if (type == UsageEvents.Event.MOVE_TO_FOREGROUND
+                    || type == UsageEvents.Event.ACTIVITY_RESUMED
+                    || type == UsageEvents.Event.MOVE_TO_BACKGROUND
+                    || type == UsageEvents.Event.ACTIVITY_PAUSED
+                    || type == UsageEvents.Event.ACTIVITY_STOPPED
+                    || type == UsageEvents.Event.DEVICE_SHUTDOWN
+                    || type == UsageEvents.Event.DEVICE_STARTUP) {
+                lastTypes.put(packageName, type);
             }
         }
 
-        return lastType == UsageEvents.Event.MOVE_TO_FOREGROUND ||
-                lastType == UsageEvents.Event.ACTIVITY_RESUMED;
+        HashSet<String> active = new HashSet<>();
+        for (Map.Entry<String, Integer> entry : lastTypes.entrySet()) {
+            int type = entry.getValue();
+            if (type == UsageEvents.Event.MOVE_TO_FOREGROUND
+                    || type == UsageEvents.Event.ACTIVITY_RESUMED) {
+                active.add(entry.getKey());
+            }
+        }
+
+        return active;
     }
 
-    private void resetLiveUsageTopUp() {
-
-        liveUsagePackage = "";
-        liveUsageStartMs = 0L;
-        liveStatsBaseMs = 0L;
-    }
-
-    // =========================================================
-    // OVERLAY
-    // =========================================================
-
-    private void showLimitOverlay(
+    private void addUsageDelta(
+            Map<String, Long> totals,
             String packageName,
-            String appName
+            long delta,
+            long maxWindow
     ) {
+        long safeDelta = Math.min(Math.max(delta, 0L), maxWindow);
+        if (safeDelta <= 0L) return;
 
+        long next = totals.getOrDefault(packageName, 0L) + safeDelta;
+        totals.put(packageName, Math.min(next, maxWindow));
+    }
+
+    private void showLimitOverlay(String packageName, String appName) {
         if (!Settings.canDrawOverlays(this)) {
-            Log.d(TAG, "overlay blocked: missing draw-over-apps permission");
             return;
         }
 
         if (overlayView != null) {
-            Log.d(TAG, "overlay already visible package=" + overlayPackage);
             return;
         }
 
         overlayPackage = packageName;
 
-        LinearLayout root =
-                new LinearLayout(this);
-
-        root.setOrientation(
-                LinearLayout.VERTICAL
-        );
-
-        root.setPadding(
-                dp(24),
-                dp(22),
-                dp(24),
-                dp(24)
-        );
-
-        root.setBackground(
-                makeSheetBackground()
-        );
-
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(24), dp(22), dp(24), dp(24));
+        root.setBackground(makeSheetBackground());
         root.setGravity(Gravity.START);
 
-        TextView brand =
-                new TextView(this);
-
+        TextView brand = new TextView(this);
         brand.setText("unlure");
-
-        brand.setTextColor(
-                Color.rgb(194, 201, 207)
-        );
-
+        brand.setTextColor(Color.rgb(194, 201, 207));
         brand.setTextSize(20);
-
         brand.setTypeface(
                 playwriteTypeface != null
                         ? playwriteTypeface
                         : Typeface.create(Typeface.SERIF, Typeface.ITALIC)
         );
-
         root.addView(brand);
 
-        TextView title =
-                new TextView(this);
-
+        TextView title = new TextView(this);
         title.setText("Take a quiet pause");
-
-        title.setTextColor(
-                Color.WHITE
-        );
-
+        title.setTextColor(Color.WHITE);
         title.setTextSize(25);
-
-        title.setTypeface(
-                Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-        );
-
+        title.setTypeface(Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD));
         title.setGravity(Gravity.START);
 
-        LinearLayout.LayoutParams titleParams =
-                new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                );
-
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
         titleParams.topMargin = dp(18);
-
         root.addView(title, titleParams);
 
-        TextView subtitle =
-                new TextView(this);
-
+        TextView subtitle = new TextView(this);
         subtitle.setText(appName);
-
-        subtitle.setTextColor(
-                Color.rgb(198, 231, 183)
-        );
-
+        subtitle.setTextColor(Color.rgb(198, 231, 183));
         subtitle.setTextSize(17);
-
-        subtitle.setTypeface(
-                Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-        );
-
+        subtitle.setTypeface(Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD));
         subtitle.setGravity(Gravity.CENTER);
-
-        subtitle.setPadding(
-                dp(14),
-                dp(7),
-                dp(14),
-                dp(7)
-        );
-
+        subtitle.setPadding(dp(14), dp(7), dp(14), dp(7));
         subtitle.setBackground(
                 makeStrokeDrawable(
                         Color.argb(120, 39, 70, 41),
@@ -629,55 +548,35 @@ public class FocusMonitorService extends Service {
                 )
         );
 
-        LinearLayout.LayoutParams subtitleParams =
-                new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                );
-
+        LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
         subtitleParams.topMargin = dp(16);
-
         root.addView(subtitle, subtitleParams);
 
-        TextView body =
-                new TextView(this);
-
+        TextView body = new TextView(this);
         String focusGoal = readFocusGoal();
-
         body.setText(
                 "You reached today's limit for "
                         + appName
                         + ". Step away for a moment and let your attention settle."
         );
-
-        body.setTextColor(
-                Color.rgb(210, 216, 224)
-        );
-
+        body.setTextColor(Color.rgb(210, 216, 224));
         body.setTextSize(16);
-
-        body.setTypeface(
-                Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
-        );
-
+        body.setTypeface(Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL));
         body.setLineSpacing(dp(2), 1f);
-
         body.setGravity(Gravity.START);
 
-        LinearLayout.LayoutParams bodyParams =
-                new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                );
-
+        LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
         bodyParams.topMargin = dp(18);
-
         root.addView(body, bodyParams);
 
         if (!focusGoal.isEmpty()) {
-            TextView goal =
-                    new TextView(this);
-
+            TextView goal = new TextView(this);
             String goalText = "Goal: " + focusGoal;
             SpannableString goalSpan = new SpannableString(goalText);
             goalSpan.setSpan(
@@ -687,111 +586,55 @@ public class FocusMonitorService extends Service {
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
             );
             goal.setText(goalSpan);
-
-            goal.setTextColor(
-                    Color.rgb(210, 216, 224)
-            );
-
+            goal.setTextColor(Color.rgb(210, 216, 224));
             goal.setTextSize(16);
-
-            goal.setTypeface(
-                    Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
-            );
-
+            goal.setTypeface(Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL));
             goal.setLineSpacing(dp(2), 1f);
-
             goal.setGravity(Gravity.START);
 
-            LinearLayout.LayoutParams goalParams =
-                    new LinearLayout.LayoutParams(
-                            LinearLayout.LayoutParams.MATCH_PARENT,
-                            LinearLayout.LayoutParams.WRAP_CONTENT
-                    );
-
+            LinearLayout.LayoutParams goalParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+            );
             goalParams.topMargin = dp(16);
-
             root.addView(goal, goalParams);
         }
 
-        TextView close =
-                new TextView(this);
-
+        TextView close = new TextView(this);
         close.setText("I'm done for now");
-
         close.setGravity(Gravity.CENTER);
-
-        close.setTextColor(
-                Color.rgb(7, 13, 9)
-        );
-
+        close.setTextColor(Color.rgb(7, 13, 9));
         close.setTextSize(16);
+        close.setTypeface(Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD));
+        close.setPadding(0, dp(14), 0, dp(14));
+        close.setBackground(makeAccentButtonBackground());
 
-        close.setTypeface(
-                Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
         );
-
-        close.setPadding(
-                0,
-                dp(14),
-                0,
-                dp(14)
-        );
-
-        close.setBackground(
-                makeAccentButtonBackground()
-        );
-
-        LinearLayout.LayoutParams closeParams =
-                new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                );
-
         closeParams.topMargin = dp(22);
-
         root.addView(close, closeParams);
 
         close.setOnClickListener(v -> {
-
             markProtectedToday(packageName);
             hideOverlay();
 
-            Intent home =
-                    new Intent(Intent.ACTION_MAIN);
-
+            Intent home = new Intent(Intent.ACTION_MAIN);
             home.addCategory(Intent.CATEGORY_HOME);
-
             home.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-
             startActivity(home);
         });
 
-        TextView bypass =
-                new TextView(this);
-
+        TextView bypass = new TextView(this);
         bypass.setText("Continue in 3");
         bypass.setEnabled(false);
         bypass.setAlpha(0.58f);
-
         bypass.setGravity(Gravity.CENTER);
-
-        bypass.setTextColor(
-                Color.rgb(225, 231, 238)
-        );
-
-        bypass.setTypeface(
-                Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-        );
-
+        bypass.setTextColor(Color.rgb(225, 231, 238));
+        bypass.setTypeface(Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD));
         bypass.setTextSize(15);
-
-        bypass.setPadding(
-                0,
-                dp(13),
-                0,
-                dp(13)
-        );
-
+        bypass.setPadding(0, dp(13), 0, dp(13));
         bypass.setBackground(
                 makeStrokeDrawable(
                         Color.TRANSPARENT,
@@ -800,14 +643,11 @@ public class FocusMonitorService extends Service {
                 )
         );
 
-        LinearLayout.LayoutParams bypassParams =
-                new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                );
-
+        LinearLayout.LayoutParams bypassParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
         bypassParams.topMargin = dp(12);
-
         root.addView(bypass, bypassParams);
 
         bypass.setOnClickListener(v -> {
@@ -817,73 +657,42 @@ public class FocusMonitorService extends Service {
 
         startContinueCountdown(bypass);
 
-        FrameLayout container =
-                new FrameLayout(this);
-
+        FrameLayout container = new FrameLayout(this);
         container.setClickable(true);
-
         container.setFocusable(true);
-
         container.setFocusableInTouchMode(true);
+        container.setBackgroundColor(Color.argb(232, 0, 8, 7));
 
-        container.setBackgroundColor(
-                Color.argb(232, 0, 8, 7)
+        FrameLayout.LayoutParams sheetParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM
         );
-
-        FrameLayout.LayoutParams sheetParams =
-                new FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                        FrameLayout.LayoutParams.WRAP_CONTENT,
-                        Gravity.BOTTOM
-                );
-
         sheetParams.leftMargin = dp(14);
         sheetParams.rightMargin = dp(14);
         sheetParams.bottomMargin = dp(18);
-
         container.addView(root, sheetParams);
 
-        int flags =
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-                        | WindowManager.LayoutParams.FLAG_DIM_BEHIND;
+        int flags = WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                | WindowManager.LayoutParams.FLAG_DIM_BEHIND;
 
-        WindowManager.LayoutParams wmParams =
-                new WindowManager.LayoutParams(
-                        WindowManager.LayoutParams.MATCH_PARENT,
-                        WindowManager.LayoutParams.MATCH_PARENT,
-                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                                : WindowManager.LayoutParams.TYPE_PHONE,
-                        flags,
-                        PixelFormat.TRANSLUCENT
-                );
-
+        WindowManager.LayoutParams wmParams = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                        ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                        : WindowManager.LayoutParams.TYPE_PHONE,
+                flags,
+                PixelFormat.TRANSLUCENT
+        );
         wmParams.gravity = Gravity.TOP;
-
         wmParams.dimAmount = 0.6f;
-
-        try {
-
-            if (overlayView != null) {
-
-                windowManager.removeViewImmediate(
-                        overlayView
-                );
-
-                overlayView = null;
-            }
-
-        } catch (Exception ignored) {}
 
         overlayView = container;
 
         try {
-            windowManager.addView(
-                    container,
-                    wmParams
-            );
-            Log.d(TAG, "overlay shown package=" + packageName);
+            windowManager.addView(container, wmParams);
         } catch (Exception e) {
             overlayView = null;
             overlayPackage = "";
@@ -892,20 +701,10 @@ public class FocusMonitorService extends Service {
         }
 
         root.post(() -> {
-
-            root.performHapticFeedback(
-                    HapticFeedbackConstants.LONG_PRESS
-            );
-
+            root.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
             root.setTranslationY(root.getHeight());
-
             ObjectAnimator
-                    .ofFloat(
-                            root,
-                            "translationY",
-                            root.getHeight(),
-                            0f
-                    )
+                    .ofFloat(root, "translationY", root.getHeight(), 0f)
                     .setDuration(220)
                     .start();
         });
@@ -913,11 +712,6 @@ public class FocusMonitorService extends Service {
 
     private String readFocusGoal() {
         try {
-            SharedPreferences prefs =
-                    getSharedPreferences(
-                            FocusModePrefs.PREFS_NAME,
-                            Context.MODE_PRIVATE
-                    );
             String goal = prefs.getString(FocusModePrefs.KEY_FOCUS_GOAL, "");
             if (goal == null) return "";
             return goal.trim();
@@ -927,115 +721,50 @@ public class FocusMonitorService extends Service {
     }
 
     private void hideOverlay() {
-
         if (overlayView == null) return;
 
         try {
-
-            windowManager.removeViewImmediate(
-                    overlayView
-            );
-
+            windowManager.removeViewImmediate(overlayView);
         } catch (Exception ignored) {}
 
         overlayView = null;
-
         overlayPackage = "";
     }
 
     private void startContinueCountdown(TextView bypass) {
-
         final int[] remaining = {3};
 
-        Runnable tick =
-                new Runnable() {
-                    @Override
-                    public void run() {
+        Runnable tick = new Runnable() {
+            @Override
+            public void run() {
+                if (overlayView == null) return;
 
-                        if (overlayView == null) return;
+                if (remaining[0] <= 0) {
+                    bypass.setEnabled(true);
+                    bypass.setAlpha(1f);
+                    bypass.setText("Continue anyway");
+                    return;
+                }
 
-                        if (remaining[0] <= 0) {
-                            bypass.setEnabled(true);
-                            bypass.setAlpha(1f);
-                            bypass.setText("Continue anyway");
-                            return;
-                        }
-
-                        bypass.setText(
-                                "Continue in "
-                                        + remaining[0]
-                        );
-
-                        remaining[0] -= 1;
-
-                        handler.postDelayed(this, 1000L);
-                    }
-                };
+                bypass.setText("Continue in " + remaining[0]);
+                remaining[0] -= 1;
+                handler.postDelayed(this, 1000L);
+            }
+        };
 
         handler.post(tick);
     }
 
-    // =========================================================
-    // HELPERS
-    // =========================================================
-
-    private Map<String, Integer> readLimits() {
-
-        HashMap<String, Integer> limits =
-                new HashMap<>();
-
-        String raw =
-                prefs.getString(
-                        FocusModePrefs.KEY_LIMITS_JSON,
-                        "{}"
-                );
-        Log.d(TAG, "readLimits raw=" + raw);
-
-        try {
-
-            JSONObject json =
-                    new JSONObject(raw);
-
-            Iterator<String> keys =
-                    json.keys();
-
-            while (keys.hasNext()) {
-
-                String key =
-                        keys.next();
-
-                int minutes =
-                        json.optInt(key, 0);
-
-                if (minutes > 0) {
-                    limits.put(key, minutes);
-                }
-            }
-
-        } catch (Exception ignored) {}
-
-        return limits;
-    }
-
     private String getAppName(String pkg) {
-
         try {
-
-            PackageManager pm =
-                    getPackageManager();
-
-            return pm.getApplicationLabel(
-                    pm.getApplicationInfo(pkg, 0)
-            ).toString();
-
+            PackageManager pm = getPackageManager();
+            return pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString();
         } catch (Exception ignored) {
-
             return "this app";
         }
     }
 
     private Typeface loadFont(String assetPath) {
-
         try {
             return Typeface.createFromAsset(getAssets(), assetPath);
         } catch (Exception e) {
@@ -1045,7 +774,6 @@ public class FocusMonitorService extends Service {
     }
 
     private boolean isSystemOrSelfPackage(String pkg) {
-
         if (pkg == null) return true;
 
         return pkg.equals(getPackageName())
@@ -1054,7 +782,6 @@ public class FocusMonitorService extends Service {
     }
 
     private boolean isBypassedToday(String packageName) {
-
         return prefs.getBoolean(
                 FocusModePrefs.KEY_BYPASS_PREFIX
                         + todayKey()
@@ -1064,19 +791,7 @@ public class FocusMonitorService extends Service {
         );
     }
 
-    private boolean isProtectedToday(String packageName) {
-
-        return prefs.getBoolean(
-                FocusModePrefs.KEY_PROTECTED_PREFIX
-                        + todayKey()
-                        + "_"
-                        + packageName,
-                false
-        );
-    }
-
     private void markBypassedToday(String packageName) {
-
         prefs.edit()
                 .putBoolean(
                         FocusModePrefs.KEY_BYPASS_PREFIX
@@ -1086,12 +801,9 @@ public class FocusMonitorService extends Service {
                         true
                 )
                 .apply();
-
-        Log.d(TAG, "marked bypassed package=" + packageName);
     }
 
     private void markProtectedToday(String packageName) {
-
         prefs.edit()
                 .putBoolean(
                         FocusModePrefs.KEY_PROTECTED_PREFIX
@@ -1101,12 +813,9 @@ public class FocusMonitorService extends Service {
                         true
                 )
                 .apply();
-
-        Log.d(TAG, "marked protected package=" + packageName);
     }
 
     private String todayKey() {
-
         return new SimpleDateFormat(
                 "yyyy-MM-dd",
                 Locale.US
@@ -1114,12 +823,9 @@ public class FocusMonitorService extends Service {
     }
 
     private Notification buildNotification() {
-
         Intent launch =
                 getPackageManager()
-                        .getLaunchIntentForPackage(
-                                getPackageName()
-                        );
+                        .getLaunchIntentForPackage(getPackageName());
 
         PendingIntent pi =
                 PendingIntent.getActivity(
@@ -1130,28 +836,17 @@ public class FocusMonitorService extends Service {
                                 | PendingIntent.FLAG_IMMUTABLE
                 );
 
-        return new Notification.Builder(
-                this,
-                CHANNEL_ID
-        )
-                .setSmallIcon(
-                        getApplicationInfo().icon
-                )
-                .setContentTitle(
-                        "Unlure is active"
-                )
-                .setContentText(
-                        "Watching your focus limits"
-                )
+        return new Notification.Builder(this, CHANNEL_ID)
+                .setSmallIcon(getApplicationInfo().icon)
+                .setContentTitle("Unlure is active")
+                .setContentText("Watching your focus limits")
                 .setOngoing(true)
                 .setContentIntent(pi)
                 .build();
     }
 
     private void createNotificationChannel() {
-
-        if (Build.VERSION.SDK_INT <
-                Build.VERSION_CODES.O) return;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
 
         NotificationChannel channel =
                 new NotificationChannel(
@@ -1161,16 +856,12 @@ public class FocusMonitorService extends Service {
                 );
 
         NotificationManager nm =
-                (NotificationManager)
-                        getSystemService(
-                                NOTIFICATION_SERVICE
-                        );
+                (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
 
         nm.createNotificationChannel(channel);
     }
 
     private GradientDrawable makeSheetBackground() {
-
         GradientDrawable d =
                 new GradientDrawable(
                         GradientDrawable.Orientation.TOP_BOTTOM,
@@ -1189,16 +880,11 @@ public class FocusMonitorService extends Service {
                 }
         );
 
-        d.setStroke(
-                dp(1),
-                Color.argb(105, 103, 124, 108)
-        );
-
+        d.setStroke(dp(1), Color.argb(105, 103, 124, 108));
         return d;
     }
 
     private GradientDrawable makeAccentButtonBackground() {
-
         GradientDrawable d =
                 new GradientDrawable(
                         GradientDrawable.Orientation.LEFT_RIGHT,
@@ -1209,22 +895,13 @@ public class FocusMonitorService extends Service {
                 );
 
         d.setCornerRadius(dp(20));
-
         return d;
     }
 
-    private GradientDrawable makeRoundedDrawable(
-            int color,
-            int radius
-    ) {
-
-        GradientDrawable d =
-                new GradientDrawable();
-
+    private GradientDrawable makeRoundedDrawable(int color, int radius) {
+        GradientDrawable d = new GradientDrawable();
         d.setColor(color);
-
         d.setCornerRadius(radius);
-
         return d;
     }
 
@@ -1233,17 +910,12 @@ public class FocusMonitorService extends Service {
             int strokeColor,
             int radius
     ) {
-
-        GradientDrawable d =
-                makeRoundedDrawable(color, radius);
-
+        GradientDrawable d = makeRoundedDrawable(color, radius);
         d.setStroke(dp(1), strokeColor);
-
         return d;
     }
 
     private int dp(int v) {
-
         return Math.round(
                 v * getResources()
                         .getDisplayMetrics()

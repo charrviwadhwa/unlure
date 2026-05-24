@@ -224,9 +224,9 @@ export const HomeScreen = ({ active = true }: { active?: boolean }) => {
     subtext: isDark ? '#A5ACB8' : COLORS.textSecondary,
     faint: isDark ? '#8A93A6' : '#B8BBC3',
     quietDate: isDark ? '#8A93A6' : '#989BA5',
-    pill: isDark ? 'rgba(255,255,255,0.06)' : '#F4F1EA',
-    dayPill: isDark ? 'rgba(255,255,255,0.06)' : '#F4F1EA',
-    border: isDark ? 'rgba(255,255,255,0.08)' : '#EEE8DC'
+    pill: isDark ? 'rgba(255,255,255,0.06)' : '#F2F2F7',
+    dayPill: isDark ? 'rgba(255,255,255,0.06)' : '#F2F2F7',
+    border: isDark ? 'rgba(255,255,255,0.08)' : '#ECECF2'
   };
   const screenGradientColors = isDark
     ? ['#121418', '#14151A', '#161A22', '#121418']

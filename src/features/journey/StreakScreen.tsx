@@ -88,6 +88,7 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
   const [focusGoal, setFocusGoal] = useState('');
   const [draftFocusGoal, setDraftFocusGoal] = useState('');
   const [editingFocusGoal, setEditingFocusGoal] = useState(false);
+  const focusGoalSaveSeq = useRef(0);
 
   const formatDateKey = (date: Date) => {
     const y = date.getFullYear();
@@ -292,14 +293,25 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
     )));
   }, [calculateStreakFromStats, calculateStreakMilestones, resolveMood]);
 
-  const saveFocusGoal = useCallback(async () => {
-    const nextGoal = draftFocusGoal.trim();
+  const persistFocusGoal = useCallback(async (goal: string, closeEditor = false) => {
+    const nextGoal = goal.trim();
+    const saveSeq = focusGoalSaveSeq.current + 1;
+    focusGoalSaveSeq.current = saveSeq;
+
     await UserStore.saveFocusGoal(nextGoal);
     await ScreenTimeService.syncFocusModeConfig(activeLimits, appNameMap, nextGoal);
+
+    if (focusGoalSaveSeq.current !== saveSeq) return;
     setFocusGoal(nextGoal);
-    setDraftFocusGoal(nextGoal);
-    setEditingFocusGoal(false);
-  }, [activeLimits, appNameMap, draftFocusGoal]);
+    if (closeEditor) {
+      setDraftFocusGoal(nextGoal);
+      setEditingFocusGoal(false);
+    }
+  }, [activeLimits, appNameMap]);
+
+  const saveFocusGoal = useCallback(async () => {
+    await persistFocusGoal(draftFocusGoal, true);
+  }, [draftFocusGoal, persistFocusGoal]);
 
   const formatTime = (mins: number) => {
     const h = Math.floor(mins / 60);
@@ -337,6 +349,19 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
   }, [active, load]);
 
   useMidnightRefresh(load);
+
+  useEffect(() => {
+    if (!editingFocusGoal) return;
+
+    const nextGoal = draftFocusGoal.trim();
+    if (nextGoal === focusGoal) return;
+
+    const timeout = setTimeout(() => {
+      persistFocusGoal(draftFocusGoal, false);
+    }, 900);
+
+    return () => clearTimeout(timeout);
+  }, [draftFocusGoal, editingFocusGoal, focusGoal, persistFocusGoal]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -469,18 +494,21 @@ const StreakScreen: React.FC<StreakScreenProps> = ({ active = true, onEditApps, 
                 </Text>
               )}
             </View>
-            {!editingFocusGoal ? (
-              <TouchableOpacity
-                style={[styles.focusGoalAction, { borderColor: theme.border }]}
-                onPress={() => {
-                  setDraftFocusGoal(focusGoal);
-                  setEditingFocusGoal(true);
-                }}
-                activeOpacity={0.76}
-              >
-                <Text style={[styles.focusGoalActionText, { color: theme.text }]}>{focusGoal ? 'Edit' : 'Add'}</Text>
-              </TouchableOpacity>
-            ) : null}
+            <TouchableOpacity
+              style={[styles.focusGoalAction, { borderColor: theme.border }]}
+              onPress={() => {
+                if (editingFocusGoal) {
+                  saveFocusGoal();
+                  return;
+                }
+
+                setDraftFocusGoal(focusGoal);
+                setEditingFocusGoal(true);
+              }}
+              activeOpacity={0.76}
+            >
+              <Text style={[styles.focusGoalActionText, { color: theme.text }]}>{editingFocusGoal ? 'Done' : focusGoal ? 'Edit' : 'Add'}</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
