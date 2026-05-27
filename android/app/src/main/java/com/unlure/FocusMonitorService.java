@@ -41,13 +41,9 @@ import org.json.JSONObject;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class FocusMonitorService extends Service {
 
@@ -57,28 +53,26 @@ public class FocusMonitorService extends Service {
 
     private static final long POLL_MS = 3000L;
     private static final long SCREEN_OFF_POLL_MS = 30000L;
-    private static final long CACHE_REFRESH_MS = 30000L;
     private static final long LIMITS_CACHE_TTL_MS = 5000L;
+    private static final long USAGE_REFRESH_MS = 15000L;
     private static final long ACTIVE_AT_START_LOOKBACK_MS = 2L * 60L * 60L * 1000L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private final Object cacheLock = new Object();
 
     private WindowManager windowManager;
     private View overlayView;
     private String overlayPackage = "";
     private String lastForegroundPackage = "";
+    private String sessionBypassPackage = "";
     private Runnable pollRunnable;
     private SharedPreferences prefs;
     private Typeface playwriteTypeface;
 
-    private final Map<String, Long> usageCache = new HashMap<>();
     private Map<String, Integer> cachedLimits = new HashMap<>();
     private long limitsLastLoaded = 0L;
-    private volatile long lastCacheRefreshTime = 0L;
-    private volatile long lastCacheCompletedTime = 0L;
-    private volatile boolean cacheRefreshRunning = false;
+    private String usageCachePackage = "";
+    private long usageCacheMs = 0L;
+    private long usageCacheAt = 0L;
 
     private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
         @Override
@@ -88,10 +82,9 @@ public class FocusMonitorService extends Service {
             String action = intent.getAction();
             if (Intent.ACTION_SCREEN_OFF.equals(action)) {
                 handler.removeCallbacks(pollRunnable);
-                clearUsageCache();
-                lastCacheRefreshTime = 0L;
-                lastCacheCompletedTime = 0L;
+                lastForegroundPackage = "";
                 limitsLastLoaded = 0L;
+                clearUsageCache();
                 hideOverlay();
             } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
                 handler.removeCallbacks(pollRunnable);
@@ -128,7 +121,6 @@ public class FocusMonitorService extends Service {
     public void onDestroy() {
         Log.d(TAG, "service onDestroy");
         handler.removeCallbacksAndMessages(null);
-        executor.shutdownNow();
 
         try {
             unregisterReceiver(screenReceiver);
@@ -198,17 +190,20 @@ public class FocusMonitorService extends Service {
             return;
         }
 
-        maybeRefreshCacheAsync(new HashSet<>(limits.keySet()));
-
         String foreground = getForegroundApp();
         if (foreground == null
                 || foreground.isEmpty()
                 || isSystemOrSelfPackage(foreground)) {
+            lastForegroundPackage = "";
+            sessionBypassPackage = "";
             hideOverlay();
             return;
         }
 
         lastForegroundPackage = foreground;
+        if (!foreground.equals(sessionBypassPackage)) {
+            sessionBypassPackage = "";
+        }
 
         Integer limitMinutes = limits.get(foreground);
         if (limitMinutes == null || limitMinutes <= 0) {
@@ -216,12 +211,12 @@ public class FocusMonitorService extends Service {
             return;
         }
 
-        if (isBypassedToday(foreground)) {
+        if (foreground.equals(sessionBypassPackage)) {
             hideOverlay();
             return;
         }
 
-        long used = getCachedUsage(foreground);
+        long used = getCachedTodayUsageMs(foreground);
         long limit = limitMinutes * 60L * 1000L;
 
         if (used >= limit) {
@@ -252,15 +247,20 @@ public class FocusMonitorService extends Service {
             while (events.hasNextEvent()) {
                 events.getNextEvent(event);
                 int type = event.getEventType();
+                long eventTime = event.getTimeStamp();
+                String pkg = event.getPackageName();
+                if (pkg == null || eventTime <= latestTime) continue;
 
                 if (type == UsageEvents.Event.MOVE_TO_FOREGROUND
                         || type == UsageEvents.Event.ACTIVITY_RESUMED) {
-                    String pkg = event.getPackageName();
-                    if (pkg == null) continue;
-
-                    if (event.getTimeStamp() > latestTime) {
-                        latest = pkg;
-                        latestTime = event.getTimeStamp();
+                    latest = pkg;
+                    latestTime = eventTime;
+                } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND
+                        || type == UsageEvents.Event.ACTIVITY_PAUSED
+                        || type == UsageEvents.Event.ACTIVITY_STOPPED) {
+                    if (pkg.equals(latest) || pkg.equals(lastForegroundPackage)) {
+                        latest = "";
+                        latestTime = eventTime;
                     }
                 }
             }
@@ -302,193 +302,132 @@ public class FocusMonitorService extends Service {
         return limits;
     }
 
-    private long getCachedUsage(String packageName) {
-        long cached;
-        synchronized (cacheLock) {
-            cached = usageCache.getOrDefault(packageName, 0L);
+    private long getCachedTodayUsageMs(String packageName) {
+        long now = System.currentTimeMillis();
+        if (packageName.equals(usageCachePackage)
+                && usageCacheAt > 0L
+                && now - usageCacheAt < USAGE_REFRESH_MS) {
+            return usageCacheMs + Math.max(now - usageCacheAt, 0L);
         }
 
-        if (packageName.equals(lastForegroundPackage) && lastCacheCompletedTime > 0L) {
-            cached += Math.max(System.currentTimeMillis() - lastCacheCompletedTime, 0L);
-        }
-
-        return cached;
+        long fresh = getTodayUsageMs(packageName);
+        usageCachePackage = packageName;
+        usageCacheMs = fresh;
+        usageCacheAt = now;
+        return fresh;
     }
 
     private void clearUsageCache() {
-        synchronized (cacheLock) {
-            usageCache.clear();
+        usageCachePackage = "";
+        usageCacheMs = 0L;
+        usageCacheAt = 0L;
+    }
+
+    private long getTodayUsageMs(String packageName) {
+        try {
+            UsageStatsManager usm =
+                    (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
+
+            if (usm == null) return 0L;
+
+            Calendar calendar = Calendar.getInstance();
+            long endTime = calendar.getTimeInMillis();
+            calendar.set(Calendar.HOUR_OF_DAY, 0);
+            calendar.set(Calendar.MINUTE, 0);
+            calendar.set(Calendar.SECOND, 0);
+            calendar.set(Calendar.MILLISECOND, 0);
+            long startTime = calendar.getTimeInMillis();
+            long maxWindow = Math.max(endTime - startTime, 0L);
+
+            long total = 0L;
+            Long activeStart = isPackageActiveAtStart(usm, packageName, startTime)
+                    ? startTime
+                    : null;
+
+            UsageEvents events = usm.queryEvents(startTime, endTime);
+            if (events != null) {
+                UsageEvents.Event event = new UsageEvents.Event();
+
+                while (events.hasNextEvent()) {
+                    events.getNextEvent(event);
+                    if (!packageName.equals(event.getPackageName())) continue;
+
+                    int type = event.getEventType();
+                    long eventTime = Math.min(Math.max(event.getTimeStamp(), startTime), endTime);
+
+                    if (isUsageStartEvent(type)) {
+                        if (activeStart == null) {
+                            activeStart = eventTime;
+                        }
+                    } else if (isUsageEndEvent(type)) {
+                        if (activeStart != null
+                                && eventTime > activeStart) {
+                            total = addUsageDelta(total, eventTime - activeStart, maxWindow);
+                        }
+                        activeStart = null;
+                    } else if (isUsageResetEvent(type)) {
+                        if (activeStart != null && eventTime > activeStart) {
+                            total = addUsageDelta(total, eventTime - activeStart, maxWindow);
+                        }
+                        activeStart = null;
+                    }
+                }
+            }
+
+            if (activeStart != null && endTime > activeStart) {
+                total = addUsageDelta(total, endTime - activeStart, maxWindow);
+            }
+
+            return total;
+        } catch (Exception e) {
+            Log.e(TAG, "usage calculation failed package=" + packageName, e);
+            return 0L;
         }
     }
 
-    private void maybeRefreshCacheAsync(Set<String> limitedPackages) {
-        long now = System.currentTimeMillis();
-        if (now - lastCacheRefreshTime < CACHE_REFRESH_MS) return;
-        if (cacheRefreshRunning) return;
-
-        cacheRefreshRunning = true;
-        lastCacheRefreshTime = now;
-
-        executor.execute(() -> {
-            try {
-                Map<String, Long> fresh = doFullEventScan(limitedPackages);
-                synchronized (cacheLock) {
-                    usageCache.clear();
-                    usageCache.putAll(fresh);
-                }
-                lastCacheCompletedTime = System.currentTimeMillis();
-            } catch (Exception e) {
-                Log.e(TAG, "cache refresh failed", e);
-            } finally {
-                cacheRefreshRunning = false;
-            }
-        });
+    private boolean isUsageStartEvent(int type) {
+        return type == UsageEvents.Event.MOVE_TO_FOREGROUND
+                || type == UsageEvents.Event.ACTIVITY_RESUMED;
     }
 
-    private Map<String, Long> doFullEventScan(Set<String> limitedPackages) {
-        HashMap<String, Long> totals = new HashMap<>();
-        HashMap<String, Long> activeStarts = new HashMap<>();
-        HashMap<String, Integer> openActivityCounts = new HashMap<>();
-
-        UsageStatsManager usm =
-                (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
-
-        if (usm == null || limitedPackages.isEmpty()) return totals;
-
-        Calendar calendar = Calendar.getInstance();
-        long endTime = calendar.getTimeInMillis();
-        calendar.set(Calendar.HOUR_OF_DAY, 0);
-        calendar.set(Calendar.MINUTE, 0);
-        calendar.set(Calendar.SECOND, 0);
-        calendar.set(Calendar.MILLISECOND, 0);
-        long startTime = calendar.getTimeInMillis();
-        long maxWindow = Math.max(endTime - startTime, 0L);
-
-        for (String packageName : getActivePackagesAtStart(usm, limitedPackages, startTime)) {
-            activeStarts.put(packageName, startTime);
-            openActivityCounts.put(packageName, 1);
-        }
-
-        UsageEvents events = usm.queryEvents(startTime, endTime);
-        if (events == null) return totals;
-
-        UsageEvents.Event event = new UsageEvents.Event();
-        while (events.hasNextEvent()) {
-            events.getNextEvent(event);
-
-            String packageName = event.getPackageName();
-            if (packageName == null || !limitedPackages.contains(packageName)) continue;
-
-            int type = event.getEventType();
-            long eventTime = Math.min(Math.max(event.getTimeStamp(), startTime), endTime);
-
-            if (type == UsageEvents.Event.MOVE_TO_FOREGROUND
-                    || type == UsageEvents.Event.ACTIVITY_RESUMED) {
-                int count = openActivityCounts.getOrDefault(packageName, 0);
-                if (count == 0) {
-                    activeStarts.put(packageName, eventTime);
-                }
-                openActivityCounts.put(packageName, count + 1);
-            } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND
-                    || type == UsageEvents.Event.ACTIVITY_PAUSED) {
-                int count = openActivityCounts.getOrDefault(packageName, 0);
-                if (count > 0) {
-                    count--;
-                }
-                openActivityCounts.put(packageName, count);
-
-                if (count == 0) {
-                    Long start = activeStarts.remove(packageName);
-                    if (start != null && eventTime > start) {
-                        addUsageDelta(totals, packageName, eventTime - start, maxWindow);
-                    }
-                }
-            } else if (type == UsageEvents.Event.ACTIVITY_STOPPED) {
-                if (openActivityCounts.getOrDefault(packageName, 0) == 0) {
-                    Long start = activeStarts.remove(packageName);
-                    if (start != null && eventTime > start) {
-                        addUsageDelta(totals, packageName, eventTime - start, maxWindow);
-                    }
-                }
-            } else if (type == UsageEvents.Event.DEVICE_SHUTDOWN
-                    || type == UsageEvents.Event.DEVICE_STARTUP) {
-                for (Map.Entry<String, Long> entry : activeStarts.entrySet()) {
-                    if (eventTime > entry.getValue()) {
-                        addUsageDelta(
-                                totals,
-                                entry.getKey(),
-                                eventTime - entry.getValue(),
-                                maxWindow
-                        );
-                    }
-                }
-                activeStarts.clear();
-                openActivityCounts.clear();
-            }
-        }
-
-        for (Map.Entry<String, Long> entry : activeStarts.entrySet()) {
-            if (endTime > entry.getValue()) {
-                addUsageDelta(totals, entry.getKey(), endTime - entry.getValue(), maxWindow);
-            }
-        }
-
-        return totals;
+    private boolean isUsageEndEvent(int type) {
+        return type == UsageEvents.Event.MOVE_TO_BACKGROUND
+                || type == UsageEvents.Event.ACTIVITY_PAUSED
+                || type == UsageEvents.Event.ACTIVITY_STOPPED;
     }
 
-    private Set<String> getActivePackagesAtStart(
+    private boolean isUsageResetEvent(int type) {
+        return type == UsageEvents.Event.DEVICE_SHUTDOWN
+                || type == UsageEvents.Event.DEVICE_STARTUP;
+    }
+
+    private long addUsageDelta(long currentTotal, long delta, long maxWindow) {
+        long safeDelta = Math.min(Math.max(delta, 0L), maxWindow);
+        return Math.min(currentTotal + safeDelta, maxWindow);
+    }
+
+    private boolean isPackageActiveAtStart(
             UsageStatsManager usm,
-            Set<String> limitedPackages,
+            String packageName,
             long startTime
     ) {
-        HashMap<String, Integer> lastTypes = new HashMap<>();
         long lookbackStart = startTime - ACTIVE_AT_START_LOOKBACK_MS;
         UsageEvents previousEvents = usm.queryEvents(lookbackStart, startTime);
+        if (previousEvents == null) return false;
 
-        if (previousEvents == null) return new HashSet<>();
-
+        int lastType = -1;
         UsageEvents.Event event = new UsageEvents.Event();
         while (previousEvents.hasNextEvent()) {
             previousEvents.getNextEvent(event);
-
-            String packageName = event.getPackageName();
-            if (packageName == null || !limitedPackages.contains(packageName)) continue;
+            if (!packageName.equals(event.getPackageName())) continue;
 
             int type = event.getEventType();
-            if (type == UsageEvents.Event.MOVE_TO_FOREGROUND
-                    || type == UsageEvents.Event.ACTIVITY_RESUMED
-                    || type == UsageEvents.Event.MOVE_TO_BACKGROUND
-                    || type == UsageEvents.Event.ACTIVITY_PAUSED
-                    || type == UsageEvents.Event.ACTIVITY_STOPPED
-                    || type == UsageEvents.Event.DEVICE_SHUTDOWN
-                    || type == UsageEvents.Event.DEVICE_STARTUP) {
-                lastTypes.put(packageName, type);
+            if (isUsageStartEvent(type) || isUsageEndEvent(type) || isUsageResetEvent(type)) {
+                lastType = type;
             }
         }
 
-        HashSet<String> active = new HashSet<>();
-        for (Map.Entry<String, Integer> entry : lastTypes.entrySet()) {
-            int type = entry.getValue();
-            if (type == UsageEvents.Event.MOVE_TO_FOREGROUND
-                    || type == UsageEvents.Event.ACTIVITY_RESUMED) {
-                active.add(entry.getKey());
-            }
-        }
-
-        return active;
-    }
-
-    private void addUsageDelta(
-            Map<String, Long> totals,
-            String packageName,
-            long delta,
-            long maxWindow
-    ) {
-        long safeDelta = Math.min(Math.max(delta, 0L), maxWindow);
-        if (safeDelta <= 0L) return;
-
-        long next = totals.getOrDefault(packageName, 0L) + safeDelta;
-        totals.put(packageName, Math.min(next, maxWindow));
+        return isUsageStartEvent(lastType);
     }
 
     private void showLimitOverlay(String packageName, String appName) {
@@ -652,6 +591,7 @@ public class FocusMonitorService extends Service {
 
         bypass.setOnClickListener(v -> {
             markBypassedToday(packageName);
+            sessionBypassPackage = packageName;
             hideOverlay();
         });
 
@@ -779,16 +719,6 @@ public class FocusMonitorService extends Service {
         return pkg.equals(getPackageName())
                 || pkg.equals("android")
                 || pkg.equals("com.android.systemui");
-    }
-
-    private boolean isBypassedToday(String packageName) {
-        return prefs.getBoolean(
-                FocusModePrefs.KEY_BYPASS_PREFIX
-                        + todayKey()
-                        + "_"
-                        + packageName,
-                false
-        );
     }
 
     private void markBypassedToday(String packageName) {

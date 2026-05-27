@@ -271,7 +271,7 @@ public void getDailyStats(Promise promise) {
             int type = event.getEventType();
             long eventTime = Math.min(Math.max(event.getTimeStamp(), startTime), endTime);
 
-            if (type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+            if (isUsageStartEvent(type)) {
                 boolean alreadyForeground = foregroundForOpenCounts.getOrDefault(pkg, false);
                 long lastOpenTime = lastOpenTimes.getOrDefault(pkg, startTime - OPEN_COUNT_DEBOUNCE_MS);
                 if (!alreadyForeground && eventTime - lastOpenTime >= OPEN_COUNT_DEBOUNCE_MS) {
@@ -283,7 +283,7 @@ public void getDailyStats(Promise promise) {
                 if (!activeStarts.containsKey(pkg)) {
                     activeStarts.put(pkg, eventTime);
                 }
-            } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND) {
+            } else if (isUsageEndEvent(type)) {
                 foregroundForOpenCounts.put(pkg, false);
                 Long start = activeStarts.remove(pkg);
                 if (start != null && eventTime > start) {
@@ -293,7 +293,7 @@ public void getDailyStats(Promise promise) {
                         totals.put(pkg, Math.min(nextTotal, maxWindow));
                     }
                 }
-            } else if (type == UsageEvents.Event.DEVICE_SHUTDOWN || type == UsageEvents.Event.DEVICE_STARTUP) {
+            } else if (isUsageResetEvent(type)) {
                 for (Map.Entry<String, Long> entry : activeStarts.entrySet()) {
                     String activePkg = entry.getKey();
                     long start = entry.getValue();
@@ -323,6 +323,22 @@ public void getDailyStats(Promise promise) {
         return new UsageSnapshot(totals, openCounts);
     }
 
+    private boolean isUsageStartEvent(int type) {
+        return type == UsageEvents.Event.MOVE_TO_FOREGROUND
+            || type == UsageEvents.Event.ACTIVITY_RESUMED;
+    }
+
+    private boolean isUsageEndEvent(int type) {
+        return type == UsageEvents.Event.MOVE_TO_BACKGROUND
+            || type == UsageEvents.Event.ACTIVITY_PAUSED
+            || type == UsageEvents.Event.ACTIVITY_STOPPED;
+    }
+
+    private boolean isUsageResetEvent(int type) {
+        return type == UsageEvents.Event.DEVICE_SHUTDOWN
+            || type == UsageEvents.Event.DEVICE_STARTUP;
+    }
+
     private static class UsageSnapshot {
         final HashMap<String, Long> totals;
         final HashMap<String, Integer> openCounts;
@@ -347,12 +363,7 @@ public void getDailyStats(Promise promise) {
             if (pkg == null || !countablePackages.contains(pkg)) continue;
 
             int type = event.getEventType();
-            if (
-                type == UsageEvents.Event.MOVE_TO_FOREGROUND ||
-                type == UsageEvents.Event.MOVE_TO_BACKGROUND ||
-                type == UsageEvents.Event.DEVICE_SHUTDOWN ||
-                type == UsageEvents.Event.DEVICE_STARTUP
-            ) {
+            if (isUsageStartEvent(type) || isUsageEndEvent(type) || isUsageResetEvent(type)) {
                 lastEvents.put(pkg, type);
             }
         }
@@ -360,7 +371,7 @@ public void getDailyStats(Promise promise) {
         HashMap<String, Boolean> active = new HashMap<>();
         for (Map.Entry<String, Integer> entry : lastEvents.entrySet()) {
             int type = entry.getValue();
-            if (type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+            if (isUsageStartEvent(type)) {
                 active.put(entry.getKey(), true);
             }
         }
@@ -496,23 +507,14 @@ public void getDailyStats(Promise promise) {
                 backfillDay = nextDay;
             }
 
-            long checkpoint = prefs.getLong(PREFS_TODAY_CHECKPOINT_KEY, startTime);
-            boolean canUseCheckpoint = todayKey.equals(lastStoredDate) && checkpoint >= startTime && checkpoint < endTime;
-            long queryStart = canUseCheckpoint ? checkpoint : startTime;
-            UsageSnapshot todaySnapshot = queryUsageSnapshot(usm, pm, queryStart, endTime);
-            JSONObject day = canUseCheckpoint && root.has(todayKey)
-                ? root.getJSONObject(todayKey)
-                : new JSONObject();
+            UsageSnapshot todaySnapshot = queryUsageSnapshot(usm, pm, startTime, endTime);
+            JSONObject day = new JSONObject();
             for (Map.Entry<String, Long> entry : todaySnapshot.totals.entrySet()) {
-                long previous = canUseCheckpoint ? day.optLong(entry.getKey(), 0L) : 0L;
-                day.put(entry.getKey(), previous + entry.getValue());
+                day.put(entry.getKey(), entry.getValue());
             }
 
-            UsageSnapshot todayOpenSnapshot = canUseCheckpoint
-                ? queryUsageSnapshot(usm, pm, startTime, endTime)
-                : todaySnapshot;
             JSONObject openDay = new JSONObject();
-            for (Map.Entry<String, Integer> entry : todayOpenSnapshot.openCounts.entrySet()) {
+            for (Map.Entry<String, Integer> entry : todaySnapshot.openCounts.entrySet()) {
                 openDay.put(entry.getKey(), entry.getValue());
             }
             root.put(todayKey, day);
